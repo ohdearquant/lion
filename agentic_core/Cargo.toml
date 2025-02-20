@@ -1,6 +1,6 @@
 [package]
 name = "agentic_core"
-version = "0.0.1-alpha-phase5"
+version = "0.0.1-stage1-phase5"
 edition = "2021"
 
 [dependencies]
@@ -9,7 +9,7 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 uuid = { version = "1.0", features = ["v4", "serde"] }
 chrono = { version = "0.4", features = ["serde"] }
-thiserror = "1.0"
+thiserror = "2.0"
 tracing = "0.1"
 futures = "0.3"
 async-trait = "0.1"

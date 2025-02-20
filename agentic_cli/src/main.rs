@@ -11,7 +11,7 @@ use tracing_subscriber::fmt::format::FmtSpan;
 use uuid::Uuid;
 
 #[derive(Parser)]
-#[command(name = "lion-cli", version = "0.0.1a")]
+#[command(name = "lion-cli", version = "0.0.1")]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
