@@ -32,3 +32,4 @@ Cargo.lock
 # Local development files
 /local/
 /tmp/
+dev/
