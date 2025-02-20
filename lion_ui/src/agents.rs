@@ -1,16 +1,11 @@
 use agentic_core::SystemEvent;
-use axum::{extract::State, response::IntoResponse, Json};
+use axum::{extract::State, Json};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use tracing::{debug, info};
+use tracing::info;
 use uuid::Uuid;
 
-use crate::events::AppState;
-
-#[derive(Debug, Deserialize)]
-pub struct SpawnAgentRequest {
-    pub prompt: String,
-}
+use crate::state::AppState;
 
 #[derive(Debug, Serialize)]
 pub struct AgentInfo {
@@ -18,66 +13,88 @@ pub struct AgentInfo {
     pub status: String,
 }
 
-/// Handler for spawning a new agent
-pub async fn spawn_agent(
-    State(state): State<Arc<AppState>>,
-    Json(payload): Json<SpawnAgentRequest>,
-) -> impl IntoResponse {
-    debug!(
-        "Handling spawn_agent request with prompt: {}",
-        payload.prompt
-    );
+#[derive(Debug, Deserialize)]
+pub struct SpawnAgentRequest {
+    pub prompt: String,
+}
 
-    // Create a new agent spawn event
-    let event = SystemEvent::new_agent(payload.prompt, None);
+#[derive(Debug, Serialize)]
+pub struct ApiResponse<T> {
+    pub success: bool,
+    pub data: Option<T>,
+    pub error: Option<String>,
+}
 
-    let agent_id = match &event {
-        SystemEvent::AgentSpawned { agent_id, .. } => *agent_id,
-        _ => unreachable!(),
-    };
-
-    debug!("Created agent with ID: {}", agent_id);
-
-    // Store the agent in our registry
-    {
-        let mut agents = state.agents.write().await;
-        agents.insert(agent_id, "spawned".to_string());
-        debug!("Stored agent {} in registry with status: spawned", agent_id);
+impl<T> ApiResponse<T> {
+    pub fn success(data: T) -> Self {
+        Self {
+            success: true,
+            data: Some(data),
+            error: None,
+        }
     }
 
-    // Send the event to the orchestrator
-    match state.orchestrator_sender.send(event).await {
-        Ok(_) => {
-            info!("Successfully spawned agent {}", agent_id);
-            // Log the spawn
-            let _ = state.logs_tx.send(format!("Agent {} spawned", agent_id));
-
-            Json(serde_json::json!({
-                "agent_id": agent_id.to_string(),
-                "status": "spawned"
-            }))
-        }
-        Err(e) => {
-            debug!("Failed to spawn agent: {}", e);
-            Json(serde_json::json!({
-                "error": format!("Failed to spawn agent: {}", e)
-            }))
+    pub fn error(msg: impl Into<String>) -> Self {
+        Self {
+            success: false,
+            data: None,
+            error: Some(msg.into()),
         }
     }
 }
 
-/// Handler for listing active agents
-pub async fn list_agents(State(state): State<Arc<AppState>>) -> impl IntoResponse {
-    debug!("Handling list_agents request");
-    let agents = state.agents.read().await;
-    let agent_list: Vec<AgentInfo> = agents
-        .iter()
-        .map(|(id, status)| AgentInfo {
-            id: *id,
-            status: status.clone(),
-        })
-        .collect();
+pub async fn spawn_agent(
+    State(state): State<Arc<AppState>>,
+    Json(req): Json<SpawnAgentRequest>,
+) -> Json<ApiResponse<AgentInfo>> {
+    info!("Spawning new agent");
 
-    debug!("Returning {} agents", agent_list.len());
-    Json(agent_list)
+    // Generate agent ID
+    let agent_id = Uuid::new_v4();
+
+    // Create the event
+    let event = SystemEvent::AgentSpawned {
+        agent_id,
+        prompt: Some(req.prompt),
+    };
+
+    // Send to orchestrator
+    if let Err(e) = state.orchestrator_tx.send(event).await {
+        return Json(ApiResponse::error(format!("Failed to spawn agent: {}", e)));
+    }
+
+    // Log the spawn event
+    let _ = state.logs_tx.send(format!("Agent {} spawned", agent_id));
+
+    // Create agent info
+    let agent_info = AgentInfo {
+        id: agent_id,
+        status: "spawned".to_string(),
+    };
+
+    Json(ApiResponse::success(agent_info))
+}
+
+pub async fn list_agents(State(_state): State<Arc<AppState>>) -> Json<ApiResponse<Vec<AgentInfo>>> {
+    // For now, return empty list
+    // In a real implementation, you would track agents in state
+    Json(ApiResponse::success(Vec::new()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_api_response() {
+        let success = ApiResponse::success("test data");
+        assert!(success.success);
+        assert_eq!(success.data, Some("test data"));
+        assert_eq!(success.error, None);
+
+        let error = ApiResponse::<()>::error("test error");
+        assert!(!error.success);
+        assert_eq!(error.data, None);
+        assert_eq!(error.error, Some("test error".to_string()));
+    }
 }

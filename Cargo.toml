@@ -2,6 +2,8 @@
 members = [
     "agentic_core",
     "agentic_cli",
-    "lion_ui"
+    "lion_ui",
+    "scripts",
+    "plugins/calculator_plugin"
 ]
 resolver = "2"

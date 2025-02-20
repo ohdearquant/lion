@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lion UI</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .section {
+            margin-bottom: 30px;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .logs {
+            background: #f5f5f5;
+            padding: 10px;
+            height: 300px;
+            overflow-y: auto;
+            font-family: monospace;
+        }
+        .log-entry {
+            margin: 5px 0;
+            padding: 5px;
+            border-bottom: 1px solid #eee;
+        }
+        button {
+            padding: 8px 16px;
+            margin: 5px;
+            cursor: pointer;
+        }
+        textarea {
+            width: 100%;
+            min-height: 100px;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>Lion UI</h1>
+
+    <!-- Agents Section -->
+    <div class="section">
+        <h2>Agents</h2>
+        <div>
+            <input type="text" id="agentPrompt" placeholder="Enter agent prompt">
+            <button onclick="spawnAgent()">Spawn Agent</button>
+        </div>
+        <div id="agentList"></div>
+    </div>
+
+    <!-- Plugins Section -->
+    <div class="section">
+        <h2>Plugins</h2>
+        <div>
+            <textarea id="pluginManifest" placeholder="Paste plugin manifest (TOML)"></textarea>
+            <button onclick="loadPlugin()">Load Plugin</button>
+        </div>
+        <div id="pluginList"></div>
+    </div>
+
+    <!-- Logs Section -->
+    <div class="section">
+        <h2>Real-time Logs</h2>
+        <div id="logs" class="logs"></div>
+    </div>
+
+    <script>
+        // Connect to SSE for real-time logs
+        const evtSource = new EventSource("/events");
+        const logsDiv = document.getElementById("logs");
+
+        evtSource.onmessage = (event) => {
+            const logEntry = document.createElement("div");
+            logEntry.className = "log-entry";
+            logEntry.textContent = event.data;
+            logsDiv.appendChild(logEntry);
+            logsDiv.scrollTop = logsDiv.scrollHeight;
+        };
+
+        // Fetch and display agents
+        async function fetchAgents() {
+            try {
+                const res = await fetch('/api/agents');
+                const data = await res.json();
+                const agentList = document.getElementById('agentList');
+                agentList.innerHTML = '';
+                
+                if (data.success && data.data) {
+                    data.data.forEach(agent => {
+                        const div = document.createElement('div');
+                        div.textContent = `Agent ${agent.id}: ${agent.status}`;
+                        agentList.appendChild(div);
+                    });
+                }
+            } catch (e) {
+                console.error('Error fetching agents:', e);
+            }
+        }
+
+        // Spawn a new agent
+        async function spawnAgent() {
+            const prompt = document.getElementById('agentPrompt').value;
+            if (!prompt) {
+                alert('Please enter a prompt');
+                return;
+            }
+
+            try {
+                const res = await fetch('/api/agents', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ prompt })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    document.getElementById('agentPrompt').value = '';
+                    fetchAgents();
+                } else {
+                    alert(data.error || 'Failed to spawn agent');
+                }
+            } catch (e) {
+                console.error('Error spawning agent:', e);
+                alert('Error spawning agent');
+            }
+        }
+
+        // Fetch and display plugins
+        async function fetchPlugins() {
+            try {
+                const res = await fetch('/api/plugins');
+                const data = await res.json();
+                const pluginList = document.getElementById('pluginList');
+                pluginList.innerHTML = '';
+                
+                if (data.success && data.data) {
+                    data.data.forEach(plugin => {
+                        const div = document.createElement('div');
+                        div.innerHTML = `
+                            <div>
+                                Plugin ${plugin.id}:
+                                ${plugin.name} v${plugin.version}
+                                <button onclick="invokePlugin('${plugin.id}')">Invoke</button>
+                            </div>
+                        `;
+                        pluginList.appendChild(div);
+                    });
+                }
+            } catch (e) {
+                console.error('Error fetching plugins:', e);
+            }
+        }
+
+        // Load a new plugin
+        async function loadPlugin() {
+            const manifest = document.getElementById('pluginManifest').value;
+            if (!manifest) {
+                alert('Please enter a plugin manifest');
+                return;
+            }
+
+            try {
+                const res = await fetch('/api/plugins', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ manifest })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    document.getElementById('pluginManifest').value = '';
+                    fetchPlugins();
+                } else {
+                    alert(data.error || 'Failed to load plugin');
+                }
+            } catch (e) {
+                console.error('Error loading plugin:', e);
+                alert('Error loading plugin');
+            }
+        }
+
+        // Invoke a plugin
+        async function invokePlugin(pluginId) {
+            const input = prompt('Enter input for plugin:');
+            if (input === null) return;
+
+            try {
+                const res = await fetch(`/api/plugins/${pluginId}/invoke`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ input })
+                });
+                const data = await res.json();
+                if (!data.success) {
+                    alert(data.error || 'Failed to invoke plugin');
+                }
+            } catch (e) {
+                console.error('Error invoking plugin:', e);
+                alert('Error invoking plugin');
+            }
+        }
+
+        // Initial fetch
+        fetchAgents();
+        fetchPlugins();
+
+        // Refresh lists periodically
+        setInterval(fetchAgents, 5000);
+        setInterval(fetchPlugins, 5000);
+    </script>
+</body>
+</html>
