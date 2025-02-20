@@ -4,3 +4,14 @@ members = [
     "agentic_cli"
 ]
 resolver = "2"
+
+[workspace.metadata]
+# Cargo aliases for common commands
+[workspace.metadata.aliases]
+ci = "run --quiet ./scripts/ci.sh"
+test-cli = "run --quiet ./scripts/test_cli.sh"
+demo = "run -p agentic_cli -- demo --data 'Hello from cargo demo!' --correlation-id 123e4567-e89b-12d3-a456-426614174000"
+plugin = """run -p agentic_cli -- load-plugin --manifest examples/hello_plugin/manifest.toml \
+    && read -r PLUGIN_ID < <(cargo run -p agentic_cli -- load-plugin --manifest examples/hello_plugin/manifest.toml 2>&1 | grep 'Plugin ID:' | cut -d' ' -f3) \
+    && cargo run -p agentic_cli -- invoke-plugin --plugin-id $PLUGIN_ID --input 'Hello from cargo plugin!'"""
+agent = "run -p agentic_cli -- spawn-agent --prompt 'Hello from cargo agent!' --correlation-id 123e4567-e89b-12d3-a456-426614174000"
