@@ -1,0 +1,8 @@
+// Mock WASM content for Phase 4 demonstration
+// In future phases, this will be replaced with actual WASM code
+
+module HelloPlugin {
+    export function hello(input: string): string {
+        return "Hello from WASM! Input: " + input;
+    }
+}
