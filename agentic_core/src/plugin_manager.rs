@@ -34,15 +34,14 @@ pub enum PluginError {
     InvokeFailure(String),
 }
 
+#[derive(Debug, Default)]
 pub struct PluginManager {
     plugins: HashMap<Uuid, PluginHandle>,
 }
 
 impl PluginManager {
     pub fn new() -> Self {
-        Self {
-            plugins: HashMap::new(),
-        }
+        Self::default()
     }
 
     pub fn load_plugin(&mut self, manifest: PluginManifest) -> Result<Uuid, PluginError> {

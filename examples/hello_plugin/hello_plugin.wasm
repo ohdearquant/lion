@@ -1,8 +1,9 @@
 // Mock WASM content for Phase 4 demonstration
-// In future phases, this will be replaced with actual WASM code
+// In a real implementation, this would be compiled WebAssembly code
 
-module HelloPlugin {
-    export function hello(input: string): string {
-        return "Hello from WASM! Input: " + input;
-    }
-}
+(module
+  (func $hello (param $input i32) (result i32)
+    local.get $input
+  )
+  (export "hello" (func $hello))
+)
