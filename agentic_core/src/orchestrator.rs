@@ -1,4 +1,7 @@
+use crate::event_log::EventLog;
+use chrono::Utc;
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use tokio::sync::{broadcast, mpsc};
 use tracing::{error, info};
 use uuid::Uuid;
@@ -48,9 +51,9 @@ impl SystemEvent {
             payload,
             metadata: EventMetadata {
                 event_id: Uuid::new_v4(),
-                timestamp: chrono::Utc::now(),
+                timestamp: Utc::now(),
                 correlation_id,
-                context: serde_json::json!({}),
+                context: json!({}),
             },
         }
     }
@@ -70,6 +73,7 @@ pub struct Orchestrator {
     event_tx: mpsc::Sender<SystemEvent>,
     event_rx: mpsc::Receiver<SystemEvent>,
     completion_tx: broadcast::Sender<SystemEvent>,
+    event_log: EventLog,
 }
 
 impl Orchestrator {
@@ -81,6 +85,7 @@ impl Orchestrator {
             event_tx: tx,
             event_rx: rx,
             completion_tx,
+            event_log: EventLog::new(),
         }
     }
 
@@ -94,8 +99,16 @@ impl Orchestrator {
         self.completion_tx.subscribe()
     }
 
+    /// Get a reference to the event log
+    pub fn event_log(&self) -> &EventLog {
+        &self.event_log
+    }
+
     /// Process a single event, returning a completion event if successful
     async fn process_event(&self, event: SystemEvent) -> Option<SystemEvent> {
+        // Log the incoming event
+        self.event_log.append(event.clone());
+
         match event {
             SystemEvent::TaskSubmitted {
                 task_id,
@@ -111,16 +124,20 @@ impl Orchestrator {
                 // Simulate some processing
                 let result = format!("Processed: {}", payload);
 
-                Some(SystemEvent::TaskCompleted {
+                let completion = SystemEvent::TaskCompleted {
                     task_id,
                     result,
                     metadata: EventMetadata {
                         event_id: Uuid::new_v4(),
-                        timestamp: chrono::Utc::now(),
+                        timestamp: Utc::now(),
                         correlation_id: metadata.correlation_id,
                         context: metadata.context,
                     },
-                })
+                };
+
+                // Log the completion event
+                self.event_log.append(completion.clone());
+                Some(completion)
             }
             SystemEvent::TaskCompleted {
                 task_id,
@@ -175,6 +192,7 @@ mod tests {
         let orchestrator = Orchestrator::new(100);
         let sender = orchestrator.sender();
         let mut completion_rx = orchestrator.completion_receiver();
+        let event_log = orchestrator.event_log().clone();
 
         // Spawn the orchestrator
         tokio::spawn(orchestrator.run());
@@ -203,6 +221,15 @@ mod tests {
             }
             _ => panic!("Expected TaskCompleted event"),
         }
+
+        // Verify events were logged
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        let records = event_log.all();
+        assert_eq!(
+            records.len(),
+            2,
+            "Should have submission and completion events"
+        );
     }
 
     #[tokio::test]
