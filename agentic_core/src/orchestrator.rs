@@ -1,9 +1,10 @@
 use crate::event_log::EventLog;
+use crate::plugin_manager::PluginManager;
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tokio::sync::{broadcast, mpsc};
-use tracing::{error, info};
+use tracing::info;
 use uuid::Uuid;
 
 /// Represents system-level events that flow through the orchestrator.
@@ -41,6 +42,24 @@ pub enum SystemEvent {
         error: String,
         metadata: EventMetadata,
     },
+    /// A plugin is being invoked
+    PluginInvoked {
+        plugin_id: Uuid,
+        input: String,
+        metadata: EventMetadata,
+    },
+    /// A plugin has produced a result
+    PluginResult {
+        plugin_id: Uuid,
+        output: String,
+        metadata: EventMetadata,
+    },
+    /// A plugin invocation resulted in an error
+    PluginError {
+        plugin_id: Uuid,
+        error: String,
+        metadata: EventMetadata,
+    },
 }
 
 impl SystemEvent {
@@ -58,12 +77,33 @@ impl SystemEvent {
         }
     }
 
+    /// Create a new PluginInvoked event
+    pub fn new_plugin_invocation(
+        plugin_id: Uuid,
+        input: String,
+        correlation_id: Option<Uuid>,
+    ) -> Self {
+        SystemEvent::PluginInvoked {
+            plugin_id,
+            input,
+            metadata: EventMetadata {
+                event_id: Uuid::new_v4(),
+                timestamp: Utc::now(),
+                correlation_id,
+                context: json!({}),
+            },
+        }
+    }
+
     /// Get the event's metadata
     pub fn metadata(&self) -> &EventMetadata {
         match self {
             SystemEvent::TaskSubmitted { metadata, .. } => metadata,
             SystemEvent::TaskCompleted { metadata, .. } => metadata,
             SystemEvent::TaskError { metadata, .. } => metadata,
+            SystemEvent::PluginInvoked { metadata, .. } => metadata,
+            SystemEvent::PluginResult { metadata, .. } => metadata,
+            SystemEvent::PluginError { metadata, .. } => metadata,
         }
     }
 }
@@ -74,6 +114,7 @@ pub struct Orchestrator {
     event_rx: mpsc::Receiver<SystemEvent>,
     completion_tx: broadcast::Sender<SystemEvent>,
     event_log: EventLog,
+    plugin_manager: PluginManager,
 }
 
 impl Orchestrator {
@@ -86,6 +127,7 @@ impl Orchestrator {
             event_rx: rx,
             completion_tx,
             event_log: EventLog::new(),
+            plugin_manager: PluginManager::new(),
         }
     }
 
@@ -102,6 +144,11 @@ impl Orchestrator {
     /// Get a reference to the event log
     pub fn event_log(&self) -> &EventLog {
         &self.event_log
+    }
+
+    /// Get a reference to the plugin manager
+    pub fn plugin_manager(&mut self) -> &mut PluginManager {
+        &mut self.plugin_manager
     }
 
     /// Process a single event, returning a completion event if successful
@@ -139,30 +186,52 @@ impl Orchestrator {
                 self.event_log.append(completion.clone());
                 Some(completion)
             }
-            SystemEvent::TaskCompleted {
-                task_id,
-                result,
+            SystemEvent::PluginInvoked {
+                plugin_id,
+                input,
                 metadata,
             } => {
                 info!(
-                    task_id = %task_id,
+                    plugin_id = %plugin_id,
                     correlation_id = ?metadata.correlation_id,
-                    "Task completed: {}", result
+                    "Invoking plugin"
                 );
-                None
+
+                match self.plugin_manager.invoke_plugin(plugin_id, &input) {
+                    Ok(output) => {
+                        let result = SystemEvent::PluginResult {
+                            plugin_id,
+                            output,
+                            metadata: EventMetadata {
+                                event_id: Uuid::new_v4(),
+                                timestamp: Utc::now(),
+                                correlation_id: metadata.correlation_id,
+                                context: metadata.context,
+                            },
+                        };
+                        self.event_log.append(result.clone());
+                        Some(result)
+                    }
+                    Err(e) => {
+                        let error_event = SystemEvent::PluginError {
+                            plugin_id,
+                            error: e.to_string(),
+                            metadata: EventMetadata {
+                                event_id: Uuid::new_v4(),
+                                timestamp: Utc::now(),
+                                correlation_id: metadata.correlation_id,
+                                context: metadata.context,
+                            },
+                        };
+                        self.event_log.append(error_event.clone());
+                        Some(error_event)
+                    }
+                }
             }
-            SystemEvent::TaskError {
-                task_id,
-                error,
-                metadata,
-            } => {
-                error!(
-                    task_id = %task_id,
-                    correlation_id = ?metadata.correlation_id,
-                    "Task error: {}", error
-                );
-                None
-            }
+            SystemEvent::TaskCompleted { .. }
+            | SystemEvent::TaskError { .. }
+            | SystemEvent::PluginResult { .. }
+            | SystemEvent::PluginError { .. } => None,
         }
     }
 
@@ -184,6 +253,7 @@ impl Orchestrator {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::plugin_manager::PluginManifest;
     use std::time::Duration;
     use tokio::time::timeout;
 
@@ -230,6 +300,51 @@ mod tests {
             2,
             "Should have submission and completion events"
         );
+    }
+
+    #[tokio::test]
+    async fn test_plugin_invocation() {
+        let mut orchestrator = Orchestrator::new(100);
+        let sender = orchestrator.sender();
+        let mut completion_rx = orchestrator.completion_receiver();
+
+        // Create a test plugin
+        let manifest = PluginManifest {
+            name: "test_plugin".to_string(),
+            version: "0.1.0".to_string(),
+            entry_point: "/dev/null".to_string(), // dummy path for testing
+            permissions: vec![],
+        };
+
+        let plugin_id = orchestrator
+            .plugin_manager()
+            .load_plugin(manifest)
+            .expect("Failed to load plugin");
+
+        // Spawn the orchestrator
+        tokio::spawn(orchestrator.run());
+
+        // Create and send a plugin invocation
+        let event = SystemEvent::new_plugin_invocation(plugin_id, "test input".to_string(), None);
+        sender.send(event).await.expect("Failed to send event");
+
+        // Wait for completion with timeout
+        let completion = timeout(Duration::from_secs(1), completion_rx.recv())
+            .await
+            .expect("Timeout waiting for completion")
+            .expect("Channel closed");
+
+        match completion {
+            SystemEvent::PluginResult {
+                plugin_id: completed_id,
+                output,
+                ..
+            } => {
+                assert_eq!(completed_id, plugin_id);
+                assert!(output.contains("test input"));
+            }
+            _ => panic!("Expected PluginResult event"),
+        }
     }
 
     #[tokio::test]
