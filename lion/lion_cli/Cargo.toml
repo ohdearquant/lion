@@ -1,5 +1,5 @@
 [package]
-name = "agentic_cli"
+name = "lion_cli"
 version = "0.0.1-stage1-phase5"
 edition = "2021"
 

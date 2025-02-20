@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::path::PathBuf;
 use uuid::Uuid;
+use std::collections::HashSet;
 
 use super::traits::{Describable, Identifiable, Validatable, Versionable};
 
@@ -17,6 +18,12 @@ pub trait Plugin: Identifiable + Describable + Versionable + Validatable {
 
     /// Execute the plugin with the given input
     async fn execute(&self, input: Value) -> Result<Value, Self::Error>;
+
+    /// Handle a language message from an agent
+    async fn handle_language_message(&self, message: Value) -> Result<Value, Self::Error> {
+        // Default implementation treats it as a regular execute
+        self.execute(message).await
+    }
 
     /// Clean up any resources used by the plugin
     async fn cleanup(&mut self) -> Result<(), Self::Error>;
@@ -65,6 +72,52 @@ pub struct PluginManifest {
     /// Optional capabilities required by the plugin
     #[serde(default)]
     pub capabilities: Vec<String>,
+
+    /// Language network protocol capabilities
+    #[serde(default)]
+    pub language_capabilities: LanguageCapabilities,
+
+    /// Security settings
+    #[serde(default)]
+    pub security: SecuritySettings,
+}
+
+/// Language network protocol capabilities for a plugin
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct LanguageCapabilities {
+    /// Whether this plugin can process language messages
+    pub language_processor: bool,
+    
+    /// Supported language models or formats
+    pub supported_models: HashSet<String>,
+    
+    /// Maximum concurrent language processing tasks
+    pub max_concurrent_tasks: usize,
+    
+    /// Whether this plugin can generate responses
+    pub can_generate: bool,
+    
+    /// Whether this plugin can modify messages
+    pub can_modify: bool,
+}
+
+/// Security settings for a plugin
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct SecuritySettings {
+    /// Whether the plugin runs in a sandbox
+    pub sandboxed: bool,
+    
+    /// Maximum memory usage in MB
+    pub memory_limit_mb: usize,
+    
+    /// Maximum execution time in seconds
+    pub time_limit_secs: usize,
+    
+    /// Allowed network domains
+    pub allowed_domains: HashSet<String>,
+    
+    /// Whether file system access is allowed
+    pub allow_fs_access: bool,
 }
 
 /// Dependency requirement for a plugin
@@ -86,6 +139,8 @@ pub enum PluginState {
     Ready,
     /// Plugin is currently executing
     Running,
+    /// Plugin is processing a language message
+    ProcessingLanguage,
     /// Plugin has encountered an error
     Error,
     /// Plugin has been disabled
@@ -106,6 +161,8 @@ impl PluginManifest {
             output_schema: None,
             dependencies: Vec::new(),
             capabilities: Vec::new(),
+            language_capabilities: LanguageCapabilities::default(),
+            security: SecuritySettings::default(),
         }
     }
 
@@ -122,6 +179,16 @@ impl PluginManifest {
             self.version.clone(),
             self.description.clone(),
         )
+    }
+
+    /// Check if the plugin supports a specific language model
+    pub fn supports_model(&self, model: &str) -> bool {
+        self.language_capabilities.supported_models.contains(model)
+    }
+
+    /// Check if the plugin has access to a specific domain
+    pub fn can_access_domain(&self, domain: &str) -> bool {
+        self.security.allowed_domains.contains(domain)
     }
 }
 
@@ -203,5 +270,34 @@ mod tests {
         assert_eq!(response.name, manifest.name);
         assert_eq!(response.version, manifest.version);
         assert_eq!(response.description, manifest.description);
+    }
+
+    #[test]
+    fn test_language_capabilities() {
+        let mut manifest = PluginManifest::new(
+            "language-plugin".to_string(),
+            "1.0.0".to_string(),
+            "A language plugin".to_string(),
+        );
+
+        manifest.language_capabilities.language_processor = true;
+        manifest.language_capabilities.supported_models.insert("gpt-4".to_string());
+        
+        assert!(manifest.supports_model("gpt-4"));
+        assert!(!manifest.supports_model("gpt-3"));
+    }
+
+    #[test]
+    fn test_security_settings() {
+        let mut manifest = PluginManifest::new(
+            "secure-plugin".to_string(),
+            "1.0.0".to_string(),
+            "A secure plugin".to_string(),
+        );
+
+        manifest.security.allowed_domains.insert("api.example.com".to_string());
+        
+        assert!(manifest.can_access_domain("api.example.com"));
+        assert!(!manifest.can_access_domain("other.com"));
     }
 }

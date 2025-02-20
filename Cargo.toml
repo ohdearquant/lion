@@ -1,7 +1,7 @@
 [workspace]
 members = [
-    "agentic_core",
-    "agentic_cli",
+    "lion_core",
+    "lion_cli",
     "lion_ui",
     "plugins/calculator_plugin"
 ]

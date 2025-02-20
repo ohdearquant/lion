@@ -10,17 +10,18 @@ use std::sync::Arc;
 use tracing::info;
 use uuid::Uuid;
 
-#[derive(Debug)]
+/// Handler for system events that coordinates with the plugin manager and event log
+#[derive(Debug, Clone)]
 pub struct EventHandler {
     event_log: Arc<EventLog>,
-    plugin_manager: PluginManager,
+    plugin_manager: Arc<PluginManager>,
 }
 
 impl EventHandler {
     pub fn new() -> Self {
         Self {
             event_log: Arc::new(EventLog::new()),
-            plugin_manager: PluginManager::new(),
+            plugin_manager: Arc::new(PluginManager::new()),
         }
     }
 
@@ -237,5 +238,23 @@ mod tests {
         } else {
             panic!("Expected agent completion");
         }
+    }
+
+    #[test]
+    fn test_handler_clone() {
+        let handler = EventHandler::new();
+        let cloned = handler.clone();
+        
+        // Verify both handlers work
+        let task_id = Uuid::new_v4();
+        let metadata = EventMetadata::new(None);
+        let event = TaskEvent::Submitted {
+            task_id,
+            payload: "test task".to_string(),
+            metadata,
+        };
+
+        assert!(handler.handle_task(event.clone()).is_some());
+        assert!(cloned.handle_task(event).is_some());
     }
 }
