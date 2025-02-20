@@ -1,6 +1,6 @@
 [package]
 name = "lion_ui"
-version = "0.0.1-stage2-phase1"
+version = "0.0.1-stage2-phase2"
 edition = "2021"
 
 [[bin]]
@@ -9,8 +9,10 @@ path = "src/main.rs"
 
 [dependencies]
 agentic_core = { path = "../agentic_core" }
-axum = "0.8.1"
+axum = { version = "0.8.1", features = ["ws"] }
 tokio = { version = "1.0", features = ["full"] }
+tokio-stream = { version = "0.1", features = ["sync"] }
+futures = "0.3"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tower-http = { version = "0.6.2", features = ["fs", "trace"] }
@@ -20,3 +22,4 @@ serde_json = "1.0"
 hyper = { version = "1.0", features = ["full"] }
 hyper-util = { version = "0.1", features = ["full"] }
 http-body-util = "0.1"
+uuid = { version = "1.0", features = ["v4", "serde"] }
