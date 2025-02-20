@@ -26,7 +26,7 @@ assignees: ''
 ## Environment
 - OS: [e.g. Ubuntu 20.04]
 - Rust Version: [e.g. 1.75.0]
-- lion Version: [e.g. v0.0.1a]
+- lion Version: [e.g. v0.0.1]
 
 ## Additional Context
 <!-- Add any other context about the problem here -->
