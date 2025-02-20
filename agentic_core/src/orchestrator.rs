@@ -1,7 +1,7 @@
-use tokio::sync::{mpsc, broadcast};
-use tracing::{info, error};
+use serde::{Deserialize, Serialize};
+use tokio::sync::{broadcast, mpsc};
+use tracing::{error, info};
 use uuid::Uuid;
-use serde::{Serialize, Deserialize};
 
 /// Represents system-level events that flow through the orchestrator.
 /// Each event carries metadata for tracking and correlation.
@@ -97,7 +97,11 @@ impl Orchestrator {
     /// Process a single event, returning a completion event if successful
     async fn process_event(&self, event: SystemEvent) -> Option<SystemEvent> {
         match event {
-            SystemEvent::TaskSubmitted { task_id, payload, metadata } => {
+            SystemEvent::TaskSubmitted {
+                task_id,
+                payload,
+                metadata,
+            } => {
                 info!(
                     task_id = %task_id,
                     correlation_id = ?metadata.correlation_id,
@@ -118,7 +122,11 @@ impl Orchestrator {
                     },
                 })
             }
-            SystemEvent::TaskCompleted { task_id, result, metadata } => {
+            SystemEvent::TaskCompleted {
+                task_id,
+                result,
+                metadata,
+            } => {
                 info!(
                     task_id = %task_id,
                     correlation_id = ?metadata.correlation_id,
@@ -126,7 +134,11 @@ impl Orchestrator {
                 );
                 None
             }
-            SystemEvent::TaskError { task_id, error, metadata } => {
+            SystemEvent::TaskError {
+                task_id,
+                error,
+                metadata,
+            } => {
                 error!(
                     task_id = %task_id,
                     correlation_id = ?metadata.correlation_id,
@@ -155,8 +167,8 @@ impl Orchestrator {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tokio::time::timeout;
     use std::time::Duration;
+    use tokio::time::timeout;
 
     #[tokio::test]
     async fn test_orchestrator_processes_task() {
@@ -177,14 +189,16 @@ mod tests {
         sender.send(event).await.expect("Failed to send event");
 
         // Wait for completion with timeout
-        let completion = timeout(
-            Duration::from_secs(1),
-            completion_rx.recv()
-        ).await.expect("Timeout waiting for completion")
-         .expect("Channel closed");
+        let completion = timeout(Duration::from_secs(1), completion_rx.recv())
+            .await
+            .expect("Timeout waiting for completion")
+            .expect("Channel closed");
 
         match completion {
-            SystemEvent::TaskCompleted { task_id: completed_id, .. } => {
+            SystemEvent::TaskCompleted {
+                task_id: completed_id,
+                ..
+            } => {
                 assert_eq!(completed_id, task_id);
             }
             _ => panic!("Expected TaskCompleted event"),
@@ -196,7 +210,7 @@ mod tests {
         let orchestrator = Orchestrator::new(100);
         let sender = orchestrator.sender();
         let mut completion_rx = orchestrator.completion_receiver();
-        
+
         // Spawn the orchestrator
         tokio::spawn(orchestrator.run());
 
@@ -205,11 +219,10 @@ mod tests {
 
         sender.send(event).await.expect("Failed to send event");
 
-        let completion = timeout(
-            Duration::from_secs(1),
-            completion_rx.recv()
-        ).await.expect("Timeout waiting for completion")
-         .expect("Channel closed");
+        let completion = timeout(Duration::from_secs(1), completion_rx.recv())
+            .await
+            .expect("Timeout waiting for completion")
+            .expect("Channel closed");
 
         assert_eq!(
             completion.metadata().correlation_id,

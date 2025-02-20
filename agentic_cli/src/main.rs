@@ -1,9 +1,9 @@
-use clap::{Parser, Subcommand};
 use agentic_core::orchestrator::{Orchestrator, SystemEvent};
-use uuid::Uuid;
-use tracing_subscriber::fmt::format::FmtSpan;
-use tokio::time::timeout;
+use clap::{Parser, Subcommand};
 use std::time::Duration;
+use tokio::time::timeout;
+use tracing_subscriber::fmt::format::FmtSpan;
+use uuid::Uuid;
 
 #[derive(Parser)]
 #[command(name = "lion-cli", version = "0.0.1a")]
@@ -19,7 +19,7 @@ enum Commands {
         /// The task data/payload
         #[arg(long)]
         data: String,
-        
+
         /// Optional correlation ID for tracking related tasks
         #[arg(long)]
         correlation_id: Option<String>,
@@ -48,14 +48,17 @@ async fn main() {
     tokio::spawn(orchestrator.run());
 
     match cli.command {
-        Commands::SubmitTask { data, correlation_id } => {
+        Commands::SubmitTask {
+            data,
+            correlation_id,
+        } => {
             let correlation_uuid = correlation_id
                 .map(|id| Uuid::parse_str(&id))
                 .transpose()
                 .expect("Invalid correlation ID format");
 
             let event = SystemEvent::new_task(data, correlation_uuid);
-            
+
             // Extract task_id before moving event
             let task_id = match &event {
                 SystemEvent::TaskSubmitted { task_id, .. } => *task_id,
@@ -72,19 +75,17 @@ async fn main() {
 
             // Wait for completion with timeout
             match timeout(Duration::from_secs(5), completion_rx.recv()).await {
-                Ok(Ok(completion)) => {
-                    match completion {
-                        SystemEvent::TaskCompleted { result, .. } => {
-                            println!("Task completed successfully!");
-                            println!("Result: {}", result);
-                        }
-                        SystemEvent::TaskError { error, .. } => {
-                            eprintln!("Task failed: {}", error);
-                            std::process::exit(1);
-                        }
-                        _ => {}
+                Ok(Ok(completion)) => match completion {
+                    SystemEvent::TaskCompleted { result, .. } => {
+                        println!("Task completed successfully!");
+                        println!("Result: {}", result);
                     }
-                }
+                    SystemEvent::TaskError { error, .. } => {
+                        eprintln!("Task failed: {}", error);
+                        std::process::exit(1);
+                    }
+                    _ => {}
+                },
                 Ok(Err(e)) => {
                     eprintln!("Error receiving completion: {}", e);
                     std::process::exit(1);
