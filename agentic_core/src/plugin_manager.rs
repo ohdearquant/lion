@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::Path;
+use std::sync::{Arc, Mutex};
 use tracing::info;
 use uuid::Uuid;
 
@@ -10,9 +11,13 @@ pub struct PluginManifest {
     pub version: String,
     pub entry_point: String,
     pub permissions: Vec<String>,
+    /// A brief description of the plugin
+    pub description: String,
+    /// A map of function names to their descriptions
+    pub functions: HashMap<String, String>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct PluginHandle {
     pub id: Uuid,
     pub manifest: PluginManifest,
@@ -36,15 +41,24 @@ pub enum PluginError {
 
 #[derive(Debug, Default)]
 pub struct PluginManager {
-    plugins: HashMap<Uuid, PluginHandle>,
+    plugins: Arc<Mutex<HashMap<Uuid, PluginHandle>>>,
 }
 
 impl PluginManager {
     pub fn new() -> Self {
-        Self::default()
+        Self {
+            plugins: Arc::new(Mutex::new(HashMap::new())),
+        }
     }
 
-    pub fn load_plugin(&mut self, manifest: PluginManifest) -> Result<Uuid, PluginError> {
+    pub fn load_plugin(&self, manifest: PluginManifest) -> Result<Uuid, PluginError> {
+        // Validate the manifest
+        if manifest.name.is_empty() || manifest.version.is_empty() {
+            return Err(PluginError::InvalidManifest(
+                "Name or version is empty".into(),
+            ));
+        }
+
         // Basic permission check - deny "forbidden" permission
         if manifest.permissions.iter().any(|p| p == "forbidden") {
             return Err(PluginError::PermissionDenied(
@@ -73,13 +87,14 @@ impl PluginManager {
             "Loading plugin"
         );
 
-        self.plugins.insert(id, handle);
+        let mut plugins = self.plugins.lock().unwrap();
+        plugins.insert(id, handle);
         Ok(id)
     }
 
     pub fn invoke_plugin(&self, plugin_id: Uuid, input: &str) -> Result<String, PluginError> {
-        let handle = self
-            .plugins
+        let plugins = self.plugins.lock().unwrap();
+        let handle = plugins
             .get(&plugin_id)
             .ok_or_else(|| PluginError::InvokeFailure("Plugin not found".into()))?;
 
@@ -99,15 +114,25 @@ impl PluginManager {
         ))
     }
 
-    pub fn get_plugin(&self, plugin_id: &Uuid) -> Option<&PluginHandle> {
-        self.plugins.get(plugin_id)
+    pub fn get_plugin(&self, plugin_id: &Uuid) -> Option<PluginHandle> {
+        let plugins = self.plugins.lock().unwrap();
+        plugins.get(plugin_id).cloned()
     }
 
-    pub fn list_plugins(&self) -> Vec<(&Uuid, &PluginManifest)> {
-        self.plugins
+    pub fn list_plugins(&self) -> Vec<(Uuid, PluginManifest)> {
+        let plugins = self.plugins.lock().unwrap();
+        plugins
             .iter()
-            .map(|(id, handle)| (id, &handle.manifest))
+            .map(|(id, handle)| (*id, handle.manifest.clone()))
             .collect()
+    }
+}
+
+impl Clone for PluginManager {
+    fn clone(&self) -> Self {
+        Self {
+            plugins: Arc::clone(&self.plugins),
+        }
     }
 }
 
@@ -129,13 +154,15 @@ mod tests {
     #[test]
     fn test_load_plugin_ok() {
         let (dir, entry_point) = create_test_plugin_file();
-        let mut mgr = PluginManager::new();
+        let mgr = PluginManager::new();
 
         let manifest = PluginManifest {
             name: "test_plugin".to_string(),
             version: "0.1.0".to_string(),
             entry_point,
             permissions: vec!["net".to_string()],
+            description: "A bad plugin".to_string(),
+            functions: HashMap::new(),
         };
 
         let result = mgr.load_plugin(manifest);
@@ -145,12 +172,14 @@ mod tests {
 
     #[test]
     fn test_load_plugin_forbidden_permission() {
-        let mut mgr = PluginManager::new();
+        let mgr = PluginManager::new();
         let manifest = PluginManifest {
             name: "bad_plugin".to_string(),
             version: "0.1.0".to_string(),
             entry_point: "dummy".to_string(),
             permissions: vec!["forbidden".to_string()],
+            description: "A test plugin".to_string(),
+            functions: HashMap::new(),
         };
 
         let result = mgr.load_plugin(manifest);
@@ -160,13 +189,15 @@ mod tests {
     #[test]
     fn test_invoke_plugin() {
         let (dir, entry_point) = create_test_plugin_file();
-        let mut mgr = PluginManager::new();
+        let mgr = PluginManager::new();
 
         let manifest = PluginManifest {
             name: "test_plugin".to_string(),
             version: "0.1.0".to_string(),
             entry_point,
             permissions: vec![],
+            description: "A test plugin".to_string(),
+            functions: HashMap::new(),
         };
 
         let plugin_id = mgr.load_plugin(manifest).unwrap();
@@ -183,5 +214,30 @@ mod tests {
         let mgr = PluginManager::new();
         let result = mgr.invoke_plugin(Uuid::new_v4(), "test");
         assert!(matches!(result, Err(PluginError::InvokeFailure(_))));
+    }
+
+    #[test]
+    fn test_plugin_manager_clone() {
+        let mgr1 = PluginManager::new();
+        let mgr2 = mgr1.clone();
+
+        // Load a plugin in mgr1
+        let (dir, entry_point) = create_test_plugin_file();
+        let manifest = PluginManifest {
+            name: "test_plugin".to_string(),
+            version: "0.1.0".to_string(),
+            entry_point,
+            permissions: vec![],
+            description: "A test plugin".to_string(),
+            functions: HashMap::new(),
+        };
+
+        let plugin_id = mgr1.load_plugin(manifest.clone()).unwrap();
+
+        // Verify the plugin is accessible in mgr2
+        let plugins2 = mgr2.list_plugins();
+        assert_eq!(plugins2.len(), 1);
+        assert_eq!(plugins2[0].0, plugin_id);
+        drop(dir);
     }
 }

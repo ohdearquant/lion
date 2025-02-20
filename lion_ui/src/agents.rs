@@ -2,6 +2,7 @@ use agentic_core::SystemEvent;
 use axum::{extract::State, response::IntoResponse, Json};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+use tracing::{debug, info};
 use uuid::Uuid;
 
 use crate::events::AppState;
@@ -22,6 +23,11 @@ pub async fn spawn_agent(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<SpawnAgentRequest>,
 ) -> impl IntoResponse {
+    debug!(
+        "Handling spawn_agent request with prompt: {}",
+        payload.prompt
+    );
+
     // Create a new agent spawn event
     let event = SystemEvent::new_agent(payload.prompt, None);
 
@@ -30,30 +36,39 @@ pub async fn spawn_agent(
         _ => unreachable!(),
     };
 
+    debug!("Created agent with ID: {}", agent_id);
+
     // Store the agent in our registry
     {
         let mut agents = state.agents.write().await;
         agents.insert(agent_id, "spawned".to_string());
+        debug!("Stored agent {} in registry with status: spawned", agent_id);
     }
 
     // Send the event to the orchestrator
-    if let Err(e) = state.orchestrator_sender.send(event).await {
-        return Json(serde_json::json!({
-            "error": format!("Failed to spawn agent: {}", e)
-        }));
+    match state.orchestrator_sender.send(event).await {
+        Ok(_) => {
+            info!("Successfully spawned agent {}", agent_id);
+            // Log the spawn
+            let _ = state.logs_tx.send(format!("Agent {} spawned", agent_id));
+
+            Json(serde_json::json!({
+                "agent_id": agent_id.to_string(),
+                "status": "spawned"
+            }))
+        }
+        Err(e) => {
+            debug!("Failed to spawn agent: {}", e);
+            Json(serde_json::json!({
+                "error": format!("Failed to spawn agent: {}", e)
+            }))
+        }
     }
-
-    // Log the spawn
-    let _ = state.logs_tx.send(format!("Agent {} spawned", agent_id));
-
-    Json(serde_json::json!({
-        "agent_id": agent_id.to_string(),
-        "status": "spawned"
-    }))
 }
 
 /// Handler for listing active agents
 pub async fn list_agents(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+    debug!("Handling list_agents request");
     let agents = state.agents.read().await;
     let agent_list: Vec<AgentInfo> = agents
         .iter()
@@ -63,5 +78,6 @@ pub async fn list_agents(State(state): State<Arc<AppState>>) -> impl IntoRespons
         })
         .collect();
 
+    debug!("Returning {} agents", agent_list.len());
     Json(agent_list)
 }

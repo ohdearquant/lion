@@ -1,9 +1,10 @@
 use crate::agent::{AgentEvent, AgentProtocol, MockStreamingAgent};
 use crate::event_log::EventLog;
-use crate::plugin_manager::PluginManager;
+use crate::plugin_manager::{PluginManager, PluginManifest};
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use std::collections::HashMap;
 use tokio::sync::{broadcast, mpsc};
 use tracing::info;
 use uuid::Uuid;
@@ -190,8 +191,8 @@ impl Orchestrator {
     }
 
     /// Get a reference to the plugin manager
-    pub fn plugin_manager(&mut self) -> &mut PluginManager {
-        &mut self.plugin_manager
+    pub fn plugin_manager(&self) -> &PluginManager {
+        &self.plugin_manager
     }
 
     /// Process a single event, returning a completion event if successful
@@ -240,34 +241,69 @@ impl Orchestrator {
                     "Invoking plugin"
                 );
 
-                match self.plugin_manager.invoke_plugin(plugin_id, &input) {
-                    Ok(output) => {
-                        let result = SystemEvent::PluginResult {
-                            plugin_id,
-                            output,
-                            metadata: EventMetadata {
-                                event_id: Uuid::new_v4(),
-                                timestamp: Utc::now(),
-                                correlation_id: metadata.correlation_id,
-                                context: metadata.context,
-                            },
-                        };
-                        self.event_log.append(result.clone());
-                        Some(result)
+                // If the input looks like a manifest, try to load the plugin
+                if let Ok(manifest) = toml::from_str::<PluginManifest>(&input) {
+                    match self.plugin_manager.load_plugin(manifest) {
+                        Ok(_) => {
+                            let result = SystemEvent::PluginResult {
+                                plugin_id,
+                                output: "Plugin loaded successfully".to_string(),
+                                metadata: EventMetadata {
+                                    event_id: Uuid::new_v4(),
+                                    timestamp: Utc::now(),
+                                    correlation_id: metadata.correlation_id,
+                                    context: metadata.context,
+                                },
+                            };
+                            self.event_log.append(result.clone());
+                            Some(result)
+                        }
+                        Err(e) => {
+                            let error_event = SystemEvent::PluginError {
+                                plugin_id,
+                                error: format!("Failed to load plugin: {}", e),
+                                metadata: EventMetadata {
+                                    event_id: Uuid::new_v4(),
+                                    timestamp: Utc::now(),
+                                    correlation_id: metadata.correlation_id,
+                                    context: metadata.context,
+                                },
+                            };
+                            self.event_log.append(error_event.clone());
+                            Some(error_event)
+                        }
                     }
-                    Err(e) => {
-                        let error_event = SystemEvent::PluginError {
-                            plugin_id,
-                            error: e.to_string(),
-                            metadata: EventMetadata {
-                                event_id: Uuid::new_v4(),
-                                timestamp: Utc::now(),
-                                correlation_id: metadata.correlation_id,
-                                context: metadata.context,
-                            },
-                        };
-                        self.event_log.append(error_event.clone());
-                        Some(error_event)
+                } else {
+                    // Not a manifest, try to invoke the plugin
+                    match self.plugin_manager.invoke_plugin(plugin_id, &input) {
+                        Ok(output) => {
+                            let result = SystemEvent::PluginResult {
+                                plugin_id,
+                                output,
+                                metadata: EventMetadata {
+                                    event_id: Uuid::new_v4(),
+                                    timestamp: Utc::now(),
+                                    correlation_id: metadata.correlation_id,
+                                    context: metadata.context,
+                                },
+                            };
+                            self.event_log.append(result.clone());
+                            Some(result)
+                        }
+                        Err(e) => {
+                            let error_event = SystemEvent::PluginError {
+                                plugin_id,
+                                error: e.to_string(),
+                                metadata: EventMetadata {
+                                    event_id: Uuid::new_v4(),
+                                    timestamp: Utc::now(),
+                                    correlation_id: metadata.correlation_id,
+                                    context: metadata.context,
+                                },
+                            };
+                            self.event_log.append(error_event.clone());
+                            Some(error_event)
+                        }
                     }
                 }
             }
@@ -455,6 +491,8 @@ mod tests {
             version: "0.1.0".to_string(),
             entry_point: "/dev/null".to_string(), // dummy path for testing
             permissions: vec![],
+            description: "A test plugin".to_string(),
+            functions: HashMap::new(),
         };
 
         let plugin_id = orchestrator

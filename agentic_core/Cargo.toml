@@ -1,6 +1,6 @@
 [package]
 name = "agentic_core"
-version = "0.0.1-stage1-phase5"
+version = "0.0.1-stage2-phase3"
 edition = "2021"
 
 [dependencies]
@@ -14,6 +14,7 @@ tracing = "0.1"
 futures = "0.3"
 async-trait = "0.1"
 tokio-stream = "0.1"
+toml = "0.8"
 
 [dev-dependencies]
 tokio-test = "0.4"
