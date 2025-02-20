@@ -1,12 +1,17 @@
 [package]
 name = "agentic_core"
-version = "0.0.1-alpha-phase1"
+version = "0.0.1-alpha-phase2"
 edition = "2021"
 
 [dependencies]
-uuid = { version = "1.7", features = ["v4", "serde"] }
+tokio = { version = "1.0", features = ["full"] }
+tracing = "0.1"
+uuid = { version = "1.0", features = ["v4", "serde"] }
 chrono = { version = "0.4", features = ["serde"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-tokio = { version = "1.36", features = ["full"] }
-tracing = "0.1"
+async-trait = "0.1"
+
+[dev-dependencies]
+tokio-test = "0.4"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
