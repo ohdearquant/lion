@@ -1,0 +1,4 @@
+name = "hello_plugin"
+version = "0.1.0"
+entry_point = "examples/hello_plugin/hello_plugin.wasm"
+permissions = ["net"]

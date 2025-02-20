@@ -1,0 +1,9 @@
+// Mock WASM content for Phase 4 demonstration
+// In a real implementation, this would be compiled WebAssembly code
+
+(module
+  (func $hello (param $input i32) (result i32)
+    local.get $input
+  )
+  (export "hello" (func $hello))
+)

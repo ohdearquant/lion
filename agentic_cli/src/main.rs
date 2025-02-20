@@ -1,4 +1,8 @@
-use agentic_core::orchestrator::{Orchestrator, SystemEvent};
+use agentic_core::plugin_manager::PluginManifest;
+use agentic_core::{
+    orchestrator::{Orchestrator, SystemEvent},
+    EventLog,
+};
 use clap::{Parser, Subcommand};
 use std::sync::Arc;
 use std::time::Duration;
@@ -22,6 +26,24 @@ enum Commands {
         data: String,
 
         /// Optional correlation ID for tracking related tasks
+        #[arg(long)]
+        correlation_id: Option<String>,
+    },
+    /// Load a plugin from a manifest file
+    LoadPlugin {
+        /// Path to the plugin manifest file
+        #[arg(long)]
+        manifest: String,
+    },
+    /// Invoke a loaded plugin
+    InvokePlugin {
+        /// Plugin ID (UUID)
+        #[arg(long)]
+        plugin_id: String,
+        /// Input data for the plugin
+        #[arg(long)]
+        input: String,
+        /// Optional correlation ID
         #[arg(long)]
         correlation_id: Option<String>,
     },
@@ -101,65 +123,181 @@ async fn main() {
                 }
             }
 
-            // Give more time for events to be processed
-            tokio::time::sleep(Duration::from_secs(1)).await;
+            print_event_log(&event_log).await;
+        }
+        Commands::LoadPlugin { manifest } => {
+            let mut orchestrator = Orchestrator::new(100);
 
-            println!("\n=== Event Log ===");
-            let records = event_log.all();
-            if records.is_empty() {
-                println!("No events recorded.");
-                return;
-            }
+            // Read and parse the manifest file
+            let manifest_content =
+                std::fs::read_to_string(manifest).expect("Failed to read manifest file");
+            let manifest: PluginManifest =
+                toml::from_str(&manifest_content).expect("Failed to parse manifest");
 
-            for (i, record) in records.iter().enumerate() {
-                println!("{}. Event at {}:", i + 1, record.timestamp);
-                match &record.event {
-                    SystemEvent::TaskSubmitted {
-                        task_id,
-                        payload,
-                        metadata,
-                    } => {
-                        println!("  Type: TaskSubmitted");
-                        println!("  Task ID: {}", task_id);
-                        println!("  Payload: {}", payload);
-                        if let Some(corr_id) = metadata.correlation_id {
-                            println!("  Correlation ID: {}", corr_id);
-                        }
-                    }
-                    SystemEvent::TaskCompleted {
-                        task_id,
-                        result,
-                        metadata,
-                    } => {
-                        println!("  Type: TaskCompleted");
-                        println!("  Task ID: {}", task_id);
-                        println!("  Result: {}", result);
-                        if let Some(corr_id) = metadata.correlation_id {
-                            println!("  Correlation ID: {}", corr_id);
-                        }
-                    }
-                    SystemEvent::TaskError {
-                        task_id,
-                        error,
-                        metadata,
-                    } => {
-                        println!("  Type: TaskError");
-                        println!("  Task ID: {}", task_id);
-                        println!("  Error: {}", error);
-                        if let Some(corr_id) = metadata.correlation_id {
-                            println!("  Correlation ID: {}", corr_id);
-                        }
-                    }
+            // Load the plugin
+            match orchestrator.plugin_manager().load_plugin(manifest) {
+                Ok(plugin_id) => {
+                    println!("Plugin loaded successfully!");
+                    println!("Plugin ID: {}", plugin_id);
                 }
-                println!();
+                Err(e) => {
+                    eprintln!("Failed to load plugin: {}", e);
+                    std::process::exit(1);
+                }
+            }
+        }
+        Commands::InvokePlugin {
+            plugin_id,
+            input,
+            correlation_id,
+        } => {
+            let orchestrator = Orchestrator::new(100);
+            let sender = orchestrator.sender();
+            let mut completion_rx = orchestrator.completion_receiver();
+            let event_log = Arc::new(orchestrator.event_log().clone());
+
+            // Spawn the orchestrator
+            tokio::spawn(orchestrator.run());
+
+            let plugin_uuid = Uuid::parse_str(&plugin_id).expect("Invalid plugin ID format");
+            let correlation_uuid = correlation_id
+                .map(|id| Uuid::parse_str(&id))
+                .transpose()
+                .expect("Invalid correlation ID format");
+
+            println!("\n=== Invoking Plugin ===");
+            let event = SystemEvent::new_plugin_invocation(plugin_uuid, input, correlation_uuid);
+
+            // Send the event
+            if let Err(e) = sender.send(event).await {
+                eprintln!("Failed to invoke plugin: {}", e);
+                std::process::exit(1);
             }
 
-            println!("=== Event Replay Summary ===");
-            let summary = event_log.replay_summary();
-            println!("{}", summary);
+            println!("Plugin invocation sent successfully");
 
-            // Keep the program running for a moment to ensure all logs are flushed
-            tokio::time::sleep(Duration::from_millis(100)).await;
+            // Wait for completion with timeout
+            match timeout(Duration::from_secs(5), completion_rx.recv()).await {
+                Ok(Ok(completion)) => match completion {
+                    SystemEvent::PluginResult { output, .. } => {
+                        println!("Plugin completed successfully!");
+                        println!("Output: {}", output);
+                    }
+                    SystemEvent::PluginError { error, .. } => {
+                        eprintln!("Plugin failed: {}", error);
+                        std::process::exit(1);
+                    }
+                    _ => {}
+                },
+                Ok(Err(e)) => {
+                    eprintln!("Error receiving completion: {}", e);
+                    std::process::exit(1);
+                }
+                Err(_) => {
+                    eprintln!("Timeout waiting for plugin completion");
+                    std::process::exit(1);
+                }
+            }
+
+            print_event_log(&event_log).await;
         }
     }
+}
+
+async fn print_event_log(event_log: &EventLog) {
+    // Give more time for events to be processed
+    tokio::time::sleep(Duration::from_secs(1)).await;
+
+    println!("\n=== Event Log ===");
+    let records = event_log.all();
+    if records.is_empty() {
+        println!("No events recorded.");
+        return;
+    }
+
+    for (i, record) in records.iter().enumerate() {
+        println!("{}. Event at {}:", i + 1, record.timestamp);
+        match &record.event {
+            SystemEvent::TaskSubmitted {
+                task_id,
+                payload,
+                metadata,
+            } => {
+                println!("  Type: TaskSubmitted");
+                println!("  Task ID: {}", task_id);
+                println!("  Payload: {}", payload);
+                if let Some(corr_id) = metadata.correlation_id {
+                    println!("  Correlation ID: {}", corr_id);
+                }
+            }
+            SystemEvent::TaskCompleted {
+                task_id,
+                result,
+                metadata,
+            } => {
+                println!("  Type: TaskCompleted");
+                println!("  Task ID: {}", task_id);
+                println!("  Result: {}", result);
+                if let Some(corr_id) = metadata.correlation_id {
+                    println!("  Correlation ID: {}", corr_id);
+                }
+            }
+            SystemEvent::TaskError {
+                task_id,
+                error,
+                metadata,
+            } => {
+                println!("  Type: TaskError");
+                println!("  Task ID: {}", task_id);
+                println!("  Error: {}", error);
+                if let Some(corr_id) = metadata.correlation_id {
+                    println!("  Correlation ID: {}", corr_id);
+                }
+            }
+            SystemEvent::PluginInvoked {
+                plugin_id,
+                input,
+                metadata,
+            } => {
+                println!("  Type: PluginInvoked");
+                println!("  Plugin ID: {}", plugin_id);
+                println!("  Input: {}", input);
+                if let Some(corr_id) = metadata.correlation_id {
+                    println!("  Correlation ID: {}", corr_id);
+                }
+            }
+            SystemEvent::PluginResult {
+                plugin_id,
+                output,
+                metadata,
+            } => {
+                println!("  Type: PluginResult");
+                println!("  Plugin ID: {}", plugin_id);
+                println!("  Output: {}", output);
+                if let Some(corr_id) = metadata.correlation_id {
+                    println!("  Correlation ID: {}", corr_id);
+                }
+            }
+            SystemEvent::PluginError {
+                plugin_id,
+                error,
+                metadata,
+            } => {
+                println!("  Type: PluginError");
+                println!("  Plugin ID: {}", plugin_id);
+                println!("  Error: {}", error);
+                if let Some(corr_id) = metadata.correlation_id {
+                    println!("  Correlation ID: {}", corr_id);
+                }
+            }
+        }
+        println!();
+    }
+
+    println!("=== Event Replay Summary ===");
+    let summary = event_log.replay_summary();
+    println!("{}", summary);
+
+    // Keep the program running for a moment to ensure all logs are flushed
+    tokio::time::sleep(Duration::from_millis(100)).await;
 }

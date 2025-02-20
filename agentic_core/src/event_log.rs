@@ -49,7 +49,11 @@ impl EventLog {
         let mut tasks_submitted = 0;
         let mut tasks_completed = 0;
         let mut tasks_failed = 0;
+        let mut plugins_invoked = 0;
+        let mut plugins_completed = 0;
+        let mut plugins_failed = 0;
         let mut task_statuses = std::collections::HashMap::new();
+        let mut plugin_statuses = std::collections::HashMap::new();
 
         // Use reference to avoid moving records
         for record in &records {
@@ -70,18 +74,55 @@ impl EventLog {
                     tasks_failed += 1;
                     task_statuses.insert(*task_id, format!("Failed with error: {}", error));
                 }
+                SystemEvent::PluginInvoked {
+                    plugin_id, input, ..
+                } => {
+                    plugins_invoked += 1;
+                    plugin_statuses.insert(*plugin_id, format!("Invoked with input: {}", input));
+                }
+                SystemEvent::PluginResult {
+                    plugin_id, output, ..
+                } => {
+                    plugins_completed += 1;
+                    plugin_statuses
+                        .insert(*plugin_id, format!("Completed with output: {}", output));
+                }
+                SystemEvent::PluginError {
+                    plugin_id, error, ..
+                } => {
+                    plugins_failed += 1;
+                    plugin_statuses.insert(*plugin_id, format!("Failed with error: {}", error));
+                }
             }
         }
 
         summary.push_str(&format!("Total Events: {}\n", records.len()));
+        summary.push_str("\nTask Statistics:\n");
+        summary.push_str("---------------\n");
         summary.push_str(&format!("Tasks Submitted: {}\n", tasks_submitted));
         summary.push_str(&format!("Tasks Completed: {}\n", tasks_completed));
-        summary.push_str(&format!("Tasks Failed: {}\n\n", tasks_failed));
+        summary.push_str(&format!("Tasks Failed: {}\n", tasks_failed));
 
-        summary.push_str("Task Status Summary:\n");
-        summary.push_str("------------------\n");
-        for (task_id, status) in task_statuses {
-            summary.push_str(&format!("Task {}: {}\n", task_id, status));
+        summary.push_str("\nPlugin Statistics:\n");
+        summary.push_str("-----------------\n");
+        summary.push_str(&format!("Plugins Invoked: {}\n", plugins_invoked));
+        summary.push_str(&format!("Plugins Completed: {}\n", plugins_completed));
+        summary.push_str(&format!("Plugins Failed: {}\n", plugins_failed));
+
+        if !task_statuses.is_empty() {
+            summary.push_str("\nTask Status Summary:\n");
+            summary.push_str("------------------\n");
+            for (task_id, status) in task_statuses {
+                summary.push_str(&format!("Task {}: {}\n", task_id, status));
+            }
+        }
+
+        if !plugin_statuses.is_empty() {
+            summary.push_str("\nPlugin Status Summary:\n");
+            summary.push_str("--------------------\n");
+            for (plugin_id, status) in plugin_statuses {
+                summary.push_str(&format!("Plugin {}: {}\n", plugin_id, status));
+            }
         }
 
         summary
@@ -212,5 +253,40 @@ mod tests {
         let summary = log.replay_summary();
         assert!(summary.contains("Tasks Failed: 1"));
         assert!(summary.contains("Failed with error: test error"));
+    }
+
+    #[test]
+    fn test_event_log_with_plugin() {
+        let log = EventLog::new();
+        let plugin_id = Uuid::new_v4();
+
+        // Invoke plugin
+        log.append(SystemEvent::PluginInvoked {
+            plugin_id,
+            input: "test input".into(),
+            metadata: EventMetadata {
+                event_id: Uuid::new_v4(),
+                timestamp: Utc::now(),
+                correlation_id: None,
+                context: json!({}),
+            },
+        });
+
+        // Plugin completes
+        log.append(SystemEvent::PluginResult {
+            plugin_id,
+            output: "test output".into(),
+            metadata: EventMetadata {
+                event_id: Uuid::new_v4(),
+                timestamp: Utc::now(),
+                correlation_id: None,
+                context: json!({}),
+            },
+        });
+
+        let summary = log.replay_summary();
+        assert!(summary.contains("Plugins Invoked: 1"));
+        assert!(summary.contains("Plugins Completed: 1"));
+        assert!(summary.contains("test output"));
     }
 }
