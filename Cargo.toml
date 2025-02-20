@@ -1,0 +1,6 @@
+[workspace]
+members = [
+    "agentic_core",
+    "agentic_cli"
+]
+resolver = "2"
