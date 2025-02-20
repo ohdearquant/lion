@@ -1,3 +1,4 @@
+use crate::agent::{AgentEvent, AgentProtocol, MockStreamingAgent};
 use crate::event_log::EventLog;
 use crate::plugin_manager::PluginManager;
 use chrono::Utc;
@@ -60,6 +61,30 @@ pub enum SystemEvent {
         error: String,
         metadata: EventMetadata,
     },
+    /// A new agent has been spawned
+    AgentSpawned {
+        agent_id: Uuid,
+        prompt: String,
+        metadata: EventMetadata,
+    },
+    /// An agent has produced partial output
+    AgentPartialOutput {
+        agent_id: Uuid,
+        chunk: String,
+        metadata: EventMetadata,
+    },
+    /// An agent has completed its task
+    AgentCompleted {
+        agent_id: Uuid,
+        result: String,
+        metadata: EventMetadata,
+    },
+    /// An agent encountered an error
+    AgentError {
+        agent_id: Uuid,
+        error: String,
+        metadata: EventMetadata,
+    },
 }
 
 impl SystemEvent {
@@ -95,6 +120,20 @@ impl SystemEvent {
         }
     }
 
+    /// Create a new AgentSpawned event
+    pub fn new_agent(prompt: String, correlation_id: Option<Uuid>) -> Self {
+        SystemEvent::AgentSpawned {
+            agent_id: Uuid::new_v4(),
+            prompt,
+            metadata: EventMetadata {
+                event_id: Uuid::new_v4(),
+                timestamp: Utc::now(),
+                correlation_id,
+                context: json!({}),
+            },
+        }
+    }
+
     /// Get the event's metadata
     pub fn metadata(&self) -> &EventMetadata {
         match self {
@@ -104,6 +143,10 @@ impl SystemEvent {
             SystemEvent::PluginInvoked { metadata, .. } => metadata,
             SystemEvent::PluginResult { metadata, .. } => metadata,
             SystemEvent::PluginError { metadata, .. } => metadata,
+            SystemEvent::AgentSpawned { metadata, .. } => metadata,
+            SystemEvent::AgentPartialOutput { metadata, .. } => metadata,
+            SystemEvent::AgentCompleted { metadata, .. } => metadata,
+            SystemEvent::AgentError { metadata, .. } => metadata,
         }
     }
 }
@@ -228,10 +271,108 @@ impl Orchestrator {
                     }
                 }
             }
+            SystemEvent::AgentSpawned {
+                agent_id,
+                prompt,
+                metadata,
+            } => {
+                info!(
+                    agent_id = %agent_id,
+                    correlation_id = ?metadata.correlation_id,
+                    "Agent spawned"
+                );
+
+                // Create a mock streaming agent
+                let mut agent = MockStreamingAgent::new(agent_id);
+
+                // Start the agent and get initial event
+                let start_evt = AgentEvent::Start {
+                    agent_id,
+                    prompt: prompt.clone(),
+                };
+
+                let mut current_evt = agent.on_event(start_evt);
+                let mut final_result = None;
+
+                // Process all agent events
+                while let Some(evt) = current_evt {
+                    match evt {
+                        AgentEvent::PartialOutput { agent_id, chunk } => {
+                            // Log partial output
+                            let partial = SystemEvent::AgentPartialOutput {
+                                agent_id,
+                                chunk: chunk.clone(),
+                                metadata: EventMetadata {
+                                    event_id: Uuid::new_v4(),
+                                    timestamp: Utc::now(),
+                                    correlation_id: metadata.correlation_id,
+                                    context: metadata.context.clone(),
+                                },
+                            };
+                            self.event_log.append(partial);
+
+                            // Get next event
+                            current_evt =
+                                agent.on_event(AgentEvent::PartialOutput { agent_id, chunk });
+                        }
+                        AgentEvent::Done { final_output, .. } => {
+                            final_result = Some(final_output);
+                            current_evt = None;
+                        }
+                        AgentEvent::Error { error, .. } => {
+                            let error_evt = SystemEvent::AgentError {
+                                agent_id,
+                                error,
+                                metadata: EventMetadata {
+                                    event_id: Uuid::new_v4(),
+                                    timestamp: Utc::now(),
+                                    correlation_id: metadata.correlation_id,
+                                    context: metadata.context,
+                                },
+                            };
+                            self.event_log.append(error_evt.clone());
+                            return Some(error_evt);
+                        }
+                        _ => current_evt = None,
+                    }
+                }
+
+                // Create completion event
+                if let Some(result) = final_result {
+                    let completion = SystemEvent::AgentCompleted {
+                        agent_id,
+                        result,
+                        metadata: EventMetadata {
+                            event_id: Uuid::new_v4(),
+                            timestamp: Utc::now(),
+                            correlation_id: metadata.correlation_id,
+                            context: metadata.context,
+                        },
+                    };
+                    self.event_log.append(completion.clone());
+                    Some(completion)
+                } else {
+                    let error_evt = SystemEvent::AgentError {
+                        agent_id,
+                        error: "Agent failed to produce final output".into(),
+                        metadata: EventMetadata {
+                            event_id: Uuid::new_v4(),
+                            timestamp: Utc::now(),
+                            correlation_id: metadata.correlation_id,
+                            context: metadata.context,
+                        },
+                    };
+                    self.event_log.append(error_evt.clone());
+                    Some(error_evt)
+                }
+            }
             SystemEvent::TaskCompleted { .. }
             | SystemEvent::TaskError { .. }
             | SystemEvent::PluginResult { .. }
-            | SystemEvent::PluginError { .. } => None,
+            | SystemEvent::PluginError { .. }
+            | SystemEvent::AgentPartialOutput { .. }
+            | SystemEvent::AgentCompleted { .. }
+            | SystemEvent::AgentError { .. } => None,
         }
     }
 
@@ -370,6 +511,71 @@ mod tests {
             completion.metadata().correlation_id,
             correlation_id,
             "Correlation ID should be preserved"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_agent_spawn_and_completion() {
+        let orchestrator = Orchestrator::new(100);
+        let sender = orchestrator.sender();
+        let mut completion_rx = orchestrator.completion_receiver();
+        let event_log = orchestrator.event_log().clone();
+
+        // Spawn the orchestrator
+        tokio::spawn(orchestrator.run());
+
+        // Create and send an agent spawn event
+        let event = SystemEvent::new_agent("test prompt".to_string(), None);
+        let agent_id = match &event {
+            SystemEvent::AgentSpawned { agent_id, .. } => *agent_id,
+            _ => panic!("Unexpected event type"),
+        };
+
+        sender.send(event).await.expect("Failed to send event");
+
+        // Wait for completion with timeout
+        let completion = timeout(Duration::from_secs(1), completion_rx.recv())
+            .await
+            .expect("Timeout waiting for completion")
+            .expect("Channel closed");
+
+        match completion {
+            SystemEvent::AgentCompleted {
+                agent_id: completed_id,
+                result,
+                ..
+            } => {
+                assert_eq!(completed_id, agent_id);
+                assert!(result.contains("test prompt"));
+            }
+            _ => panic!("Expected AgentCompleted event"),
+        }
+
+        // Verify events were logged
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        let records = event_log.all();
+        assert_eq!(
+            records.len(),
+            4,
+            "Should have spawn, partial outputs, and completion events"
+        );
+
+        // Verify event sequence
+        assert!(
+            matches!(records[0].event, SystemEvent::AgentSpawned { .. }),
+            "First event should be AgentSpawned"
+        );
+        assert!(
+            matches!(records[1].event, SystemEvent::AgentPartialOutput { .. }),
+            "Second event should be AgentPartialOutput"
+        );
+        assert!(
+            matches!(records[2].event, SystemEvent::AgentPartialOutput { .. }),
+            "Third event should be AgentPartialOutput"
+        );
+        assert!(
+            matches!(records[3].event, SystemEvent::AgentCompleted { .. }),
+            "Fourth event should be AgentCompleted"
         );
     }
 }

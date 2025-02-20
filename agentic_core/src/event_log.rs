@@ -52,8 +52,12 @@ impl EventLog {
         let mut plugins_invoked = 0;
         let mut plugins_completed = 0;
         let mut plugins_failed = 0;
+        let mut agents_spawned = 0;
+        let mut agents_completed = 0;
+        let mut agents_failed = 0;
         let mut task_statuses = std::collections::HashMap::new();
         let mut plugin_statuses = std::collections::HashMap::new();
+        let mut agent_statuses = std::collections::HashMap::new();
 
         // Use reference to avoid moving records
         for record in &records {
@@ -93,10 +97,42 @@ impl EventLog {
                     plugins_failed += 1;
                     plugin_statuses.insert(*plugin_id, format!("Failed with error: {}", error));
                 }
+                SystemEvent::AgentSpawned {
+                    agent_id, prompt, ..
+                } => {
+                    agents_spawned += 1;
+                    agent_statuses.insert(*agent_id, format!("Spawned with prompt: {}", prompt));
+                }
+                SystemEvent::AgentPartialOutput {
+                    agent_id, chunk, ..
+                } => {
+                    let status = agent_statuses.entry(*agent_id).or_insert_with(String::new);
+                    if !status.is_empty() {
+                        status.push_str("\n  ");
+                    }
+                    status.push_str(&format!("Partial output: {}", chunk));
+                }
+                SystemEvent::AgentCompleted {
+                    agent_id, result, ..
+                } => {
+                    agents_completed += 1;
+                    let status = agent_statuses.entry(*agent_id).or_insert_with(String::new);
+                    if !status.is_empty() {
+                        status.push_str("\n  ");
+                    }
+                    status.push_str(&format!("Completed with result: {}", result));
+                }
+                SystemEvent::AgentError {
+                    agent_id, error, ..
+                } => {
+                    agents_failed += 1;
+                    agent_statuses.insert(*agent_id, format!("Failed with error: {}", error));
+                }
             }
         }
 
         summary.push_str(&format!("Total Events: {}\n", records.len()));
+
         summary.push_str("\nTask Statistics:\n");
         summary.push_str("---------------\n");
         summary.push_str(&format!("Tasks Submitted: {}\n", tasks_submitted));
@@ -108,6 +144,12 @@ impl EventLog {
         summary.push_str(&format!("Plugins Invoked: {}\n", plugins_invoked));
         summary.push_str(&format!("Plugins Completed: {}\n", plugins_completed));
         summary.push_str(&format!("Plugins Failed: {}\n", plugins_failed));
+
+        summary.push_str("\nAgent Statistics:\n");
+        summary.push_str("----------------\n");
+        summary.push_str(&format!("Agents Spawned: {}\n", agents_spawned));
+        summary.push_str(&format!("Agents Completed: {}\n", agents_completed));
+        summary.push_str(&format!("Agents Failed: {}\n", agents_failed));
 
         if !task_statuses.is_empty() {
             summary.push_str("\nTask Status Summary:\n");
@@ -122,6 +164,14 @@ impl EventLog {
             summary.push_str("--------------------\n");
             for (plugin_id, status) in plugin_statuses {
                 summary.push_str(&format!("Plugin {}: {}\n", plugin_id, status));
+            }
+        }
+
+        if !agent_statuses.is_empty() {
+            summary.push_str("\nAgent Status Summary:\n");
+            summary.push_str("-------------------\n");
+            for (agent_id, status) in agent_statuses {
+                summary.push_str(&format!("Agent {}: {}\n", agent_id, status));
             }
         }
 
@@ -288,5 +338,53 @@ mod tests {
         assert!(summary.contains("Plugins Invoked: 1"));
         assert!(summary.contains("Plugins Completed: 1"));
         assert!(summary.contains("test output"));
+    }
+
+    #[test]
+    fn test_event_log_with_agent() {
+        let log = EventLog::new();
+        let agent_id = Uuid::new_v4();
+
+        // Spawn agent
+        log.append(SystemEvent::AgentSpawned {
+            agent_id,
+            prompt: "test prompt".into(),
+            metadata: EventMetadata {
+                event_id: Uuid::new_v4(),
+                timestamp: Utc::now(),
+                correlation_id: None,
+                context: json!({}),
+            },
+        });
+
+        // Agent produces partial output
+        log.append(SystemEvent::AgentPartialOutput {
+            agent_id,
+            chunk: "partial result".into(),
+            metadata: EventMetadata {
+                event_id: Uuid::new_v4(),
+                timestamp: Utc::now(),
+                correlation_id: None,
+                context: json!({}),
+            },
+        });
+
+        // Agent completes
+        log.append(SystemEvent::AgentCompleted {
+            agent_id,
+            result: "final result".into(),
+            metadata: EventMetadata {
+                event_id: Uuid::new_v4(),
+                timestamp: Utc::now(),
+                correlation_id: None,
+                context: json!({}),
+            },
+        });
+
+        let summary = log.replay_summary();
+        assert!(summary.contains("Agents Spawned: 1"));
+        assert!(summary.contains("Agents Completed: 1"));
+        assert!(summary.contains("partial result"));
+        assert!(summary.contains("final result"));
     }
 }

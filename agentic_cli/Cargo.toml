@@ -1,6 +1,6 @@
 [package]
 name = "agentic_cli"
-version = "0.0.1-alpha-phase4"
+version = "0.0.1-alpha-phase5"
 edition = "2021"
 
 [dependencies]
