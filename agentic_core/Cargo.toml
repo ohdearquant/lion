@@ -1,6 +1,6 @@
 [package]
 name = "agentic_core"
-version = "0.0.1a-phase1"
+version = "0.0.1-alpha-phase1"
 edition = "2021"
 
 [dependencies]
