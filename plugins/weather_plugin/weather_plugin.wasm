@@ -1,0 +1,13 @@
+// Mock WASM content for weather plugin
+// In a real implementation, this would be compiled WebAssembly code
+
+(module
+  (func $current (param $city i32) (param $country i32) (result i32)
+    local.get $city
+  )
+  (func $forecast (param $city i32) (param $country i32) (param $days i32) (result i32)
+    local.get $city
+  )
+  (export "current" (func $current))
+  (export "forecast" (func $forecast))
+)

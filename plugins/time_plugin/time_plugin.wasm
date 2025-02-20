@@ -1,0 +1,13 @@
+// Mock WASM content for time plugin
+// In a real implementation, this would be compiled WebAssembly code
+
+(module
+  (func $current (param $timezone i32) (result i32)
+    local.get $timezone
+  )
+  (func $convert (param $time i32) (param $from i32) (param $to i32) (result i32)
+    local.get $time
+  )
+  (export "current" (func $current))
+  (export "convert" (func $convert))
+)

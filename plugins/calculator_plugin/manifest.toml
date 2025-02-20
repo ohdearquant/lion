@@ -1,0 +1,10 @@
+name = "calculator_plugin"
+version = "0.1.0"
+description = "A plugin for performing advanced mathematical calculations and unit conversions"
+entry_point = "plugins/calculator_plugin/calculator_plugin.wasm"
+permissions = []
+
+[functions]
+calculate = "Evaluate mathematical expressions"
+convert = "Convert between different units of measurement"
+solve = "Solve mathematical equations"

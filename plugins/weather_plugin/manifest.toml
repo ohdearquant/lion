@@ -1,0 +1,9 @@
+name = "weather_plugin"
+version = "0.1.0"
+description = "A plugin for retrieving weather information for cities worldwide"
+entry_point = "plugins/weather_plugin/weather_plugin.wasm"
+permissions = ["net"]
+
+[functions]
+current = "Get current weather for a city"
+forecast = "Get weather forecast for a city"

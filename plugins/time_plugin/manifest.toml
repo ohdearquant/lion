@@ -1,0 +1,9 @@
+name = "time_plugin"
+version = "0.1.0"
+description = "A plugin for timezone conversions and time-related operations"
+entry_point = "plugins/time_plugin/time_plugin.wasm"
+permissions = ["time"]
+
+[functions]
+convert = "Convert time between timezones"
+current = "Get current time in a specific timezone"
