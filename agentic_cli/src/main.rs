@@ -1,83 +1,100 @@
-use agentic_core::{ElementData, InMemoryStore};
+use agentic_core::orchestrator::{Orchestrator, SystemEvent};
 use clap::{Parser, Subcommand};
-use serde_json::Value;
-use tracing::{error, info};
+use std::time::Duration;
+use tokio::time::timeout;
+use tracing_subscriber::fmt::format::FmtSpan;
+use uuid::Uuid;
 
-#[derive(Debug, Parser)]
-#[command(name = "lion-cli", version = "0.0.1-alpha")]
+#[derive(Parser)]
+#[command(name = "lion-cli", version = "0.0.1a")]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
 }
 
-#[derive(Debug, Subcommand)]
+#[derive(Subcommand)]
 enum Commands {
-    /// Create a new element with the given metadata
-    CreateElement {
-        /// JSON metadata for the element
+    /// Submit a task to the orchestrator
+    SubmitTask {
+        /// The task data/payload
         #[arg(long)]
-        metadata: String,
+        data: String,
+
+        /// Optional correlation ID for tracking related tasks
+        #[arg(long)]
+        correlation_id: Option<String>,
     },
-    /// List all stored element IDs
-    ListElements,
 }
 
-fn main() {
-    // Initialize logging
-    tracing_subscriber::fmt::init();
+#[tokio::main]
+async fn main() {
+    // Initialize tracing subscriber for structured logging
+    tracing_subscriber::fmt()
+        .with_span_events(FmtSpan::CLOSE)
+        .with_thread_ids(true)
+        .with_target(false)
+        .with_file(true)
+        .with_line_number(true)
+        .init();
 
     let cli = Cli::parse();
-    // Create an ephemeral store (Phase 1 is purely in-memory)
-    let store = InMemoryStore::new();
+
+    // Create orchestrator with a channel capacity of 100
+    let orchestrator = Orchestrator::new(100);
+    let sender = orchestrator.sender();
+    let mut completion_rx = orchestrator.completion_receiver();
+
+    // Spawn the orchestrator's event loop
+    tokio::spawn(orchestrator.run());
 
     match cli.command {
-        Commands::CreateElement { metadata } => match serde_json::from_str::<Value>(&metadata) {
-            Ok(parsed) => {
-                let elem = ElementData::new(parsed);
-                let id = store.create_element(elem);
-                info!("Created element with ID: {}", id);
-                println!("Created element with ID: {}", id);
-            }
-            Err(e) => {
-                error!("Invalid JSON metadata: {}", e);
-                eprintln!("Error: Invalid JSON for --metadata");
+        Commands::SubmitTask {
+            data,
+            correlation_id,
+        } => {
+            let correlation_uuid = correlation_id
+                .map(|id| Uuid::parse_str(&id))
+                .transpose()
+                .expect("Invalid correlation ID format");
+
+            let event = SystemEvent::new_task(data, correlation_uuid);
+
+            // Extract task_id before moving event
+            let task_id = match &event {
+                SystemEvent::TaskSubmitted { task_id, .. } => *task_id,
+                _ => panic!("Unexpected event type"),
+            };
+
+            // Send the event
+            if let Err(e) = sender.send(event).await {
+                eprintln!("Failed to submit task: {}", e);
                 std::process::exit(1);
             }
-        },
-        Commands::ListElements => {
-            let ids = store.list_element_ids();
-            if ids.is_empty() {
-                println!("No elements stored yet.");
-            } else {
-                println!("Element IDs:");
-                for id in ids {
-                    println!("  {}", id);
+
+            println!("Task submitted successfully with ID: {}", task_id);
+
+            // Wait for completion with timeout
+            match timeout(Duration::from_secs(5), completion_rx.recv()).await {
+                Ok(Ok(completion)) => match completion {
+                    SystemEvent::TaskCompleted { result, .. } => {
+                        println!("Task completed successfully!");
+                        println!("Result: {}", result);
+                    }
+                    SystemEvent::TaskError { error, .. } => {
+                        eprintln!("Task failed: {}", error);
+                        std::process::exit(1);
+                    }
+                    _ => {}
+                },
+                Ok(Err(e)) => {
+                    eprintln!("Error receiving completion: {}", e);
+                    std::process::exit(1);
+                }
+                Err(_) => {
+                    eprintln!("Timeout waiting for task completion");
+                    std::process::exit(1);
                 }
             }
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use serde_json::json;
-
-    #[test]
-    fn test_store_operations() {
-        let store = InMemoryStore::new();
-        assert!(store.is_empty());
-
-        // Create an element
-        let metadata = json!({"test": "value"});
-        let elem = ElementData::new(metadata);
-        let id = store.create_element(elem);
-
-        // Verify it exists
-        assert!(!store.is_empty());
-        assert_eq!(store.len(), 1);
-
-        let ids = store.list_element_ids();
-        assert!(ids.contains(&id));
     }
 }
