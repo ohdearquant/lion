@@ -3,17 +3,14 @@ use axum::{
     routing::{get, post},
     Router,
 };
+use lion_ui::{
+    invoke_plugin_handler, list_agents, list_plugins_handler, load_plugin_handler, spawn_agent,
+    sse_handler, AppState,
+};
 use std::{net::SocketAddr, sync::Arc};
 use tokio::net::TcpListener;
 use tracing::{info, Level};
 use tracing_subscriber::FmtSubscriber;
-
-mod agents;
-mod events;
-pub mod plugins;
-pub mod state;
-
-use crate::state::AppState;
 
 #[tokio::main]
 async fn main() {
@@ -40,18 +37,15 @@ async fn main() {
     let app = Router::new()
         .route("/", get(index_handler))
         .route("/ping", get(ping_handler))
-        .route("/events", get(events::sse_handler))
-        .route(
-            "/api/agents",
-            get(agents::list_agents).post(agents::spawn_agent),
-        )
+        .route("/events", get(sse_handler))
+        .route("/api/agents", get(list_agents).post(spawn_agent))
         .route(
             "/api/plugins",
-            get(plugins::list_plugins).post(plugins::load_plugin),
+            get(list_plugins_handler).post(load_plugin_handler),
         )
         .route(
             "/api/plugins/:plugin_id/invoke",
-            post(plugins::invoke_plugin),
+            post(invoke_plugin_handler),
         )
         .with_state(state);
 

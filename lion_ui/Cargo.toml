@@ -18,6 +18,7 @@ tower-http = { version = "0.6", features = ["trace"] }
 tower = { version = "0.5", features = ["util"] }
 http-body-util = "0.1"
 toml = "0.8"
+chrono = { version = "0.4", features = ["serde"] }
 
 [build-dependencies]
 fs_extra = "1.3"

@@ -1,4 +1,4 @@
-use agentic_core::SystemEvent;
+use agentic_core::orchestrator::events::SystemEvent;
 use std::collections::HashMap;
 use tokio::sync::{broadcast, mpsc, RwLock};
 use uuid::Uuid;

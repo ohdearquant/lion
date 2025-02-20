@@ -1,6 +1,11 @@
-use agentic_core::SystemEvent;
+use agentic_core::orchestrator::{
+    events::{AgentEvent, SystemEvent},
+    metadata::EventMetadata,
+};
 use axum::{extract::State, Json};
+use chrono::Utc;
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use std::sync::Arc;
 use tracing::info;
 use uuid::Uuid;
@@ -43,6 +48,15 @@ impl<T> ApiResponse<T> {
     }
 }
 
+fn create_metadata(correlation_id: Option<Uuid>) -> EventMetadata {
+    EventMetadata {
+        event_id: Uuid::new_v4(),
+        timestamp: Utc::now(),
+        correlation_id,
+        context: json!({}),
+    }
+}
+
 pub async fn spawn_agent(
     State(state): State<Arc<AppState>>,
     Json(req): Json<SpawnAgentRequest>,
@@ -52,11 +66,8 @@ pub async fn spawn_agent(
     // Generate agent ID
     let agent_id = Uuid::new_v4();
 
-    // Create the event
-    let event = SystemEvent::AgentSpawned {
-        agent_id,
-        prompt: Some(req.prompt),
-    };
+    // Create the event using the constructor
+    let event = SystemEvent::new_agent(req.prompt, None);
 
     // Send to orchestrator
     if let Err(e) = state.orchestrator_tx.send(event).await {
