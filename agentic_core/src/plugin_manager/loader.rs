@@ -1,9 +1,10 @@
 use super::{
     error::PluginError,
     manifest::PluginManifest,
-    registry::{PluginRegistry, PluginState},
+    registry::PluginRegistry,
     Result,
 };
+use crate::types::{plugin::PluginState, traits::Validatable};
 use std::path::{Path, PathBuf};
 use tokio::fs;
 use tracing::{debug, error};
@@ -89,7 +90,7 @@ impl PluginLoader {
             Err(e) => {
                 error!("Failed to initialize plugin: {}", e);
                 self.registry
-                    .update_state(plugin_id, PluginState::Failed(e.to_string()))?;
+                    .update_state(plugin_id, PluginState::Error)?;
                 Err(e)
             }
         }
@@ -139,10 +140,7 @@ mod tests {
         // Verify plugin state
         let metadata = loader.registry().get(plugin_id).unwrap();
         assert_eq!(metadata.manifest.name, "test-plugin");
-        match metadata.state {
-            PluginState::Ready => (),
-            _ => panic!("Unexpected plugin state"),
-        }
+        assert_eq!(metadata.state, PluginState::Ready);
     }
 
     #[tokio::test]

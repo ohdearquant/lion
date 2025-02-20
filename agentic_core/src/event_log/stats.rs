@@ -134,3 +134,33 @@ impl EventStats {
         }
     }
 }
+                    .entry(*agent_id)
+                    .or_insert_with(String::new);
+                if !status.is_empty() {
+                    status.push_str("\n  ");
+                }
+                status.push_str(&format!("Partial output: {}", chunk));
+            }
+            AgentEvent::Completed {
+                agent_id, result, ..
+            } => {
+                self.agents_completed += 1;
+                let status = self
+                    .agent_statuses
+                    .entry(*agent_id)
+                    .or_insert_with(String::new);
+                if !status.is_empty() {
+                    status.push_str("\n  ");
+                }
+                status.push_str(&format!("Completed with result: {}", result));
+            }
+            AgentEvent::Error {
+                agent_id, error, ..
+            } => {
+                self.agents_failed += 1;
+                self.agent_statuses
+                    .insert(*agent_id, format!("Failed with error: {}", error));
+            }
+        }
+    }
+}

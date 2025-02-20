@@ -6,8 +6,9 @@ mod registry;
 
 pub use error::PluginError;
 pub use manager::PluginManager;
-pub use manifest::PluginManifest;
-pub use registry::{PluginMetadata, PluginRegistry, PluginState};
+// Use the new PluginManifest from types
+pub use crate::types::plugin::{Plugin, PluginManifest, PluginState};
+pub use registry::PluginMetadata;
 
 // Re-export common types that consumers will need
 pub type Result<T> = std::result::Result<T, PluginError>;

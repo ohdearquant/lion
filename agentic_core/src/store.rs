@@ -1,45 +1,38 @@
-use crate::element::ElementData;
-use crate::pile::Pile;
-use uuid::Uuid;
+use crate::storage::{ElementData, ElementId, FileStorage};
+use std::sync::Arc;
 
+/// A store for managing elements
 #[derive(Debug, Clone)]
-pub struct InMemoryStore {
-    elements: Pile<ElementData>,
+pub struct Store {
+    storage: Arc<FileStorage>,
 }
 
-impl InMemoryStore {
-    pub fn new() -> Self {
+impl Store {
+    /// Create a new store
+    pub fn new(storage_path: &str) -> Self {
         Self {
-            elements: Pile::new(),
+            storage: Arc::new(FileStorage::new(storage_path)),
         }
     }
 
-    pub fn create_element(&self, elem: ElementData) -> Uuid {
-        let id = elem.id;
-        self.elements.insert(id, elem);
-        id
+    /// Get an element by ID
+    pub fn get(&self, id: ElementId) -> Option<ElementData> {
+        self.storage.get(id)
     }
 
-    pub fn get_element(&self, id: &Uuid) -> Option<ElementData> {
-        self.elements.get(id)
+    /// Set an element
+    pub fn set(&self, id: ElementId, data: serde_json::Value) -> bool {
+        self.storage.set(id, data)
     }
 
-    pub fn list_element_ids(&self) -> Vec<Uuid> {
-        self.elements.list_ids()
+    /// Remove an element
+    pub fn remove(&self, id: ElementId) -> bool {
+        self.storage.remove(id)
     }
 
-    pub fn len(&self) -> usize {
-        self.elements.len()
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.elements.is_empty()
-    }
-}
-
-impl Default for InMemoryStore {
-    fn default() -> Self {
-        Self::new()
+    /// List all elements
+    pub fn list(&self) -> Vec<ElementData> {
+        self.storage.list()
     }
 }
 
@@ -47,42 +40,50 @@ impl Default for InMemoryStore {
 mod tests {
     use super::*;
     use serde_json::json;
+    use tempfile::tempdir;
+    use uuid::Uuid;
 
     #[test]
     fn test_store_create_element() {
-        let store = InMemoryStore::new();
-        let data = ElementData::new(json!({ "hello": "world" }));
-        let id = store.create_element(data.clone());
-        let retrieved = store.get_element(&id).unwrap();
-        assert_eq!(retrieved.id, data.id);
-        assert_eq!(retrieved.metadata, data.metadata);
-    }
+        let temp_dir = tempdir().unwrap();
+        let store = Store::new(temp_dir.path().to_str().unwrap());
 
-    #[test]
-    fn test_store_list_elements() {
-        let store = InMemoryStore::new();
-        assert!(store.is_empty());
+        let id = ElementId(Uuid::new_v4());
+        let data = json!({
+            "name": "test",
+            "value": 42
+        });
 
-        let mut created_ids = Vec::new();
-        for i in 0..3 {
-            let elem = ElementData::new(json!({ "index": i }));
-            let id = store.create_element(elem);
-            created_ids.push(id);
-        }
+        assert!(store.set(id, data.clone()));
 
-        let stored_ids = store.list_element_ids();
-        assert_eq!(stored_ids.len(), 3);
-        assert_eq!(store.len(), 3);
-
-        for id in created_ids {
-            assert!(stored_ids.contains(&id));
-        }
+        let element = store.get(id).unwrap();
+        assert_eq!(element.id, id);
+        assert_eq!(element.data.content, data);
     }
 
     #[test]
     fn test_store_get_nonexistent() {
-        let store = InMemoryStore::new();
-        let id = Uuid::new_v4();
-        assert!(store.get_element(&id).is_none());
+        let temp_dir = tempdir().unwrap();
+        let store = Store::new(temp_dir.path().to_str().unwrap());
+
+        let id = ElementId(Uuid::new_v4());
+        assert!(store.get(id).is_none());
+    }
+
+    #[test]
+    fn test_store_list_elements() {
+        let temp_dir = tempdir().unwrap();
+        let store = Store::new(temp_dir.path().to_str().unwrap());
+
+        let id1 = ElementId(Uuid::new_v4());
+        let id2 = ElementId(Uuid::new_v4());
+
+        store.set(id1, json!({"name": "test1"}));
+        store.set(id2, json!({"name": "test2"}));
+
+        let elements = store.list();
+        assert_eq!(elements.len(), 2);
+        assert!(elements.iter().any(|e| e.id == id1));
+        assert!(elements.iter().any(|e| e.id == id2));
     }
 }

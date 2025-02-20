@@ -1,17 +1,18 @@
 use crate::state::AppState;
-use agentic_core::orchestrator::{
-    events::{PluginEvent, SystemEvent},
-    metadata::EventMetadata,
+use agentic_core::{
+    orchestrator::{
+        events::{PluginEvent, SystemEvent},
+        metadata::create_metadata,
+    },
+    plugin_manager::PluginManifest,
+    types::plugin::PluginResponse,
 };
-use agentic_core::plugin_manager::PluginManifest;
 use axum::{
     extract::{Path, State},
     response::IntoResponse,
     Json,
 };
-use chrono::Utc;
-use serde::{Deserialize, Serialize};
-use serde_json::json;
+use serde::Deserialize;
 use std::sync::Arc;
 use tracing::{debug, error};
 use uuid::Uuid;
@@ -20,23 +21,6 @@ use uuid::Uuid;
 pub struct LoadPluginRequest {
     pub manifest: String,
     pub manifest_path: Option<String>,
-}
-
-#[derive(Debug, Serialize)]
-pub struct PluginResponse {
-    pub id: Uuid,
-    pub name: String,
-    pub version: String,
-    pub description: String,
-}
-
-fn create_metadata(correlation_id: Option<Uuid>) -> EventMetadata {
-    EventMetadata {
-        event_id: Uuid::new_v4(),
-        timestamp: Utc::now(),
-        correlation_id,
-        context: json!({}),
-    }
 }
 
 pub async fn load_plugin_handler(
@@ -49,31 +33,25 @@ pub async fn load_plugin_handler(
         Ok(m) => m,
         Err(e) => {
             error!("Failed to parse manifest: {}", e);
-            return Json(serde_json::json!({
-                "error": format!("Failed to parse manifest: {}", e)
-            }));
+            return Json(PluginResponse::error(format!(
+                "Failed to parse manifest: {}",
+                e
+            )));
         }
     };
 
-    let plugin_id = Uuid::new_v4();
-    let event = SystemEvent::Plugin(PluginEvent::Load {
-        plugin_id,
-        manifest,
-        manifest_path: req.manifest_path,
-        metadata: create_metadata(None),
-    });
+    let plugin_id = manifest.id;
+    let event = SystemEvent::new_plugin_load(plugin_id, manifest.clone(), req.manifest_path, None);
 
     if let Err(e) = state.orchestrator_tx.send(event).await {
         error!("Failed to send plugin load event: {}", e);
-        return Json(serde_json::json!({
-            "error": format!("Failed to load plugin: {}", e)
-        }));
+        return Json(PluginResponse::error(format!(
+            "Failed to load plugin: {}",
+            e
+        )));
     }
 
-    Json(serde_json::json!({
-        "plugin_id": plugin_id.to_string(),
-        "status": "loading"
-    }))
+    Json(manifest.into_response().with_status("loading"))
 }
 
 pub async fn list_plugins_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
@@ -81,18 +59,20 @@ pub async fn list_plugins_handler(State(state): State<Arc<AppState>>) -> impl In
 
     if let Err(e) = state
         .orchestrator_tx
-        .send(SystemEvent::Plugin(PluginEvent::List))
+        .send(SystemEvent::new_plugin_list())
         .await
     {
         error!("Failed to send list plugins event: {}", e);
-        return Json(serde_json::json!({
-            "error": format!("Failed to list plugins: {}", e)
-        }));
+        return Json(PluginResponse::error(format!(
+            "Failed to list plugins: {}",
+            e
+        )));
     }
 
-    Json(serde_json::json!({
-        "status": "listing"
-    }))
+    Json(
+        PluginResponse::new(Uuid::nil(), String::new(), String::new(), String::new())
+            .with_status("listing"),
+    )
 }
 
 pub async fn invoke_plugin_handler(
@@ -106,12 +86,14 @@ pub async fn invoke_plugin_handler(
 
     if let Err(e) = state.orchestrator_tx.send(event).await {
         error!("Failed to send plugin invoke event: {}", e);
-        return Json(serde_json::json!({
-            "error": format!("Failed to invoke plugin: {}", e)
-        }));
+        return Json(PluginResponse::error(format!(
+            "Failed to invoke plugin: {}",
+            e
+        )));
     }
 
-    Json(serde_json::json!({
-        "status": "invoking"
-    }))
+    Json(
+        PluginResponse::new(plugin_id, String::new(), String::new(), String::new())
+            .with_status("invoking"),
+    )
 }

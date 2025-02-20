@@ -1,5 +1,11 @@
-use super::{error::PluginError, manifest::PluginManifest, Result};
-use crate::storage::{ElementId, FileStorage};
+use super::{error::PluginError, Result};
+use crate::{
+    storage::{ElementId, FileStorage},
+    types::{
+        plugin::{PluginManifest, PluginState},
+        traits::Validatable,
+    },
+};
 use serde_json::json;
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
@@ -20,13 +26,6 @@ pub struct PluginMetadata {
     pub state: PluginState,
 }
 
-#[derive(Debug, Clone)]
-pub enum PluginState {
-    Loading,
-    Ready,
-    Failed(String),
-}
-
 impl PluginRegistry {
     /// Create a new plugin registry
     pub fn new(storage_path: &str) -> Self {
@@ -45,7 +44,7 @@ impl PluginRegistry {
         // Validate manifest
         manifest.validate().map_err(PluginError::InvalidManifest)?;
 
-        let plugin_id = Uuid::new_v4();
+        let plugin_id = manifest.id;
 
         // Create plugin data before moving manifest_path
         let plugin_data = json!({
@@ -61,7 +60,7 @@ impl PluginRegistry {
             id: plugin_id,
             manifest: manifest.clone(),
             manifest_path,
-            state: PluginState::Loading,
+            state: PluginState::Uninitialized,
         };
 
         // Store in memory
@@ -97,7 +96,7 @@ impl PluginRegistry {
             .ok_or_else(|| PluginError::NotFound(plugin_id))?;
 
         let data = &element.data.content;
-        let manifest = PluginManifest::new(
+        let mut manifest = PluginManifest::new(
             data.get("name")
                 .and_then(|v| v.as_str())
                 .unwrap_or_default()
@@ -112,6 +111,11 @@ impl PluginRegistry {
                 .to_string(),
         );
 
+        // Set the wasm path if it exists
+        if let Some(wasm_path) = data.get("wasm_path").and_then(|v| v.as_str()) {
+            manifest.wasm_path = Some(wasm_path.to_string());
+        }
+
         let metadata = PluginMetadata {
             id: plugin_id,
             manifest,
@@ -119,7 +123,7 @@ impl PluginRegistry {
                 .get("manifest_path")
                 .and_then(|v| v.as_str())
                 .map(String::from),
-            state: PluginState::Ready,
+            state: PluginState::Uninitialized,
         };
 
         Ok(metadata)
@@ -144,7 +148,7 @@ impl PluginRegistry {
                         continue;
                     }
 
-                    let manifest = PluginManifest::new(
+                    let mut manifest = PluginManifest::new(
                         data.get("name")
                             .and_then(|v| v.as_str())
                             .unwrap_or_default()
@@ -159,6 +163,11 @@ impl PluginRegistry {
                             .to_string(),
                     );
 
+                    // Set the wasm path if it exists
+                    if let Some(wasm_path) = data.get("wasm_path").and_then(|v| v.as_str()) {
+                        manifest.wasm_path = Some(wasm_path.to_string());
+                    }
+
                     let metadata = PluginMetadata {
                         id,
                         manifest,
@@ -166,7 +175,7 @@ impl PluginRegistry {
                             .get("manifest_path")
                             .and_then(|v| v.as_str())
                             .map(String::from),
-                        state: PluginState::Ready,
+                        state: PluginState::Uninitialized,
                     };
 
                     plugins.push(metadata);
@@ -241,10 +250,7 @@ mod tests {
             .update_state(plugin_id, PluginState::Ready)
             .unwrap();
         let metadata = registry.get(plugin_id).unwrap();
-        match metadata.state {
-            PluginState::Ready => (),
-            _ => panic!("Unexpected plugin state"),
-        }
+        assert_eq!(metadata.state, PluginState::Ready);
 
         // Remove plugin
         registry.remove(plugin_id).unwrap();

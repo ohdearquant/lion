@@ -3,7 +3,7 @@ use crate::{
         events::{AgentEvent, PluginEvent, SystemEvent, TaskEvent},
         metadata::EventMetadata,
     },
-    plugin_manager::{PluginManager, PluginManifest},
+    plugin_manager::PluginManager,
     EventLog,
 };
 use std::sync::Arc;
@@ -64,21 +64,9 @@ impl EventHandler {
             } => {
                 info!(plugin_id = %plugin_id, "Loading plugin: {}", manifest.name);
 
-                // Convert manifest to TOML string
-                let manifest_str = match toml::to_string(&manifest) {
-                    Ok(s) => s,
-                    Err(e) => {
-                        return Some(SystemEvent::Plugin(PluginEvent::Error {
-                            plugin_id,
-                            error: format!("Failed to serialize manifest: {}", e),
-                            metadata: EventMetadata::new(metadata.correlation_id),
-                        }));
-                    }
-                };
-
                 match self
                     .plugin_manager
-                    .load_plugin_from_string(manifest_str, manifest_path)
+                    .load_plugin_from_string(toml::to_string(&manifest).unwrap(), manifest_path)
                     .await
                 {
                     Ok(_) => Some(SystemEvent::Plugin(PluginEvent::Result {
@@ -162,6 +150,7 @@ impl Default for EventHandler {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::types::plugin::PluginManifest;
 
     #[tokio::test]
     async fn test_plugin_handling() {

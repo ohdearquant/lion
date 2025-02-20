@@ -2,11 +2,12 @@ use super::{
     error::PluginError,
     loader::PluginLoader,
     manifest::PluginManifest,
-    registry::{PluginMetadata, PluginState},
+    registry::PluginMetadata,
     Result,
 };
+use crate::types::plugin::PluginState;
 use std::path::{Path, PathBuf};
-use tracing::{debug, error, info};
+use tracing::{debug, info};
 use uuid::Uuid;
 
 /// Main plugin management interface that coordinates loading, initialization,
@@ -87,16 +88,23 @@ impl PluginManager {
         // Check plugin state
         match metadata.state {
             PluginState::Ready => (),
-            PluginState::Loading => {
+            PluginState::Uninitialized => {
                 return Err(PluginError::InvokeError(
-                    "Plugin is still loading".to_string(),
+                    "Plugin is not initialized".to_string(),
                 ))
             }
-            PluginState::Failed(ref reason) => {
-                return Err(PluginError::InvokeError(format!(
-                    "Plugin failed to load: {}",
-                    reason
-                )))
+            PluginState::Running => {
+                return Err(PluginError::InvokeError(
+                    "Plugin is already running".to_string(),
+                ))
+            }
+            PluginState::Error => {
+                return Err(PluginError::InvokeError(
+                    "Plugin is in error state".to_string(),
+                ))
+            }
+            PluginState::Disabled => {
+                return Err(PluginError::InvokeError("Plugin is disabled".to_string()))
             }
         }
 
@@ -138,15 +146,15 @@ mod tests {
         let manager = PluginManager::with_manifest_dir(temp_dir.path());
 
         // Create test manifest
-        let manifest = toml::toml! {
-            name = "test-plugin"
-            version = "1.0.0"
-            description = "A test plugin"
-        };
+        let manifest = PluginManifest::new(
+            "test-plugin".to_string(),
+            "1.0.0".to_string(),
+            "A test plugin".to_string(),
+        );
 
         // Load plugin
         let plugin_id = manager
-            .load_plugin_from_string(manifest.to_string(), None)
+            .load_plugin_from_string(toml::to_string(&manifest).unwrap(), None)
             .await
             .unwrap();
 
@@ -178,15 +186,15 @@ mod tests {
         let manager = PluginManager::new();
 
         // Create invalid manifest
-        let manifest = toml::toml! {
-            name = ""
-            version = "1.0.0"
-            description = ""
-        };
+        let manifest = PluginManifest::new(
+            "".to_string(),
+            "1.0.0".to_string(),
+            "".to_string(),
+        );
 
         // Try to load plugin
         let result = manager
-            .load_plugin_from_string(manifest.to_string(), None)
+            .load_plugin_from_string(toml::to_string(&manifest).unwrap(), None)
             .await;
         assert!(matches!(result, Err(PluginError::InvalidManifest(_))));
     }
