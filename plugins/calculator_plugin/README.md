@@ -1,151 +1,91 @@
 # Calculator Plugin
 
-A plugin for the lion microkernel system that provides advanced mathematical calculations and unit conversions.
+A simple calculator plugin for the lion/agentic system that can perform basic arithmetic operations.
 
 ## Features
 
-- Evaluate complex mathematical expressions
-- Convert between different units of measurement
-- Solve equations and systems of equations
-- Support for:
-  - Basic arithmetic
-  - Trigonometric functions
-  - Logarithms and exponentials
-  - Unit conversions
-  - Equation solving
+- Basic arithmetic operations:
+  - Addition
+  - Subtraction
+  - Multiplication
+  - Division (with division by zero checks)
 
-## Functions
+## Usage
 
-### calculate
-Evaluates mathematical expressions with support for variables and functions.
+The plugin accepts JSON input via stdin and produces JSON output. Each input should be a single line containing a JSON object with:
 
-Input format:
+- `function`: The operation to perform ("add", "subtract", "multiply", or "divide")
+- `args`: An object containing:
+  - `a`: First number (float)
+  - `b`: Second number (float)
+
+### Example Inputs
+
+Addition:
 ```json
-{
-    "function": "calculate",
-    "args": {
-        "expression": "sin(45) * sqrt(16) + log(100)",
-        "variables": {  // Optional: define variables
-            "x": 5,
-            "y": 10
-        }
-    }
-}
+{"function": "add", "args": {"a": 5.0, "b": 3.0}}
 ```
 
-Example response:
+Subtraction:
 ```json
-{
-    "result": 4.8242,
-    "steps": [
-        "sin(45) = 0.7071",
-        "sqrt(16) = 4",
-        "log(100) = 2",
-        "0.7071 * 4 + 2 = 4.8242"
-    ]
-}
+{"function": "subtract", "args": {"a": 10.0, "b": 4.0}}
 ```
 
-Supported operations:
-- Basic: +, -, *, /, ^, %
-- Functions: sin, cos, tan, sqrt, log, ln, exp
-- Constants: pi, e
-
-### convert
-Converts values between different units of measurement.
-
-Input format:
+Multiplication:
 ```json
-{
-    "function": "convert",
-    "args": {
-        "value": 100,
-        "from": "km/h",
-        "to": "mph"
-    }
-}
+{"function": "multiply", "args": {"a": 6.0, "b": 7.0}}
 ```
 
-Example response:
+Division:
 ```json
-{
-    "result": 62.1371,
-    "from": {
-        "value": 100,
-        "unit": "km/h"
-    },
-    "to": {
-        "value": 62.1371,
-        "unit": "mph"
-    }
-}
+{"function": "divide", "args": {"a": 15.0, "b": 3.0}}
 ```
 
-Supported unit categories:
-- Length (km, m, mi, ft, in, etc.)
-- Mass (kg, g, lb, oz, etc.)
-- Speed (km/h, mph, m/s, etc.)
-- Temperature (°C, °F, K)
-- Volume (L, gal, mL, etc.)
-- Area (m², km², ft², etc.)
+### Example Outputs
 
-### solve
-Solves mathematical equations or systems of equations.
-
-Input format:
+Success:
 ```json
-{
-    "function": "solve",
-    "args": {
-        "equation": "x^2 + 2x - 5 = 0",
-        // Or for systems of equations:
-        "equations": [
-            "2x + y = 5",
-            "x - y = 1"
-        ]
-    }
-}
+{"result": 8.0}
 ```
 
-Example response:
+Error (e.g., division by zero):
 ```json
-{
-    "solutions": {
-        "x": [-3.4142, 1.4142]  // For quadratic equation
-    },
-    "steps": [
-        "Standard form: x^2 + 2x - 5 = 0",
-        "Using quadratic formula: (-2 ± √(4 + 20)) / 2",
-        "x = -3.4142 or x = 1.4142"
-    ]
-}
+{"error": "Division by zero"}
 ```
 
-## Implementation Notes
+## Building
 
-- Uses high-precision floating-point arithmetic
-- Provides step-by-step solution breakdowns
-- Validates input expressions and equations
-- Handles complex numbers when necessary
-- Maintains consistent unit conversion accuracy
+From the repository root:
 
-## Error Handling
+```bash
+cargo build --manifest-path plugins/calculator_plugin/Cargo.toml
+```
 
-The plugin returns clear error messages for:
-- Invalid mathematical expressions
-- Undefined variables
-- Division by zero
-- Invalid units or unit conversions
-- Unsolvable equations
-- Syntax errors
+## Testing
 
-## Permissions
+You can test the plugin using the provided test script:
 
-This plugin requires no special permissions as it performs purely computational tasks without external system access.
+```bash
+cargo run --manifest-path scripts/Cargo.toml --bin test_calculator_plugin
+```
 
-## Usage Tips
+## Integration
 
-1. For complex calculations, use the step-by-step output to verify the solution path
-2. When converting units, check the supported unit list to ensure compatibility
-3. For equation solving, provide equations in standard mathematical notation
-4. Use variables to store intermediate results in complex calculations
+To use this plugin with the lion/agentic system, use the following manifest:
+
+```toml
+[plugin]
+name = "calculator"
+version = "0.1.0"
+description = "A simple calculator plugin that can perform basic arithmetic operations"
+entry_point = "target/debug/calculator_plugin"
+driver = "subprocess"
+
+[functions]
+add = "Add two numbers"
+subtract = "Subtract two numbers"
+multiply = "Multiply two numbers"
+divide = "Divide two numbers"
+```
+
+Then load the plugin through the UI or API, and invoke functions with appropriate arguments.

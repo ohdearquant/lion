@@ -1,243 +1,318 @@
+use crate::element::ElementData;
+use crate::storage::FileStorage;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::path::Path;
-use std::sync::{Arc, Mutex};
-use tracing::info;
+use serde_json::json;
+use std::io::Write;
+use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
+use std::sync::Arc;
+use thiserror::Error;
+use tracing::{debug, error, info};
 use uuid::Uuid;
+
+#[derive(Debug, Error)]
+pub enum PluginError {
+    #[error("Plugin not found: {0}")]
+    NotFound(Uuid),
+    #[error("Failed to load plugin: {0}")]
+    LoadError(String),
+    #[error("Failed to invoke plugin: {0}")]
+    InvokeError(String),
+    #[error("Plugin process error: {0}")]
+    ProcessError(String),
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PluginManifest {
     pub name: String,
     pub version: String,
+    pub description: String,
     pub entry_point: String,
     pub permissions: Vec<String>,
-    /// A brief description of the plugin
+    pub driver: Option<String>,
+    pub functions: std::collections::HashMap<String, PluginFunction>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PluginFunction {
+    pub name: String,
     pub description: String,
-    /// A map of function names to their descriptions
-    pub functions: HashMap<String, String>,
+    pub input_schema: serde_json::Value,
+    pub output_schema: serde_json::Value,
 }
 
 #[derive(Debug, Clone)]
-pub struct PluginHandle {
-    pub id: Uuid,
-    pub manifest: PluginManifest,
-    // For Phase 4, we'll keep this simple without actual WASM/process handles
-    // In a future phase, we might add:
-    // wasm_instance: Option<WasmInstance>,
-    // process_handle: Option<Child>,
-}
-
-#[derive(Debug, thiserror::Error)]
-pub enum PluginError {
-    #[error("Invalid manifest: {0}")]
-    InvalidManifest(String),
-    #[error("Permission denied: {0}")]
-    PermissionDenied(String),
-    #[error("Failed to load plugin: {0}")]
-    LoadFailure(String),
-    #[error("Failed to invoke plugin: {0}")]
-    InvokeFailure(String),
-}
-
-#[derive(Debug, Default)]
 pub struct PluginManager {
-    plugins: Arc<Mutex<HashMap<Uuid, PluginHandle>>>,
+    manifest_dir: Option<PathBuf>,
+    storage: Arc<FileStorage>,
 }
 
 impl PluginManager {
     pub fn new() -> Self {
+        debug!("Creating new PluginManager with no manifest directory");
         Self {
-            plugins: Arc::new(Mutex::new(HashMap::new())),
+            manifest_dir: None,
+            storage: Arc::new(FileStorage::new("plugins/data")),
         }
     }
 
-    pub fn load_plugin(&self, manifest: PluginManifest) -> Result<Uuid, PluginError> {
-        // Validate the manifest
-        if manifest.name.is_empty() || manifest.version.is_empty() {
-            return Err(PluginError::InvalidManifest(
-                "Name or version is empty".into(),
-            ));
+    pub fn with_manifest_dir<P: AsRef<Path>>(manifest_dir: P) -> Self {
+        let dir = manifest_dir.as_ref().to_path_buf();
+        debug!(
+            "Creating new PluginManager with manifest directory: {:?}",
+            dir
+        );
+        Self {
+            manifest_dir: Some(dir),
+            storage: Arc::new(FileStorage::new("plugins/data")),
+        }
+    }
+
+    fn resolve_entry_point(&self, entry_point: &str) -> PathBuf {
+        // If entry_point is absolute, use it directly
+        let path = PathBuf::from(entry_point);
+        if path.is_absolute() {
+            debug!("Using absolute entry point: {:?}", path);
+            return path;
         }
 
-        // Basic permission check - deny "forbidden" permission
-        if manifest.permissions.iter().any(|p| p == "forbidden") {
-            return Err(PluginError::PermissionDenied(
-                "Plugin requested forbidden permission".into(),
-            ));
+        // Get the current working directory
+        let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+        debug!("Current working directory: {:?}", cwd);
+
+        // If it starts with ../ or ./, resolve relative to current directory
+        if entry_point.starts_with("../") || entry_point.starts_with("./") {
+            // Split the path into components
+            let components: Vec<&str> = entry_point.split('/').collect();
+            let mut current_path = cwd.clone();
+
+            // Handle .. components by going up directories
+            for component in components {
+                match component {
+                    ".." => {
+                        current_path = current_path.parent().unwrap_or(&current_path).to_path_buf();
+                    }
+                    "." => {}
+                    "" => {}
+                    _ => {
+                        current_path = current_path.join(component);
+                    }
+                }
+            }
+
+            debug!(
+                "Resolved relative entry point {:?} to {:?}",
+                entry_point, current_path
+            );
+            return current_path;
         }
+
+        // Otherwise, resolve relative to current directory
+        let resolved = cwd.join(entry_point);
+        debug!("Resolved entry point {:?} to {:?}", entry_point, resolved);
+        resolved
+    }
+
+    pub fn load_plugin(&self, manifest: PluginManifest) -> Result<Uuid, PluginError> {
+        debug!("Loading plugin {}", manifest.name);
+
+        let entry_point = self.resolve_entry_point(&manifest.entry_point);
+        debug!("Resolved entry point: {:?}", entry_point);
 
         // Check if entry point exists
-        if !Path::new(&manifest.entry_point).exists() {
-            return Err(PluginError::LoadFailure(format!(
-                "Entry point {} not found",
-                manifest.entry_point
+        if !entry_point.exists() {
+            error!("Entry point not found: {:?}", entry_point);
+            return Err(PluginError::LoadError(format!(
+                "Entry point not found: {}",
+                entry_point.display()
             )));
         }
 
-        let id = Uuid::new_v4();
-        let handle = PluginHandle {
-            id,
-            manifest: manifest.clone(),
-        };
+        debug!("Entry point exists checking if it's executable");
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let metadata = entry_point
+                .metadata()
+                .map_err(|e| PluginError::LoadError(format!("Failed to get metadata: {}", e)))?;
+            let permissions = metadata.permissions();
+            let mode = permissions.mode();
+            debug!("File permissions: {:o}", mode);
+            if mode & 0o111 == 0 {
+                error!("Entry point is not executable: {:?}", entry_point);
+                return Err(PluginError::LoadError(format!(
+                    "Entry point is not executable: {}",
+                    entry_point.display()
+                )));
+            }
+        }
 
+        // Create an ElementData for this plugin
+        let metadata = json!({
+            "type": "plugin",
+            "manifest": manifest,
+            "status": "loaded"
+        });
+        let element = ElementData::new(metadata);
+        let id = element.id;
+
+        // Store the plugin in our storage
+        self.storage.store(element);
         info!(
-            plugin_name = manifest.name,
-            plugin_version = manifest.version,
-            plugin_id = %id,
-            "Loading plugin"
+            "Plugin {} loaded successfully with ID {}",
+            manifest.name, id
         );
 
-        let mut plugins = self.plugins.lock().unwrap();
-        plugins.insert(id, handle);
         Ok(id)
     }
 
     pub fn invoke_plugin(&self, plugin_id: Uuid, input: &str) -> Result<String, PluginError> {
-        let plugins = self.plugins.lock().unwrap();
-        let handle = plugins
+        debug!("Invoking plugin {} with input: {}", plugin_id, input);
+
+        let plugin = self
+            .storage
             .get(&plugin_id)
-            .ok_or_else(|| PluginError::InvokeFailure("Plugin not found".into()))?;
+            .ok_or_else(|| PluginError::NotFound(plugin_id))?;
 
-        info!(
-            plugin_id = %plugin_id,
-            plugin_name = handle.manifest.name,
-            "Invoking plugin"
-        );
+        let manifest: PluginManifest = serde_json::from_value(
+            plugin
+                .metadata
+                .get("manifest")
+                .ok_or_else(|| PluginError::InvokeError("Invalid plugin metadata".to_string()))?
+                .clone(),
+        )
+        .map_err(|e| PluginError::InvokeError(format!("Failed to parse manifest: {}", e)))?;
 
-        // For Phase 4, we'll simulate plugin execution
-        // In a real implementation, this would:
-        // 1. For WASM: Load and call the WASM module
-        // 2. For subprocess: Spawn a process and communicate via IPC
-        Ok(format!(
-            "Hello from plugin {} (version {}) with input: {}",
-            handle.manifest.name, handle.manifest.version, input
-        ))
-    }
+        debug!("Retrieved plugin manifest: {:?}", manifest);
 
-    pub fn get_plugin(&self, plugin_id: &Uuid) -> Option<PluginHandle> {
-        let plugins = self.plugins.lock().unwrap();
-        plugins.get(plugin_id).cloned()
+        // Parse input JSON
+        let input_json: serde_json::Value = serde_json::from_str(input)
+            .map_err(|e| PluginError::InvokeError(format!("Invalid input JSON: {}", e)))?;
+
+        debug!("Parsed input JSON: {:?}", input_json);
+
+        // Get function name from input
+        let function_name = input_json
+            .get("function")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| {
+                PluginError::InvokeError("Missing 'function' field in input".to_string())
+            })?;
+
+        debug!("Function name from input: {}", function_name);
+
+        // Check if function exists in manifest
+        let function = manifest.functions.get(function_name).ok_or_else(|| {
+            PluginError::InvokeError(format!("Function '{}' not found in plugin", function_name))
+        })?;
+
+        debug!("Found function in manifest: {:?}", function);
+
+        let entry_point = self.resolve_entry_point(&manifest.entry_point);
+        debug!("Resolved entry point: {:?}", entry_point);
+
+        // Execute the plugin with the input via stdin
+        let mut child = Command::new(&entry_point)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .map_err(|e| PluginError::ProcessError(format!("Failed to execute plugin: {}", e)))?;
+
+        // Write input to stdin
+        if let Some(mut stdin) = child.stdin.take() {
+            stdin.write_all(input.as_bytes()).map_err(|e| {
+                PluginError::ProcessError(format!("Failed to write to plugin stdin: {}", e))
+            })?;
+            stdin.write_all(b"\n").map_err(|e| {
+                PluginError::ProcessError(format!("Failed to write newline to plugin stdin: {}", e))
+            })?;
+        }
+
+        // Get output
+        let output = child.wait_with_output().map_err(|e| {
+            PluginError::ProcessError(format!("Failed to get plugin output: {}", e))
+        })?;
+
+        if !output.status.success() {
+            let error = String::from_utf8_lossy(&output.stderr);
+            error!("Plugin execution failed: {}", error);
+            return Err(PluginError::ProcessError(format!(
+                "Plugin execution failed: {}",
+                error
+            )));
+        }
+
+        let output_str = String::from_utf8_lossy(&output.stdout).to_string();
+        debug!("Plugin execution succeeded with output: {}", output_str);
+
+        Ok(output_str)
     }
 
     pub fn list_plugins(&self) -> Vec<(Uuid, PluginManifest)> {
-        let plugins = self.plugins.lock().unwrap();
-        plugins
-            .iter()
-            .map(|(id, handle)| (*id, handle.manifest.clone()))
-            .collect()
-    }
-}
+        debug!("Listing all plugins");
+        let elements = self.storage.list();
+        debug!("Found {} elements in storage", elements.len());
 
-impl Clone for PluginManager {
-    fn clone(&self) -> Self {
-        Self {
-            plugins: Arc::clone(&self.plugins),
-        }
+        elements
+            .into_iter()
+            .filter_map(|element| {
+                if let Some(manifest) = element.metadata.get("manifest") {
+                    match serde_json::from_value(manifest.clone()) {
+                        Ok(manifest) => {
+                            debug!("Successfully parsed manifest for plugin {}", element.id);
+                            Some((element.id, manifest))
+                        }
+                        Err(e) => {
+                            error!("Failed to parse manifest for plugin {}: {}", element.id, e);
+                            None
+                        }
+                    }
+                } else {
+                    debug!("Element {} is not a plugin (no manifest)", element.id);
+                    None
+                }
+            })
+            .collect()
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::fs::File;
-    use std::io::Write;
     use tempfile::tempdir;
 
-    fn create_test_plugin_file() -> (tempfile::TempDir, String) {
-        let dir = tempdir().unwrap();
-        let file_path = dir.path().join("test_plugin.wasm");
-        let mut file = File::create(&file_path).unwrap();
-        writeln!(file, "mock wasm content").unwrap();
-        (dir, file_path.to_string_lossy().into_owned())
-    }
-
-    #[test]
-    fn test_load_plugin_ok() {
-        let (dir, entry_point) = create_test_plugin_file();
-        let mgr = PluginManager::new();
-
-        let manifest = PluginManifest {
+    fn create_test_manifest() -> PluginManifest {
+        PluginManifest {
             name: "test_plugin".to_string(),
             version: "0.1.0".to_string(),
-            entry_point,
-            permissions: vec!["net".to_string()],
-            description: "A bad plugin".to_string(),
-            functions: HashMap::new(),
-        };
-
-        let result = mgr.load_plugin(manifest);
-        assert!(result.is_ok());
-        drop(dir); // Clean up temp directory
-    }
-
-    #[test]
-    fn test_load_plugin_forbidden_permission() {
-        let mgr = PluginManager::new();
-        let manifest = PluginManifest {
-            name: "bad_plugin".to_string(),
-            version: "0.1.0".to_string(),
-            entry_point: "dummy".to_string(),
-            permissions: vec!["forbidden".to_string()],
-            description: "A test plugin".to_string(),
-            functions: HashMap::new(),
-        };
-
-        let result = mgr.load_plugin(manifest);
-        assert!(matches!(result, Err(PluginError::PermissionDenied(_))));
-    }
-
-    #[test]
-    fn test_invoke_plugin() {
-        let (dir, entry_point) = create_test_plugin_file();
-        let mgr = PluginManager::new();
-
-        let manifest = PluginManifest {
-            name: "test_plugin".to_string(),
-            version: "0.1.0".to_string(),
-            entry_point,
+            description: "Test plugin".to_string(),
+            entry_point: "nonexistent".to_string(),
             permissions: vec![],
-            description: "A test plugin".to_string(),
-            functions: HashMap::new(),
-        };
-
-        let plugin_id = mgr.load_plugin(manifest).unwrap();
-        let result = mgr.invoke_plugin(plugin_id, "test input");
-
-        assert!(result.is_ok());
-        let output = result.unwrap();
-        assert!(output.contains("test input"));
-        drop(dir);
+            driver: None,
+            functions: std::collections::HashMap::new(),
+        }
     }
 
     #[test]
-    fn test_invoke_nonexistent_plugin() {
-        let mgr = PluginManager::new();
-        let result = mgr.invoke_plugin(Uuid::new_v4(), "test");
-        assert!(matches!(result, Err(PluginError::InvokeFailure(_))));
+    fn test_load_plugin_nonexistent() {
+        let manager = PluginManager::new();
+        let manifest = create_test_manifest();
+        let result = manager.load_plugin(manifest);
+        assert!(result.is_err());
     }
 
     #[test]
-    fn test_plugin_manager_clone() {
-        let mgr1 = PluginManager::new();
-        let mgr2 = mgr1.clone();
+    fn test_plugin_not_found() {
+        let manager = PluginManager::new();
+        let id = Uuid::new_v4();
+        let result = manager.invoke_plugin(id, "test");
+        assert!(matches!(result, Err(PluginError::NotFound(_))));
+    }
 
-        // Load a plugin in mgr1
-        let (dir, entry_point) = create_test_plugin_file();
-        let manifest = PluginManifest {
-            name: "test_plugin".to_string(),
-            version: "0.1.0".to_string(),
-            entry_point,
-            permissions: vec![],
-            description: "A test plugin".to_string(),
-            functions: HashMap::new(),
-        };
-
-        let plugin_id = mgr1.load_plugin(manifest.clone()).unwrap();
-
-        // Verify the plugin is accessible in mgr2
-        let plugins2 = mgr2.list_plugins();
-        assert_eq!(plugins2.len(), 1);
-        assert_eq!(plugins2[0].0, plugin_id);
-        drop(dir);
+    #[test]
+    fn test_list_plugins() {
+        let manager = PluginManager::new();
+        assert!(manager.list_plugins().is_empty());
     }
 }

@@ -1,619 +1,367 @@
-use crate::agent::{AgentEvent, AgentProtocol, MockStreamingAgent};
+use crate::element::ElementData;
 use crate::event_log::EventLog;
 use crate::plugin_manager::{PluginManager, PluginManifest};
-use chrono::Utc;
 use serde::{Deserialize, Serialize};
-use serde_json::json;
-use std::collections::HashMap;
+use std::path::Path;
+use std::sync::Arc;
 use tokio::sync::{broadcast, mpsc};
-use tracing::info;
+use tracing::{debug, error, info};
 use uuid::Uuid;
 
-/// Represents system-level events that flow through the orchestrator.
-/// Each event carries metadata for tracking and correlation.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct EventMetadata {
-    /// Unique identifier for this event
-    pub event_id: Uuid,
-    /// When this event was created
-    pub timestamp: chrono::DateTime<chrono::Utc>,
-    /// Optional correlation ID to track related events
-    pub correlation_id: Option<Uuid>,
-    /// Additional context as key-value pairs
-    pub context: serde_json::Value,
-}
-
-/// System events that can be processed by the orchestrator
+/// Events that can occur in the system
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum SystemEvent {
-    /// A new task has been submitted for processing
+    // Task events
     TaskSubmitted {
         task_id: Uuid,
         payload: String,
-        metadata: EventMetadata,
     },
-    /// A task has been completed
     TaskCompleted {
         task_id: Uuid,
         result: String,
-        metadata: EventMetadata,
     },
-    /// An error occurred during task processing
-    TaskError {
+    TaskFailed {
         task_id: Uuid,
         error: String,
-        metadata: EventMetadata,
     },
-    /// A plugin is being invoked
-    PluginInvoked {
-        plugin_id: Uuid,
-        input: String,
-        metadata: EventMetadata,
-    },
-    /// A plugin has produced a result
-    PluginResult {
-        plugin_id: Uuid,
-        output: String,
-        metadata: EventMetadata,
-    },
-    /// A plugin invocation resulted in an error
-    PluginError {
-        plugin_id: Uuid,
-        error: String,
-        metadata: EventMetadata,
-    },
-    /// A new agent has been spawned
+
+    // Agent events
     AgentSpawned {
         agent_id: Uuid,
-        prompt: String,
-        metadata: EventMetadata,
+        prompt: Option<String>,
     },
-    /// An agent has produced partial output
     AgentPartialOutput {
         agent_id: Uuid,
         chunk: String,
-        metadata: EventMetadata,
     },
-    /// An agent has completed its task
     AgentCompleted {
         agent_id: Uuid,
         result: String,
-        metadata: EventMetadata,
     },
-    /// An agent encountered an error
     AgentError {
         agent_id: Uuid,
         error: String,
-        metadata: EventMetadata,
     },
-}
 
-impl SystemEvent {
-    /// Create a new TaskSubmitted event
-    pub fn new_task(payload: String, correlation_id: Option<Uuid>) -> Self {
-        SystemEvent::TaskSubmitted {
-            task_id: Uuid::new_v4(),
-            payload,
-            metadata: EventMetadata {
-                event_id: Uuid::new_v4(),
-                timestamp: Utc::now(),
-                correlation_id,
-                context: json!({}),
-            },
-        }
-    }
-
-    /// Create a new PluginInvoked event
-    pub fn new_plugin_invocation(
+    // Plugin events
+    PluginLoad {
+        plugin_id: Uuid,
+        manifest: PluginManifest,
+        manifest_path: Option<String>,
+    },
+    PluginInvoked {
         plugin_id: Uuid,
         input: String,
-        correlation_id: Option<Uuid>,
-    ) -> Self {
-        SystemEvent::PluginInvoked {
-            plugin_id,
-            input,
-            metadata: EventMetadata {
-                event_id: Uuid::new_v4(),
-                timestamp: Utc::now(),
-                correlation_id,
-                context: json!({}),
-            },
-        }
-    }
-
-    /// Create a new AgentSpawned event
-    pub fn new_agent(prompt: String, correlation_id: Option<Uuid>) -> Self {
-        SystemEvent::AgentSpawned {
-            agent_id: Uuid::new_v4(),
-            prompt,
-            metadata: EventMetadata {
-                event_id: Uuid::new_v4(),
-                timestamp: Utc::now(),
-                correlation_id,
-                context: json!({}),
-            },
-        }
-    }
-
-    /// Get the event's metadata
-    pub fn metadata(&self) -> &EventMetadata {
-        match self {
-            SystemEvent::TaskSubmitted { metadata, .. } => metadata,
-            SystemEvent::TaskCompleted { metadata, .. } => metadata,
-            SystemEvent::TaskError { metadata, .. } => metadata,
-            SystemEvent::PluginInvoked { metadata, .. } => metadata,
-            SystemEvent::PluginResult { metadata, .. } => metadata,
-            SystemEvent::PluginError { metadata, .. } => metadata,
-            SystemEvent::AgentSpawned { metadata, .. } => metadata,
-            SystemEvent::AgentPartialOutput { metadata, .. } => metadata,
-            SystemEvent::AgentCompleted { metadata, .. } => metadata,
-            SystemEvent::AgentError { metadata, .. } => metadata,
-        }
-    }
+    },
+    PluginResult {
+        plugin_id: Uuid,
+        result: String,
+    },
+    PluginError {
+        plugin_id: Uuid,
+        error: String,
+    },
+    ListPlugins,
 }
 
-/// The core orchestrator that processes system events
+/// The orchestrator manages the system's event loop and coordinates components
 pub struct Orchestrator {
-    event_tx: mpsc::Sender<SystemEvent>,
-    event_rx: mpsc::Receiver<SystemEvent>,
-    completion_tx: broadcast::Sender<SystemEvent>,
-    event_log: EventLog,
-    plugin_manager: PluginManager,
+    event_log: Arc<EventLog>,
+    plugin_manager: Arc<PluginManager>,
+    event_sender: mpsc::Sender<SystemEvent>,
+    event_receiver: mpsc::Receiver<SystemEvent>,
+    completion_sender: broadcast::Sender<SystemEvent>,
 }
 
 impl Orchestrator {
-    /// Create a new orchestrator instance with specified channel capacity
-    pub fn new(channel_capacity: usize) -> Self {
-        let (tx, rx) = mpsc::channel(channel_capacity);
-        let (completion_tx, _) = broadcast::channel(channel_capacity);
+    pub fn new(channel_size: usize) -> Self {
+        let (tx, rx) = mpsc::channel(channel_size);
+        let (completion_tx, _) = broadcast::channel(channel_size);
+
+        // Create a plugin manager with a default plugins directory
+        let plugin_manager = Arc::new(PluginManager::with_manifest_dir("plugins"));
+
+        debug!(
+            "Created new orchestrator with plugin manager: {:?}",
+            plugin_manager
+        );
+
         Self {
-            event_tx: tx,
-            event_rx: rx,
-            completion_tx,
-            event_log: EventLog::new(),
-            plugin_manager: PluginManager::new(),
+            event_log: Arc::new(EventLog::new(1000)), // Keep last 1000 events
+            plugin_manager,
+            event_sender: tx,
+            event_receiver: rx,
+            completion_sender: completion_tx,
         }
     }
 
-    /// Get a sender that can be used to submit events to this orchestrator
+    pub fn with_plugin_dir<P: AsRef<Path>>(channel_size: usize, plugin_dir: P) -> Self {
+        let (tx, rx) = mpsc::channel(channel_size);
+        let (completion_tx, _) = broadcast::channel(channel_size);
+
+        let plugin_manager = Arc::new(PluginManager::with_manifest_dir(plugin_dir));
+
+        debug!(
+            "Created new orchestrator with custom plugin directory: {:?}",
+            plugin_manager
+        );
+
+        Self {
+            event_log: Arc::new(EventLog::new(1000)),
+            plugin_manager,
+            event_sender: tx,
+            event_receiver: rx,
+            completion_sender: completion_tx,
+        }
+    }
+
+    /// Get a sender for submitting events to the orchestrator
     pub fn sender(&self) -> mpsc::Sender<SystemEvent> {
-        self.event_tx.clone()
+        self.event_sender.clone()
     }
 
     /// Get a receiver for completion events
     pub fn completion_receiver(&self) -> broadcast::Receiver<SystemEvent> {
-        self.completion_tx.subscribe()
+        self.completion_sender.subscribe()
     }
 
-    /// Get a reference to the event log
-    pub fn event_log(&self) -> &EventLog {
-        &self.event_log
-    }
-
-    /// Get a reference to the plugin manager
-    pub fn plugin_manager(&self) -> &PluginManager {
-        &self.plugin_manager
-    }
-
-    /// Process a single event, returning a completion event if successful
-    async fn process_event(&self, event: SystemEvent) -> Option<SystemEvent> {
-        // Log the incoming event
-        self.event_log.append(event.clone());
-
-        match event {
-            SystemEvent::TaskSubmitted {
-                task_id,
-                payload,
-                metadata,
-            } => {
-                info!(
-                    task_id = %task_id,
-                    correlation_id = ?metadata.correlation_id,
-                    "Processing task"
-                );
-
-                // Simulate some processing
-                let result = format!("Processed: {}", payload);
-
-                let completion = SystemEvent::TaskCompleted {
-                    task_id,
-                    result,
-                    metadata: EventMetadata {
-                        event_id: Uuid::new_v4(),
-                        timestamp: Utc::now(),
-                        correlation_id: metadata.correlation_id,
-                        context: metadata.context,
-                    },
-                };
-
-                // Log the completion event
-                self.event_log.append(completion.clone());
-                Some(completion)
-            }
-            SystemEvent::PluginInvoked {
-                plugin_id,
-                input,
-                metadata,
-            } => {
-                info!(
-                    plugin_id = %plugin_id,
-                    correlation_id = ?metadata.correlation_id,
-                    "Invoking plugin"
-                );
-
-                // If the input looks like a manifest, try to load the plugin
-                if let Ok(manifest) = toml::from_str::<PluginManifest>(&input) {
-                    match self.plugin_manager.load_plugin(manifest) {
-                        Ok(_) => {
-                            let result = SystemEvent::PluginResult {
-                                plugin_id,
-                                output: "Plugin loaded successfully".to_string(),
-                                metadata: EventMetadata {
-                                    event_id: Uuid::new_v4(),
-                                    timestamp: Utc::now(),
-                                    correlation_id: metadata.correlation_id,
-                                    context: metadata.context,
-                                },
-                            };
-                            self.event_log.append(result.clone());
-                            Some(result)
-                        }
-                        Err(e) => {
-                            let error_event = SystemEvent::PluginError {
-                                plugin_id,
-                                error: format!("Failed to load plugin: {}", e),
-                                metadata: EventMetadata {
-                                    event_id: Uuid::new_v4(),
-                                    timestamp: Utc::now(),
-                                    correlation_id: metadata.correlation_id,
-                                    context: metadata.context,
-                                },
-                            };
-                            self.event_log.append(error_event.clone());
-                            Some(error_event)
-                        }
-                    }
-                } else {
-                    // Not a manifest, try to invoke the plugin
-                    match self.plugin_manager.invoke_plugin(plugin_id, &input) {
-                        Ok(output) => {
-                            let result = SystemEvent::PluginResult {
-                                plugin_id,
-                                output,
-                                metadata: EventMetadata {
-                                    event_id: Uuid::new_v4(),
-                                    timestamp: Utc::now(),
-                                    correlation_id: metadata.correlation_id,
-                                    context: metadata.context,
-                                },
-                            };
-                            self.event_log.append(result.clone());
-                            Some(result)
-                        }
-                        Err(e) => {
-                            let error_event = SystemEvent::PluginError {
-                                plugin_id,
-                                error: e.to_string(),
-                                metadata: EventMetadata {
-                                    event_id: Uuid::new_v4(),
-                                    timestamp: Utc::now(),
-                                    correlation_id: metadata.correlation_id,
-                                    context: metadata.context,
-                                },
-                            };
-                            self.event_log.append(error_event.clone());
-                            Some(error_event)
-                        }
-                    }
-                }
-            }
-            SystemEvent::AgentSpawned {
-                agent_id,
-                prompt,
-                metadata,
-            } => {
-                info!(
-                    agent_id = %agent_id,
-                    correlation_id = ?metadata.correlation_id,
-                    "Agent spawned"
-                );
-
-                // Create a mock streaming agent
-                let mut agent = MockStreamingAgent::new(agent_id);
-
-                // Start the agent and get initial event
-                let start_evt = AgentEvent::Start {
-                    agent_id,
-                    prompt: prompt.clone(),
-                };
-
-                let mut current_evt = agent.on_event(start_evt);
-                let mut final_result = None;
-
-                // Process all agent events
-                while let Some(evt) = current_evt {
-                    match evt {
-                        AgentEvent::PartialOutput { agent_id, chunk } => {
-                            // Log partial output
-                            let partial = SystemEvent::AgentPartialOutput {
-                                agent_id,
-                                chunk: chunk.clone(),
-                                metadata: EventMetadata {
-                                    event_id: Uuid::new_v4(),
-                                    timestamp: Utc::now(),
-                                    correlation_id: metadata.correlation_id,
-                                    context: metadata.context.clone(),
-                                },
-                            };
-                            self.event_log.append(partial);
-
-                            // Get next event
-                            current_evt =
-                                agent.on_event(AgentEvent::PartialOutput { agent_id, chunk });
-                        }
-                        AgentEvent::Done { final_output, .. } => {
-                            final_result = Some(final_output);
-                            current_evt = None;
-                        }
-                        AgentEvent::Error { error, .. } => {
-                            let error_evt = SystemEvent::AgentError {
-                                agent_id,
-                                error,
-                                metadata: EventMetadata {
-                                    event_id: Uuid::new_v4(),
-                                    timestamp: Utc::now(),
-                                    correlation_id: metadata.correlation_id,
-                                    context: metadata.context,
-                                },
-                            };
-                            self.event_log.append(error_evt.clone());
-                            return Some(error_evt);
-                        }
-                        _ => current_evt = None,
-                    }
-                }
-
-                // Create completion event
-                if let Some(result) = final_result {
-                    let completion = SystemEvent::AgentCompleted {
-                        agent_id,
-                        result,
-                        metadata: EventMetadata {
-                            event_id: Uuid::new_v4(),
-                            timestamp: Utc::now(),
-                            correlation_id: metadata.correlation_id,
-                            context: metadata.context,
-                        },
-                    };
-                    self.event_log.append(completion.clone());
-                    Some(completion)
-                } else {
-                    let error_evt = SystemEvent::AgentError {
-                        agent_id,
-                        error: "Agent failed to produce final output".into(),
-                        metadata: EventMetadata {
-                            event_id: Uuid::new_v4(),
-                            timestamp: Utc::now(),
-                            correlation_id: metadata.correlation_id,
-                            context: metadata.context,
-                        },
-                    };
-                    self.event_log.append(error_evt.clone());
-                    Some(error_evt)
-                }
-            }
-            SystemEvent::TaskCompleted { .. }
-            | SystemEvent::TaskError { .. }
-            | SystemEvent::PluginResult { .. }
-            | SystemEvent::PluginError { .. }
-            | SystemEvent::AgentPartialOutput { .. }
-            | SystemEvent::AgentCompleted { .. }
-            | SystemEvent::AgentError { .. } => None,
-        }
+    /// Get access to the event log
+    pub fn event_log(&self) -> Arc<EventLog> {
+        self.event_log.clone()
     }
 
     /// Run the orchestrator's event loop
     pub async fn run(mut self) {
-        info!("Orchestrator starting");
+        info!("Starting orchestrator event loop");
 
-        while let Some(event) = self.event_rx.recv().await {
-            if let Some(completion_event) = self.process_event(event).await {
-                // Broadcast the completion event
-                let _ = self.completion_tx.send(completion_event);
+        while let Some(event) = self.event_receiver.recv().await {
+            // Log the event
+            self.event_log.log_event(event.clone());
+
+            match &event {
+                // Plugin events
+                SystemEvent::PluginLoad {
+                    plugin_id,
+                    manifest,
+                    manifest_path,
+                } => {
+                    info!(plugin_id = %plugin_id, "Loading plugin {}", manifest.name);
+
+                    // If manifest_path is provided, update the plugin manager's manifest directory
+                    if let Some(path) = manifest_path {
+                        if let Some(parent) = Path::new(path).parent() {
+                            debug!("Updating plugin manager directory to: {:?}", parent);
+                            self.plugin_manager =
+                                Arc::new(PluginManager::with_manifest_dir(parent));
+                        }
+                    }
+
+                    match self.plugin_manager.load_plugin(manifest.clone()) {
+                        Ok(_) => {
+                            let result = SystemEvent::PluginResult {
+                                plugin_id: *plugin_id,
+                                result: format!("Plugin {} loaded successfully", manifest.name),
+                            };
+                            let _ = self.completion_sender.send(result.clone());
+                            info!(plugin_id = %plugin_id, "Plugin {} loaded successfully", manifest.name);
+                            self.event_log.log_event(result);
+                        }
+                        Err(e) => {
+                            let error = SystemEvent::PluginError {
+                                plugin_id: *plugin_id,
+                                error: e.to_string(),
+                            };
+                            let _ = self.completion_sender.send(error.clone());
+                            error!(plugin_id = %plugin_id, "Failed to load plugin: {}", e);
+                            self.event_log.log_event(error);
+                        }
+                    }
+                }
+                SystemEvent::PluginInvoked { plugin_id, input } => {
+                    info!(plugin_id = %plugin_id, "Invoking plugin");
+                    match self.plugin_manager.invoke_plugin(*plugin_id, input) {
+                        Ok(output) => {
+                            let result = SystemEvent::PluginResult {
+                                plugin_id: *plugin_id,
+                                result: output,
+                            };
+                            let _ = self.completion_sender.send(result.clone());
+                            self.event_log.log_event(result);
+                        }
+                        Err(e) => {
+                            let error = SystemEvent::PluginError {
+                                plugin_id: *plugin_id,
+                                error: e.to_string(),
+                            };
+                            let _ = self.completion_sender.send(error.clone());
+                            self.event_log.log_event(error);
+                        }
+                    }
+                }
+                SystemEvent::ListPlugins => {
+                    info!("Listing plugins");
+                    let plugins = self.plugin_manager.list_plugins();
+                    debug!("Found {} plugins", plugins.len());
+
+                    if plugins.is_empty() {
+                        let result = SystemEvent::PluginResult {
+                            plugin_id: Uuid::nil(),
+                            result: "No plugins loaded".to_string(),
+                        };
+                        let _ = self.completion_sender.send(result.clone());
+                        self.event_log.log_event(result);
+                    } else {
+                        for (id, manifest) in plugins {
+                            let result = SystemEvent::PluginResult {
+                                plugin_id: id,
+                                result: serde_json::to_string(&manifest).unwrap_or_default(),
+                            };
+                            let _ = self.completion_sender.send(result.clone());
+                            self.event_log.log_event(result);
+                        }
+                    }
+                }
+
+                // Agent events - broadcast them for real-time updates
+                SystemEvent::AgentSpawned { .. }
+                | SystemEvent::AgentPartialOutput { .. }
+                | SystemEvent::AgentCompleted { .. }
+                | SystemEvent::AgentError { .. } => {
+                    let _ = self.completion_sender.send(event.clone());
+                }
+
+                // Task events
+                SystemEvent::TaskSubmitted { task_id, payload } => {
+                    info!(task_id = %task_id, "Task submitted: {}", payload);
+                    // Here you might queue the task for execution
+                }
+                SystemEvent::TaskCompleted { task_id, result } => {
+                    info!(task_id = %task_id, "Task completed: {}", result);
+                    let _ = self.completion_sender.send(event.clone());
+                }
+                SystemEvent::TaskFailed { task_id, error } => {
+                    error!(task_id = %task_id, "Task failed: {}", error);
+                    let _ = self.completion_sender.send(event.clone());
+                }
+
+                // Plugin result/error events are generated internally
+                SystemEvent::PluginResult { .. } | SystemEvent::PluginError { .. } => {
+                    // These are generated by the orchestrator itself
+                    // Just broadcast them
+                    let _ = self.completion_sender.send(event.clone());
+                }
             }
         }
 
-        info!("Orchestrator shutting down");
+        info!("Orchestrator event loop terminated");
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::plugin_manager::PluginManifest;
     use std::time::Duration;
-    use tokio::time::timeout;
+    use tempfile::tempdir;
 
     #[tokio::test]
-    async fn test_orchestrator_processes_task() {
+    async fn test_orchestrator_events() {
         let orchestrator = Orchestrator::new(100);
         let sender = orchestrator.sender();
-        let mut completion_rx = orchestrator.completion_receiver();
-        let event_log = orchestrator.event_log().clone();
+        let mut receiver = orchestrator.completion_receiver();
 
         // Spawn the orchestrator
         tokio::spawn(orchestrator.run());
 
-        // Create and send a task
-        let event = SystemEvent::new_task("test payload".to_string(), None);
-        let task_id = match &event {
-            SystemEvent::TaskSubmitted { task_id, .. } => *task_id,
-            _ => panic!("Unexpected event type"),
-        };
-
-        sender.send(event).await.expect("Failed to send event");
-
-        // Wait for completion with timeout
-        let completion = timeout(Duration::from_secs(1), completion_rx.recv())
+        // Send a test event
+        let task_id = Uuid::new_v4();
+        sender
+            .send(SystemEvent::TaskSubmitted {
+                task_id,
+                payload: "test task".to_string(),
+            })
             .await
-            .expect("Timeout waiting for completion")
-            .expect("Channel closed");
+            .unwrap();
 
-        match completion {
+        // Send completion
+        sender
+            .send(SystemEvent::TaskCompleted {
+                task_id,
+                result: "done".to_string(),
+            })
+            .await
+            .unwrap();
+
+        // Should receive the completion event
+        let received = tokio::time::timeout(Duration::from_secs(1), receiver.recv())
+            .await
+            .unwrap()
+            .unwrap();
+
+        match received {
             SystemEvent::TaskCompleted {
-                task_id: completed_id,
-                ..
-            } => {
-                assert_eq!(completed_id, task_id);
-            }
-            _ => panic!("Expected TaskCompleted event"),
-        }
-
-        // Verify events were logged
-        tokio::time::sleep(Duration::from_millis(100)).await;
-        let records = event_log.all();
-        assert_eq!(
-            records.len(),
-            2,
-            "Should have submission and completion events"
-        );
-    }
-
-    #[tokio::test]
-    async fn test_plugin_invocation() {
-        let mut orchestrator = Orchestrator::new(100);
-        let sender = orchestrator.sender();
-        let mut completion_rx = orchestrator.completion_receiver();
-
-        // Create a test plugin
-        let manifest = PluginManifest {
-            name: "test_plugin".to_string(),
-            version: "0.1.0".to_string(),
-            entry_point: "/dev/null".to_string(), // dummy path for testing
-            permissions: vec![],
-            description: "A test plugin".to_string(),
-            functions: HashMap::new(),
-        };
-
-        let plugin_id = orchestrator
-            .plugin_manager()
-            .load_plugin(manifest)
-            .expect("Failed to load plugin");
-
-        // Spawn the orchestrator
-        tokio::spawn(orchestrator.run());
-
-        // Create and send a plugin invocation
-        let event = SystemEvent::new_plugin_invocation(plugin_id, "test input".to_string(), None);
-        sender.send(event).await.expect("Failed to send event");
-
-        // Wait for completion with timeout
-        let completion = timeout(Duration::from_secs(1), completion_rx.recv())
-            .await
-            .expect("Timeout waiting for completion")
-            .expect("Channel closed");
-
-        match completion {
-            SystemEvent::PluginResult {
-                plugin_id: completed_id,
-                output,
-                ..
-            } => {
-                assert_eq!(completed_id, plugin_id);
-                assert!(output.contains("test input"));
-            }
-            _ => panic!("Expected PluginResult event"),
-        }
-    }
-
-    #[tokio::test]
-    async fn test_correlation_id_propagation() {
-        let orchestrator = Orchestrator::new(100);
-        let sender = orchestrator.sender();
-        let mut completion_rx = orchestrator.completion_receiver();
-
-        // Spawn the orchestrator
-        tokio::spawn(orchestrator.run());
-
-        let correlation_id = Some(Uuid::new_v4());
-        let event = SystemEvent::new_task("test payload".to_string(), correlation_id);
-
-        sender.send(event).await.expect("Failed to send event");
-
-        let completion = timeout(Duration::from_secs(1), completion_rx.recv())
-            .await
-            .expect("Timeout waiting for completion")
-            .expect("Channel closed");
-
-        assert_eq!(
-            completion.metadata().correlation_id,
-            correlation_id,
-            "Correlation ID should be preserved"
-        );
-    }
-
-    #[tokio::test]
-    async fn test_agent_spawn_and_completion() {
-        let orchestrator = Orchestrator::new(100);
-        let sender = orchestrator.sender();
-        let mut completion_rx = orchestrator.completion_receiver();
-        let event_log = orchestrator.event_log().clone();
-
-        // Spawn the orchestrator
-        tokio::spawn(orchestrator.run());
-
-        // Create and send an agent spawn event
-        let event = SystemEvent::new_agent("test prompt".to_string(), None);
-        let agent_id = match &event {
-            SystemEvent::AgentSpawned { agent_id, .. } => *agent_id,
-            _ => panic!("Unexpected event type"),
-        };
-
-        sender.send(event).await.expect("Failed to send event");
-
-        // Wait for completion with timeout
-        let completion = timeout(Duration::from_secs(1), completion_rx.recv())
-            .await
-            .expect("Timeout waiting for completion")
-            .expect("Channel closed");
-
-        match completion {
-            SystemEvent::AgentCompleted {
-                agent_id: completed_id,
+                task_id: id,
                 result,
-                ..
             } => {
-                assert_eq!(completed_id, agent_id);
-                assert!(result.contains("test prompt"));
+                assert_eq!(id, task_id);
+                assert_eq!(result, "done");
             }
-            _ => panic!("Expected AgentCompleted event"),
+            _ => panic!("Unexpected event type"),
         }
+    }
 
-        // Verify events were logged
-        tokio::time::sleep(Duration::from_millis(100)).await;
-        let records = event_log.all();
-        assert_eq!(
-            records.len(),
-            4,
-            "Should have spawn, partial outputs, and completion events"
-        );
+    #[tokio::test]
+    async fn test_plugin_events() {
+        let test_dir = tempdir().unwrap();
+        let orchestrator = Orchestrator::with_plugin_dir(100, test_dir.path());
+        let sender = orchestrator.sender();
+        let mut receiver = orchestrator.completion_receiver();
 
-        // Verify event sequence
-        assert!(
-            matches!(records[0].event, SystemEvent::AgentSpawned { .. }),
-            "First event should be AgentSpawned"
-        );
-        assert!(
-            matches!(records[1].event, SystemEvent::AgentPartialOutput { .. }),
-            "Second event should be AgentPartialOutput"
-        );
-        assert!(
-            matches!(records[2].event, SystemEvent::AgentPartialOutput { .. }),
-            "Third event should be AgentPartialOutput"
-        );
-        assert!(
-            matches!(records[3].event, SystemEvent::AgentCompleted { .. }),
-            "Fourth event should be AgentCompleted"
-        );
+        // Spawn the orchestrator
+        tokio::spawn(orchestrator.run());
+
+        // Create a test plugin manifest
+        let plugin_id = Uuid::new_v4();
+        let manifest = PluginManifest {
+            name: "test".to_string(),
+            version: "1.0".to_string(),
+            description: "Test plugin".to_string(),
+            entry_point: "nonexistent".to_string(),
+            permissions: vec![],
+            driver: None,
+            functions: std::collections::HashMap::new(),
+        };
+
+        // Try to load the plugin (should fail because entry_point doesn't exist)
+        sender
+            .send(SystemEvent::PluginLoad {
+                plugin_id,
+                manifest,
+                manifest_path: Some(
+                    test_dir
+                        .path()
+                        .join("manifest.toml")
+                        .to_string_lossy()
+                        .into_owned(),
+                ),
+            })
+            .await
+            .unwrap();
+
+        // Should receive an error event
+        let received = tokio::time::timeout(Duration::from_secs(1), receiver.recv())
+            .await
+            .unwrap()
+            .unwrap();
+
+        match received {
+            SystemEvent::PluginError {
+                plugin_id: id,
+                error,
+            } => {
+                assert_eq!(id, plugin_id);
+                assert!(error.contains("not found"));
+            }
+            _ => panic!("Expected PluginError event"),
+        }
     }
 }
