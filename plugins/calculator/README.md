@@ -1,6 +1,7 @@
 # Calculator Plugin
 
-A simple calculator plugin for the lion/agentic system that can perform basic arithmetic operations.
+A simple calculator plugin for the lion/agentic system that can perform basic
+arithmetic operations.
 
 ## Features
 
@@ -12,9 +13,11 @@ A simple calculator plugin for the lion/agentic system that can perform basic ar
 
 ## Usage
 
-The plugin accepts JSON input via stdin and produces JSON output. Each input should be a single line containing a JSON object with:
+The plugin accepts JSON input via stdin and produces JSON output. Each input
+should be a single line containing a JSON object with:
 
-- `function`: The operation to perform ("add", "subtract", "multiply", or "divide")
+- `function`: The operation to perform ("add", "subtract", "multiply", or
+  "divide")
 - `args`: An object containing:
   - `a`: First number (float)
   - `b`: Second number (float)
@@ -22,35 +25,41 @@ The plugin accepts JSON input via stdin and produces JSON output. Each input sho
 ### Example Inputs
 
 Addition:
+
 ```json
-{"function": "add", "args": {"a": 5.0, "b": 3.0}}
+{ "function": "add", "args": { "a": 5.0, "b": 3.0 } }
 ```
 
 Subtraction:
+
 ```json
-{"function": "subtract", "args": {"a": 10.0, "b": 4.0}}
+{ "function": "subtract", "args": { "a": 10.0, "b": 4.0 } }
 ```
 
 Multiplication:
+
 ```json
-{"function": "multiply", "args": {"a": 6.0, "b": 7.0}}
+{ "function": "multiply", "args": { "a": 6.0, "b": 7.0 } }
 ```
 
 Division:
+
 ```json
-{"function": "divide", "args": {"a": 15.0, "b": 3.0}}
+{ "function": "divide", "args": { "a": 15.0, "b": 3.0 } }
 ```
 
 ### Example Outputs
 
 Success:
+
 ```json
-{"result": 8.0}
+{ "result": 8.0 }
 ```
 
 Error (e.g., division by zero):
+
 ```json
-{"error": "Division by zero"}
+{ "error": "Division by zero" }
 ```
 
 ## Building
@@ -88,4 +97,5 @@ multiply = "Multiply two numbers"
 divide = "Divide two numbers"
 ```
 
-Then load the plugin through the UI or API, and invoke functions with appropriate arguments.
+Then load the plugin through the UI or API, and invoke functions with
+appropriate arguments.
