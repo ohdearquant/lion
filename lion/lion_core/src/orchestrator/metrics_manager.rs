@@ -1,5 +1,5 @@
-use tokio::sync::RwLock;
 use std::sync::Arc;
+use tokio::sync::RwLock;
 use tokio::time::Instant;
 
 /// Metrics for monitoring orchestrator performance
@@ -28,8 +28,10 @@ impl MetricsManager {
     pub async fn update_processing_metrics(&self, processing_time: f64) {
         let mut metrics = self.metrics.write().await;
         metrics.messages_processed += 1;
-        metrics.average_processing_time = (metrics.average_processing_time * (metrics.messages_processed - 1) as f64
-            + processing_time) / metrics.messages_processed as f64;
+        metrics.average_processing_time = (metrics.average_processing_time
+            * (metrics.messages_processed - 1) as f64
+            + processing_time)
+            / metrics.messages_processed as f64;
     }
 
     /// Increment completed tasks

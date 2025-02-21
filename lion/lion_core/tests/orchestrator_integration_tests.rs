@@ -1,4 +1,5 @@
 use lion_core::{
+    events::sse::NetworkEvent,
     orchestrator::{
         events::{AgentEvent, PluginEvent, SystemEvent, TaskEvent},
         metadata::EventMetadata,
@@ -6,7 +7,6 @@ use lion_core::{
     },
     plugin_manager::PluginManifest,
     types::traits::{LanguageMessage, LanguageMessageType},
-    events::sse::NetworkEvent,
 };
 use serde_json::json;
 use std::time::Duration;
@@ -232,7 +232,7 @@ async fn test_multi_agent_interaction() {
     let orchestrator = Orchestrator::new(OrchestratorConfig::default());
     let sender = orchestrator.sender();
     let mut completion_rx = orchestrator.completion_receiver();
-    let mut network_rx = orchestrator.network_sender().subscribe();
+    let mut _network_rx = orchestrator.network_sender().subscribe();
 
     // Spawn orchestrator
     tokio::spawn(orchestrator.run());

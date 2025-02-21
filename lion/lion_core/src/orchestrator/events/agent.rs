@@ -8,16 +8,24 @@ use super::SystemEvent;
 impl fmt::Display for AgentEvent {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            AgentEvent::Spawned { agent_id, prompt, .. } => {
+            AgentEvent::Spawned {
+                agent_id, prompt, ..
+            } => {
                 write!(f, "Agent {} spawned with prompt: {}", agent_id, prompt)
             }
-            AgentEvent::PartialOutput { agent_id, output, .. } => {
+            AgentEvent::PartialOutput {
+                agent_id, output, ..
+            } => {
                 write!(f, "Agent {} partial output: {}", agent_id, output)
             }
-            AgentEvent::Completed { agent_id, result, .. } => {
+            AgentEvent::Completed {
+                agent_id, result, ..
+            } => {
                 write!(f, "Agent {} completed with result: {}", agent_id, result)
             }
-            AgentEvent::Error { agent_id, error, .. } => {
+            AgentEvent::Error {
+                agent_id, error, ..
+            } => {
                 write!(f, "Agent {} error: {}", agent_id, error)
             }
         }
@@ -67,7 +75,11 @@ pub enum AgentEvent {
 
 impl AgentEvent {
     /// Create a new agent spawn event
-    pub fn spawn(agent_id: Uuid, prompt: impl Into<String>, correlation_id: Option<Uuid>) -> SystemEvent {
+    pub fn spawn(
+        agent_id: Uuid,
+        prompt: impl Into<String>,
+        correlation_id: Option<Uuid>,
+    ) -> SystemEvent {
         SystemEvent::Agent(AgentEvent::Spawned {
             agent_id,
             prompt: prompt.into(),
@@ -89,7 +101,11 @@ impl AgentEvent {
     }
 
     /// Create a new agent completion event
-    pub fn complete(agent_id: Uuid, result: impl Into<String>, correlation_id: Option<Uuid>) -> SystemEvent {
+    pub fn complete(
+        agent_id: Uuid,
+        result: impl Into<String>,
+        correlation_id: Option<Uuid>,
+    ) -> SystemEvent {
         SystemEvent::Agent(AgentEvent::Completed {
             agent_id,
             result: result.into(),
@@ -98,7 +114,11 @@ impl AgentEvent {
     }
 
     /// Create a new agent error event
-    pub fn error(agent_id: Uuid, error: impl Into<String>, correlation_id: Option<Uuid>) -> SystemEvent {
+    pub fn error(
+        agent_id: Uuid,
+        error: impl Into<String>,
+        correlation_id: Option<Uuid>,
+    ) -> SystemEvent {
         SystemEvent::Agent(AgentEvent::Error {
             agent_id,
             error: error.into(),

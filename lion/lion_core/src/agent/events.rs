@@ -1,4 +1,4 @@
-use crate::types::agent::{AgentInfo, AgentState, AgentCapabilities};
+use crate::types::agent::{AgentCapabilities, AgentInfo, AgentState};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -88,10 +88,32 @@ impl AgentEvent {
                 "Agent instance",
                 "1.0.0",
                 AgentCapabilities::default(),
-            ).with_status(AgentState::Initializing),
-            Self::PartialOutput { .. } => AgentInfo::new(id, "agent", "Agent instance", "1.0.0", AgentCapabilities::default()).with_status(AgentState::Running),
-            Self::Done { .. } => AgentInfo::new(id, "agent", "Agent instance", "1.0.0", AgentCapabilities::default()).with_status(AgentState::Ready),
-            Self::Error { error, .. } => AgentInfo::new(id, "agent", "Agent instance", "1.0.0", AgentCapabilities::default()).with_error(error),
+            )
+            .with_status(AgentState::Initializing),
+            Self::PartialOutput { .. } => AgentInfo::new(
+                id,
+                "agent",
+                "Agent instance",
+                "1.0.0",
+                AgentCapabilities::default(),
+            )
+            .with_status(AgentState::Running),
+            Self::Done { .. } => AgentInfo::new(
+                id,
+                "agent",
+                "Agent instance",
+                "1.0.0",
+                AgentCapabilities::default(),
+            )
+            .with_status(AgentState::Ready),
+            Self::Error { error, .. } => AgentInfo::new(
+                id,
+                "agent",
+                "Agent instance",
+                "1.0.0",
+                AgentCapabilities::default(),
+            )
+            .with_error(error),
         }
     }
 }
@@ -187,7 +209,10 @@ mod tests {
         let info = event.agent_info();
         assert_eq!(info.id, agent_id);
         assert_eq!(info.status.state, AgentState::Error);
-        assert_eq!(info.status.metadata, serde_json::json!({"error": "test error"}));
+        assert_eq!(
+            info.status.metadata,
+            serde_json::json!({"error": "test error"})
+        );
     }
 
     #[test]

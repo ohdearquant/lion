@@ -1,5 +1,5 @@
 //! # Agent System
-//! 
+//!
 //! This module defines the core agent abstractions and implementations for the Lion framework.
 //! It provides the foundational components needed for creating and managing AI agents within
 //! the system.
@@ -27,9 +27,9 @@
 //! // Example agent implementation would implement AgentProtocol
 //! ```
 
+mod events;
 #[cfg(test)]
 mod mock;
-mod events;
 mod protocol;
 
 pub use events::AgentEvent;

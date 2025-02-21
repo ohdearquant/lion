@@ -1,8 +1,8 @@
 use super::{error::PluginError, Result};
 use crate::{
+    plugin_manager::manifest::PluginManifest,
     storage::{ElementId, FileStorage},
     types::traits::Validatable,
-    plugin_manager::manifest::PluginManifest,
 };
 use serde_json::json;
 use std::collections::HashMap;
@@ -40,11 +40,13 @@ impl PluginRegistry {
         manifest_path: Option<String>,
     ) -> Result<Uuid> {
         // Validate manifest
-        manifest.validate().map_err(|e| PluginError::InvalidManifest(e.to_string()))?;
+        manifest
+            .validate()
+            .map_err(|e| PluginError::InvalidManifest(e.to_string()))?;
 
         let plugin_id = manifest.id;
 
-        // Create plugin data before moving manifest_path
+        // Create plugin data first
         let plugin_data = json!({
             "id": plugin_id.to_string(),
             "name": manifest.name,
@@ -55,6 +57,12 @@ impl PluginRegistry {
             "manifest_path": manifest_path,
         });
 
+        // Store in persistent storage
+        self.storage
+            .set(ElementId(plugin_id), plugin_data)
+            .map_err(|e| PluginError::LoadError(format!("Failed to store plugin data: {}", e)))?;
+
+        // Create metadata after storage is updated
         let metadata = PluginMetadata {
             id: plugin_id,
             manifest: manifest.clone(),
@@ -70,11 +78,6 @@ impl PluginRegistry {
                 "Failed to acquire write lock".into(),
             ));
         }
-
-        // Store in persistent storage
-        self.storage
-            .set(ElementId(plugin_id), plugin_data)
-            .map_err(|e| PluginError::LoadError(format!("Failed to store plugin data: {}", e)))?;
 
         Ok(plugin_id)
     }
@@ -116,13 +119,15 @@ impl PluginRegistry {
         }
 
         // Parse state from storage, defaulting to Uninitialized
-        let plugin_state = data.get("state")
+        let plugin_state = data
+            .get("state")
             .and_then(|v| v.as_str())
             .map(|s| match s {
                 "Ready" => crate::types::plugin::PluginState::Ready,
-                _ => crate::types::plugin::PluginState::Uninitialized
-            }).unwrap_or(crate::types::plugin::PluginState::Uninitialized);
-            
+                _ => crate::types::plugin::PluginState::Uninitialized,
+            })
+            .unwrap_or(crate::types::plugin::PluginState::Uninitialized);
+
         let metadata = PluginMetadata {
             id: plugin_id,
             manifest,
@@ -175,6 +180,16 @@ impl PluginRegistry {
                         manifest.wasm_path = Some(wasm_path.to_string());
                     }
 
+                    // Parse state from storage
+                    let state = data
+                        .get("state")
+                        .and_then(|v| v.as_str())
+                        .map(|s| match s {
+                            "Ready" => crate::types::plugin::PluginState::Ready,
+                            _ => crate::types::plugin::PluginState::Uninitialized,
+                        })
+                        .unwrap_or(crate::types::plugin::PluginState::Uninitialized);
+
                     let metadata = PluginMetadata {
                         id,
                         manifest,
@@ -182,7 +197,7 @@ impl PluginRegistry {
                             .get("manifest_path")
                             .and_then(|v| v.as_str())
                             .map(String::from),
-                        state: crate::types::plugin::PluginState::Uninitialized,
+                        state,
                     };
 
                     plugins.push(metadata);
@@ -194,18 +209,22 @@ impl PluginRegistry {
     }
 
     /// Update plugin state
-    pub fn update_state(&self, plugin_id: Uuid, state: crate::types::plugin::PluginState) -> Result<()> {
+    pub fn update_state(
+        &self,
+        plugin_id: Uuid,
+        state: crate::types::plugin::PluginState,
+    ) -> Result<()> {
         if let Ok(mut plugins) = self.plugins.write() {
             if let Some(metadata) = plugins.get_mut(&plugin_id) {
                 // Convert state to string first
                 let state_str = match &state {
                     crate::types::plugin::PluginState::Ready => "Ready",
-                    _ => "Uninitialized"
+                    _ => "Uninitialized",
                 };
 
                 // Update state in memory
                 metadata.state = state;
-                
+
                 // Update state in storage
                 let plugin_data = json!({
                     "id": plugin_id.to_string(),
@@ -216,8 +235,11 @@ impl PluginRegistry {
                     "wasm_path": metadata.manifest.wasm_path,
                     "manifest_path": metadata.manifest_path,
                 });
-                self.storage.set(ElementId(plugin_id), plugin_data)
-                    .map_err(|e| PluginError::LoadError(format!("Failed to update plugin state: {}", e)))?;
+                self.storage
+                    .set(ElementId(plugin_id), plugin_data)
+                    .map_err(|e| {
+                        PluginError::LoadError(format!("Failed to update plugin state: {}", e))
+                    })?;
                 return Ok(());
             }
         }

@@ -1,7 +1,4 @@
-use crate::{
-    orchestrator::metadata::EventMetadata,
-    plugin_manager::PluginManifest
-};
+use crate::{orchestrator::metadata::EventMetadata, plugin_manager::PluginManifest};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use uuid::Uuid;
@@ -11,19 +8,34 @@ use super::SystemEvent;
 impl fmt::Display for PluginEvent {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            PluginEvent::Load { plugin_id, manifest, manifest_path, .. } => {
-                write!(f, "Plugin {} loading from {}: {}", plugin_id, 
-                    manifest_path.as_deref().unwrap_or("memory"), 
-                    manifest.name)
+            PluginEvent::Load {
+                plugin_id,
+                manifest,
+                manifest_path,
+                ..
+            } => {
+                write!(
+                    f,
+                    "Plugin {} loading from {}: {}",
+                    plugin_id,
+                    manifest_path.as_deref().unwrap_or("memory"),
+                    manifest.name
+                )
             }
-            PluginEvent::Invoked { plugin_id, input, .. } => {
+            PluginEvent::Invoked {
+                plugin_id, input, ..
+            } => {
                 write!(f, "Plugin {} invoked with input: {}", plugin_id, input)
             }
             PluginEvent::List => write!(f, "Listing plugins"),
-            PluginEvent::Result { plugin_id, result, .. } => {
+            PluginEvent::Result {
+                plugin_id, result, ..
+            } => {
                 write!(f, "Plugin {} result: {}", plugin_id, result)
             }
-            PluginEvent::Error { plugin_id, error, .. } => {
+            PluginEvent::Error {
+                plugin_id, error, ..
+            } => {
                 write!(f, "Plugin {} error: {}", plugin_id, error)
             }
         }
@@ -92,7 +104,11 @@ impl PluginEvent {
     }
 
     /// Create a new plugin invocation event
-    pub fn invoke(plugin_id: Uuid, input: impl Into<String>, correlation_id: Option<Uuid>) -> SystemEvent {
+    pub fn invoke(
+        plugin_id: Uuid,
+        input: impl Into<String>,
+        correlation_id: Option<Uuid>,
+    ) -> SystemEvent {
         SystemEvent::Plugin(PluginEvent::Invoked {
             plugin_id,
             input: input.into(),
@@ -101,7 +117,11 @@ impl PluginEvent {
     }
 
     /// Create a new plugin result event
-    pub fn result(plugin_id: Uuid, result: impl Into<String>, correlation_id: Option<Uuid>) -> SystemEvent {
+    pub fn result(
+        plugin_id: Uuid,
+        result: impl Into<String>,
+        correlation_id: Option<Uuid>,
+    ) -> SystemEvent {
         SystemEvent::Plugin(PluginEvent::Result {
             plugin_id,
             result: result.into(),
@@ -110,7 +130,11 @@ impl PluginEvent {
     }
 
     /// Create a new plugin error event
-    pub fn error(plugin_id: Uuid, error: impl Into<String>, correlation_id: Option<Uuid>) -> SystemEvent {
+    pub fn error(
+        plugin_id: Uuid,
+        error: impl Into<String>,
+        correlation_id: Option<Uuid>,
+    ) -> SystemEvent {
         SystemEvent::Plugin(PluginEvent::Error {
             plugin_id,
             error: error.into(),

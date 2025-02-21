@@ -1,5 +1,5 @@
 //! # Orchestrator
-//! 
+//!
 //! The orchestrator is the core component of the Lion framework, responsible for managing
 //! multi-agent concurrency, event routing, and system coordination.
 //!
@@ -30,19 +30,19 @@
 //! 3. Results are emitted as completion events
 //! 4. Subscribers receive and handle completion events
 
+mod agent_manager;
 pub mod events;
 pub mod metadata;
-mod processor;
-mod agent_manager;
 mod metrics_manager;
+mod processor;
 mod types;
 
+pub use agent_manager::AgentManager;
 pub use events::{AgentEvent, PluginEvent, SystemEvent, TaskEvent};
 #[deprecated(note = "use EventMetadata::new instead")]
 pub use metadata::create_metadata;
 pub use metadata::EventMetadata;
 pub use metrics_manager::MetricsManager;
-pub use agent_manager::AgentManager;
 pub use processor::{Orchestrator, OrchestratorConfig, OrchestratorError};
 pub use types::*;
 

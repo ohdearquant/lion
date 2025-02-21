@@ -52,7 +52,9 @@ mod tests {
         }
 
         match AgentEvent::partial_output(id, "test output", correlation_id) {
-            SystemEvent::Agent(AgentEvent::PartialOutput { agent_id, .. }) => assert_eq!(agent_id, id),
+            SystemEvent::Agent(AgentEvent::PartialOutput { agent_id, .. }) => {
+                assert_eq!(agent_id, id)
+            }
             _ => panic!("Expected Agent PartialOutput event"),
         }
 
@@ -100,7 +102,9 @@ mod tests {
         }
 
         match PluginEvent::invoke(id, "test input", correlation_id) {
-            SystemEvent::Plugin(PluginEvent::Invoked { plugin_id, .. }) => assert_eq!(plugin_id, id),
+            SystemEvent::Plugin(PluginEvent::Invoked { plugin_id, .. }) => {
+                assert_eq!(plugin_id, id)
+            }
             _ => panic!("Expected Plugin Invoked event"),
         }
 

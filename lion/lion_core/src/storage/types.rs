@@ -1,11 +1,10 @@
-use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
-use std::fmt;
-use uuid::Uuid;
-use std::collections::HashMap;
 use crate::types::traits::LanguageMessage;
 use crate::types::ParticipantState;
-
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::fmt;
+use uuid::Uuid;
 
 /// Unique identifier for storage elements
 #[derive(Debug, Clone, Copy, Hash, Eq, PartialEq, Serialize, Deserialize)]
@@ -167,7 +166,10 @@ impl Element {
         metadata.element_type = ElementType::Message;
         metadata.agent_id = Some(message.sender_id);
         metadata.conversation_id = Some(message.id);
-        metadata.attributes.insert("message_type".to_string(), format!("{:?}", message.message_type));
+        metadata.attributes.insert(
+            "message_type".to_string(),
+            format!("{:?}", message.message_type),
+        );
 
         Self {
             id: ElementId(message.id),
@@ -207,7 +209,9 @@ impl Element {
         let mut metadata = ElementMetadata::default();
         metadata.element_type = ElementType::AgentState;
         metadata.agent_id = Some(agent_id);
-        metadata.attributes.insert("state".to_string(), format!("{:?}", state));
+        metadata
+            .attributes
+            .insert("state".to_string(), format!("{:?}", state));
 
         Self {
             id: ElementId(Uuid::new_v4()),
@@ -304,7 +308,8 @@ mod tests {
         assert_eq!(element.conversation_id(), Some(conversation_id));
 
         if let serde_json::Value::Object(obj) = element.data.content {
-            let stored_participants: Vec<Uuid> = serde_json::from_value(obj["participants"].clone()).unwrap();
+            let stored_participants: Vec<Uuid> =
+                serde_json::from_value(obj["participants"].clone()).unwrap();
             assert_eq!(stored_participants, participants);
         } else {
             panic!("Expected object");
@@ -326,10 +331,7 @@ mod tests {
         assert!(element.is_agent_state());
         assert_eq!(element.agent_id(), Some(agent_id));
         assert_eq!(element.data.content, context);
-        assert_eq!(
-            element.metadata.attributes.get("state").unwrap(),
-            "Ready"
-        );
+        assert_eq!(element.metadata.attributes.get("state").unwrap(), "Ready");
     }
 
     #[test]

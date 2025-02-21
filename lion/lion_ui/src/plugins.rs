@@ -7,7 +7,7 @@ use axum::{
 use lion_core::{
     orchestrator::{
         events::{PluginEvent, SystemEvent},
-        metadata::create_metadata,
+        metadata::EventMetadata,
     },
     plugin_manager::PluginManifest,
     types::plugin::PluginResponse,
@@ -45,7 +45,7 @@ pub async fn load_plugin_handler(
         plugin_id,
         manifest: manifest.clone(),
         manifest_path: req.manifest_path,
-        metadata: create_metadata(None),
+        metadata: EventMetadata::new(None),
     });
 
     if let Err(e) = state.orchestrator_tx.send(event).await {
@@ -56,12 +56,15 @@ pub async fn load_plugin_handler(
         )));
     }
 
-    Json(PluginResponse::new(
-        manifest.id,
-        manifest.name,
-        manifest.version,
-        manifest.description,
-    ).with_status("loading"))
+    Json(
+        PluginResponse::new(
+            manifest.id,
+            manifest.name,
+            manifest.version,
+            manifest.description,
+        )
+        .with_status("loading"),
+    )
 }
 
 pub async fn list_plugins_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
@@ -95,7 +98,7 @@ pub async fn invoke_plugin_handler(
     let event = SystemEvent::Plugin(PluginEvent::Invoked {
         plugin_id,
         input: input.to_string(),
-        metadata: create_metadata(None),
+        metadata: EventMetadata::new(None),
     });
 
     if let Err(e) = state.orchestrator_tx.send(event).await {

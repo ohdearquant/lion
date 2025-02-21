@@ -2,11 +2,11 @@ mod response;
 
 pub use response::PluginResponse;
 
+use super::traits::{Identifiable, Stateful, Validatable};
+use super::{Error, ParticipantState, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use uuid::Uuid;
-use super::traits::{Identifiable, Stateful, Validatable};
-use super::{Error, ParticipantState, Result};
 
 /// Represents the state of a plugin in the system
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -119,11 +119,7 @@ pub struct Plugin {
 
 impl Plugin {
     /// Create a new plugin instance
-    pub fn new(
-        id: Uuid,
-        capabilities: LanguageCapabilities,
-        security: SecuritySettings,
-    ) -> Self {
+    pub fn new(id: Uuid, capabilities: LanguageCapabilities, security: SecuritySettings) -> Self {
         Self {
             id,
             state: PluginState::Uninitialized,
@@ -244,11 +240,7 @@ mod tests {
         capabilities.supported_models.insert("gpt-4".to_string());
         capabilities.supported_languages.insert("en".to_string());
 
-        let plugin = Plugin::new(
-            Uuid::new_v4(),
-            capabilities,
-            SecuritySettings::default(),
-        );
+        let plugin = Plugin::new(Uuid::new_v4(), capabilities, SecuritySettings::default());
 
         assert!(plugin.validate().is_ok());
 

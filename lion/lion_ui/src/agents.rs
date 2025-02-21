@@ -1,7 +1,7 @@
 use axum::{extract::State, Json};
 use lion_core::orchestrator::{
     events::{AgentEvent, SystemEvent},
-    metadata::create_metadata,
+    metadata::EventMetadata,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -60,7 +60,7 @@ pub async fn spawn_agent(
     let event = SystemEvent::Agent(AgentEvent::Spawned {
         agent_id,
         prompt: req.prompt,
-        metadata: create_metadata(None),
+        metadata: EventMetadata::new(None),
     });
 
     // Send to orchestrator

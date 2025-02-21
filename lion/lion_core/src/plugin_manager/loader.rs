@@ -1,9 +1,4 @@
-use super::{
-    error::PluginError,
-    manifest::PluginManifest,
-    registry::PluginRegistry,
-    Result,
-};
+use super::{error::PluginError, manifest::PluginManifest, registry::PluginRegistry, Result};
 use crate::types::{plugin::PluginState, traits::Validatable};
 use std::path::{Path, PathBuf};
 use tokio::fs;
@@ -60,7 +55,9 @@ impl PluginLoader {
         debug!("Loading plugin: {}", manifest.name);
 
         // Validate manifest
-        manifest.validate().map_err(|e| PluginError::InvalidManifest(e.to_string()))?;
+        manifest
+            .validate()
+            .map_err(|e| PluginError::InvalidManifest(e.to_string()))?;
 
         // Check WASM file if specified
         if let Some(wasm_path) = manifest.wasm_path.as_ref() {
@@ -78,19 +75,19 @@ impl PluginLoader {
             }
         }
 
-        // Register plugin
+        // Register plugin in Uninitialized state
         let plugin_id = self.registry.register(manifest.clone(), manifest_path)?;
 
-        // Initialize plugin
+        // Initialize plugin and update state
         match self.initialize_plugin(plugin_id, &manifest).await {
             Ok(_) => {
+                // Ensure state is Ready before returning
                 self.registry.update_state(plugin_id, PluginState::Ready)?;
                 Ok(plugin_id)
             }
             Err(e) => {
                 error!("Failed to initialize plugin: {}", e);
-                self.registry
-                    .update_state(plugin_id, PluginState::Error)?;
+                self.registry.update_state(plugin_id, PluginState::Error)?;
                 Err(e)
             }
         }
@@ -103,8 +100,10 @@ impl PluginLoader {
         manifest: &PluginManifest,
     ) -> Result<String> {
         // TODO: Implement WASM module loading and initialization
-        // For now, just verify the manifest and return success
+        // For now, just verify the manifest
         debug!("Initializing plugin: {}", manifest.name);
+
+        // Return success without setting state (state will be set by caller)
         Ok(format!("Plugin {} initialized successfully", manifest.name))
     }
 

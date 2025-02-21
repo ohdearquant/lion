@@ -1,11 +1,11 @@
 mod tests;
 
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, PoisonError};
-use uuid::Uuid;
-use chrono::{DateTime, Utc};
 use thiserror::Error;
-use serde::{Serialize, Deserialize};
+use uuid::Uuid;
 
 /// Errors that can occur when working with a Progression
 #[derive(Error, Debug)]
@@ -105,8 +105,14 @@ impl Progression {
             next_steps: Vec::new(),
         };
 
-        let mut steps = self.steps.lock().map_err(|e| ProgressionError::LockError(e.to_string()))?;
-        let mut roots = self.roots.lock().map_err(|e| ProgressionError::LockError(e.to_string()))?;
+        let mut steps = self
+            .steps
+            .lock()
+            .map_err(|e| ProgressionError::LockError(e.to_string()))?;
+        let mut roots = self
+            .roots
+            .lock()
+            .map_err(|e| ProgressionError::LockError(e.to_string()))?;
 
         steps.insert(step_id, step);
         roots.push(step_id);
@@ -116,8 +122,14 @@ impl Progression {
 
     /// Create a new branch from a specific step
     pub fn create_branch(&self, branch_name: String, parent_id: Uuid) -> ProgressionResult<()> {
-        let steps = self.steps.lock().map_err(|e| ProgressionError::LockError(e.to_string()))?;
-        let mut branches = self.branches.lock().map_err(|e| ProgressionError::LockError(e.to_string()))?;
+        let steps = self
+            .steps
+            .lock()
+            .map_err(|e| ProgressionError::LockError(e.to_string()))?;
+        let mut branches = self
+            .branches
+            .lock()
+            .map_err(|e| ProgressionError::LockError(e.to_string()))?;
 
         if !steps.contains_key(&parent_id) {
             return Err(ProgressionError::NotFound(parent_id));
@@ -134,13 +146,21 @@ impl Progression {
         agent_id: Uuid,
         metadata: serde_json::Value,
     ) -> ProgressionResult<Uuid> {
-        let mut branches = self.branches.lock().map_err(|e| ProgressionError::LockError(e.to_string()))?;
-        let mut steps = self.steps.lock().map_err(|e| ProgressionError::LockError(e.to_string()))?;
+        let mut branches = self
+            .branches
+            .lock()
+            .map_err(|e| ProgressionError::LockError(e.to_string()))?;
+        let mut steps = self
+            .steps
+            .lock()
+            .map_err(|e| ProgressionError::LockError(e.to_string()))?;
 
-        let branch = branches.get_mut(branch_name)
+        let branch = branches
+            .get_mut(branch_name)
             .ok_or_else(|| ProgressionError::BranchNotFound(branch_name.to_string()))?;
 
-        let parent_id = *branch.last()
+        let parent_id = *branch
+            .last()
             .ok_or_else(|| ProgressionError::InvalidOperation("Branch is empty".to_string()))?;
 
         let step_id = Uuid::new_v4();
@@ -168,12 +188,17 @@ impl Progression {
 
     /// Merge a branch back into the main progression
     pub fn merge_branch(&self, branch_name: &str) -> ProgressionResult<Uuid> {
-        let mut branches = self.branches.lock().map_err(|e| ProgressionError::LockError(e.to_string()))?;
-        
-        let branch = branches.remove(branch_name)
+        let mut branches = self
+            .branches
+            .lock()
+            .map_err(|e| ProgressionError::LockError(e.to_string()))?;
+
+        let branch = branches
+            .remove(branch_name)
             .ok_or_else(|| ProgressionError::BranchNotFound(branch_name.to_string()))?;
 
-        let last_step_id = *branch.last()
+        let last_step_id = *branch
+            .last()
             .ok_or_else(|| ProgressionError::InvalidOperation("Branch is empty".to_string()))?;
 
         Ok(last_step_id)
@@ -181,19 +206,30 @@ impl Progression {
 
     /// Get all steps in order (for a specific branch if specified)
     pub fn list(&self, branch_name: Option<&str>) -> ProgressionResult<Vec<ProgressionStep>> {
-        let steps = self.steps.lock().map_err(|e| ProgressionError::LockError(e.to_string()))?;
-        let branches = self.branches.lock().map_err(|e| ProgressionError::LockError(e.to_string()))?;
+        let steps = self
+            .steps
+            .lock()
+            .map_err(|e| ProgressionError::LockError(e.to_string()))?;
+        let branches = self
+            .branches
+            .lock()
+            .map_err(|e| ProgressionError::LockError(e.to_string()))?;
 
         match branch_name {
             Some(name) => {
-                let branch = branches.get(name)
+                let branch = branches
+                    .get(name)
                     .ok_or_else(|| ProgressionError::BranchNotFound(name.to_string()))?;
-                Ok(branch.iter()
+                Ok(branch
+                    .iter()
                     .filter_map(|id| steps.get(id).cloned())
                     .collect())
-            },
+            }
             None => {
-                let roots = self.roots.lock().map_err(|e| ProgressionError::LockError(e.to_string()))?;
+                let roots = self
+                    .roots
+                    .lock()
+                    .map_err(|e| ProgressionError::LockError(e.to_string()))?;
                 let mut result = Vec::new();
                 let mut stack = roots.clone();
 
@@ -211,8 +247,12 @@ impl Progression {
 
     /// Get steps created by a specific agent
     pub fn get_agent_steps(&self, agent_id: Uuid) -> ProgressionResult<Vec<ProgressionStep>> {
-        let steps = self.steps.lock().map_err(|e| ProgressionError::LockError(e.to_string()))?;
-        Ok(steps.values()
+        let steps = self
+            .steps
+            .lock()
+            .map_err(|e| ProgressionError::LockError(e.to_string()))?;
+        Ok(steps
+            .values()
             .filter(|step| step.metadata.agent_id == agent_id)
             .cloned()
             .collect())
@@ -220,7 +260,10 @@ impl Progression {
 
     /// Get the number of steps
     pub fn len(&self) -> ProgressionResult<usize> {
-        let steps = self.steps.lock().map_err(|e| ProgressionError::LockError(e.to_string()))?;
+        let steps = self
+            .steps
+            .lock()
+            .map_err(|e| ProgressionError::LockError(e.to_string()))?;
         Ok(steps.len())
     }
 
@@ -231,15 +274,27 @@ impl Progression {
 
     /// Check if a step exists
     pub fn contains(&self, id: &Uuid) -> ProgressionResult<bool> {
-        let steps = self.steps.lock().map_err(|e| ProgressionError::LockError(e.to_string()))?;
+        let steps = self
+            .steps
+            .lock()
+            .map_err(|e| ProgressionError::LockError(e.to_string()))?;
         Ok(steps.contains_key(id))
     }
 
     /// Clear all steps
     pub fn clear(&self) -> ProgressionResult<()> {
-        let mut steps = self.steps.lock().map_err(|e| ProgressionError::LockError(e.to_string()))?;
-        let mut roots = self.roots.lock().map_err(|e| ProgressionError::LockError(e.to_string()))?;
-        let mut branches = self.branches.lock().map_err(|e| ProgressionError::LockError(e.to_string()))?;
+        let mut steps = self
+            .steps
+            .lock()
+            .map_err(|e| ProgressionError::LockError(e.to_string()))?;
+        let mut roots = self
+            .roots
+            .lock()
+            .map_err(|e| ProgressionError::LockError(e.to_string()))?;
+        let mut branches = self
+            .branches
+            .lock()
+            .map_err(|e| ProgressionError::LockError(e.to_string()))?;
 
         steps.clear();
         roots.clear();
@@ -249,7 +304,10 @@ impl Progression {
 
     /// Get active branches
     pub fn list_branches(&self) -> ProgressionResult<Vec<String>> {
-        let branches = self.branches.lock().map_err(|e| ProgressionError::LockError(e.to_string()))?;
+        let branches = self
+            .branches
+            .lock()
+            .map_err(|e| ProgressionError::LockError(e.to_string()))?;
         Ok(branches.keys().cloned().collect())
     }
 }

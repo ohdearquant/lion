@@ -4,7 +4,7 @@ pub use sse::{NetworkEvent, NetworkEventSender, SseError};
 
 use crate::types::{
     agent::AgentState,
-    plugin::{PluginState, PluginResponse},
+    plugin::{PluginResponse, PluginState},
     traits::LanguageMessage,
     Metadata,
 };

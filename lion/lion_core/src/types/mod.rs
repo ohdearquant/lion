@@ -18,28 +18,28 @@ use uuid::Uuid;
 pub enum Error {
     #[error("Agent error: {0}")]
     Agent(String),
-    
+
     #[error("Plugin error: {0}")]
     Plugin(String),
-    
+
     #[error("Storage error: {0}")]
     Storage(String),
-    
+
     #[error("Orchestration error: {0}")]
     Orchestration(String),
-    
+
     #[error("Network error: {0}")]
     Network(String),
-    
+
     #[error("Invalid state: {0}")]
     InvalidState(String),
-    
+
     #[error("Resource not found: {0}")]
     NotFound(String),
-    
+
     #[error("Operation timeout: {0}")]
     Timeout(String),
-    
+
     #[error("Internal error: {0}")]
     Internal(String),
 }
@@ -129,7 +129,7 @@ mod tests {
     fn test_metadata() {
         let correlation_id = Some(Uuid::new_v4());
         let metadata = Metadata::new(correlation_id);
-        
+
         assert_eq!(metadata.correlation_id, correlation_id);
         assert!(metadata.context.as_object().unwrap().is_empty());
 
@@ -144,7 +144,7 @@ mod tests {
     fn test_participant_state_transitions() {
         let state = ParticipantState::Uninitialized;
         assert_ne!(state, ParticipantState::Ready);
-        
+
         let state = ParticipantState::Ready;
         assert_ne!(state, ParticipantState::Error);
     }

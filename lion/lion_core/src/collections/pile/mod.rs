@@ -1,10 +1,10 @@
 mod tests;
 
+use crate::types::traits::{LanguageMessage, LanguageMessageType};
 use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, Mutex, PoisonError};
-use uuid::Uuid;
-use crate::types::traits::{LanguageMessage, LanguageMessageType};
 use thiserror::Error;
+use uuid::Uuid;
 
 /// Errors that can occur when working with a Pile
 #[derive(Error, Debug)]
@@ -69,8 +69,14 @@ impl<T> Pile<T> {
 
     /// Insert an item with a specific ID
     pub fn insert(&self, id: Uuid, item: T) -> PileResult<()> {
-        let mut items = self.items.lock().map_err(|e| PileError::LockError(e.to_string()))?;
-        let mut order = self.order.lock().map_err(|e| PileError::LockError(e.to_string()))?;
+        let mut items = self
+            .items
+            .lock()
+            .map_err(|e| PileError::LockError(e.to_string()))?;
+        let mut order = self
+            .order
+            .lock()
+            .map_err(|e| PileError::LockError(e.to_string()))?;
 
         // If we're at capacity, remove oldest item
         if let Some(max) = self.max_size {
@@ -91,7 +97,10 @@ impl<T> Pile<T> {
     where
         T: Clone,
     {
-        let guard = self.items.lock().map_err(|e| PileError::LockError(e.to_string()))?;
+        let guard = self
+            .items
+            .lock()
+            .map_err(|e| PileError::LockError(e.to_string()))?;
         guard.get(id).cloned().ok_or(PileError::NotFound(*id))
     }
 
@@ -100,8 +109,14 @@ impl<T> Pile<T> {
     where
         T: Clone,
     {
-        let items = self.items.lock().map_err(|e| PileError::LockError(e.to_string()))?;
-        let order = self.order.lock().map_err(|e| PileError::LockError(e.to_string()))?;
+        let items = self
+            .items
+            .lock()
+            .map_err(|e| PileError::LockError(e.to_string()))?;
+        let order = self
+            .order
+            .lock()
+            .map_err(|e| PileError::LockError(e.to_string()))?;
         Ok(order
             .iter()
             .filter_map(|id| items.get(id).cloned())
@@ -113,8 +128,14 @@ impl<T> Pile<T> {
     where
         T: Clone,
     {
-        let items = self.items.lock().map_err(|e| PileError::LockError(e.to_string()))?;
-        let order = self.order.lock().map_err(|e| PileError::LockError(e.to_string()))?;
+        let items = self
+            .items
+            .lock()
+            .map_err(|e| PileError::LockError(e.to_string()))?;
+        let order = self
+            .order
+            .lock()
+            .map_err(|e| PileError::LockError(e.to_string()))?;
         Ok(order
             .iter()
             .rev()
@@ -125,19 +146,28 @@ impl<T> Pile<T> {
 
     /// List all IDs in insertion order
     pub fn list_ids(&self) -> PileResult<Vec<Uuid>> {
-        let order = self.order.lock().map_err(|e| PileError::LockError(e.to_string()))?;
+        let order = self
+            .order
+            .lock()
+            .map_err(|e| PileError::LockError(e.to_string()))?;
         Ok(order.iter().cloned().collect())
     }
 
     /// Check if the pile contains an item with the given ID
     pub fn contains(&self, id: &Uuid) -> PileResult<bool> {
-        let guard = self.items.lock().map_err(|e| PileError::LockError(e.to_string()))?;
+        let guard = self
+            .items
+            .lock()
+            .map_err(|e| PileError::LockError(e.to_string()))?;
         Ok(guard.contains_key(id))
     }
 
     /// Get the number of items in the pile
     pub fn len(&self) -> PileResult<usize> {
-        let guard = self.items.lock().map_err(|e| PileError::LockError(e.to_string()))?;
+        let guard = self
+            .items
+            .lock()
+            .map_err(|e| PileError::LockError(e.to_string()))?;
         Ok(guard.len())
     }
 
@@ -148,8 +178,14 @@ impl<T> Pile<T> {
 
     /// Remove an item by ID
     pub fn remove(&self, id: &Uuid) -> PileResult<Option<T>> {
-        let mut items = self.items.lock().map_err(|e| PileError::LockError(e.to_string()))?;
-        let mut order = self.order.lock().map_err(|e| PileError::LockError(e.to_string()))?;
+        let mut items = self
+            .items
+            .lock()
+            .map_err(|e| PileError::LockError(e.to_string()))?;
+        let mut order = self
+            .order
+            .lock()
+            .map_err(|e| PileError::LockError(e.to_string()))?;
 
         if let Some(item) = items.remove(id) {
             order.retain(|x| x != id);
@@ -161,8 +197,14 @@ impl<T> Pile<T> {
 
     /// Clear all items
     pub fn clear(&self) -> PileResult<()> {
-        let mut items = self.items.lock().map_err(|e| PileError::LockError(e.to_string()))?;
-        let mut order = self.order.lock().map_err(|e| PileError::LockError(e.to_string()))?;
+        let mut items = self
+            .items
+            .lock()
+            .map_err(|e| PileError::LockError(e.to_string()))?;
+        let mut order = self
+            .order
+            .lock()
+            .map_err(|e| PileError::LockError(e.to_string()))?;
         items.clear();
         order.clear();
         Ok(())
@@ -174,8 +216,14 @@ impl<T> Pile<T> {
         T: Clone,
         F: Fn(&T) -> bool,
     {
-        let items = self.items.lock().map_err(|e| PileError::LockError(e.to_string()))?;
-        let order = self.order.lock().map_err(|e| PileError::LockError(e.to_string()))?;
+        let items = self
+            .items
+            .lock()
+            .map_err(|e| PileError::LockError(e.to_string()))?;
+        let order = self
+            .order
+            .lock()
+            .map_err(|e| PileError::LockError(e.to_string()))?;
         Ok(order
             .iter()
             .filter_map(|id| {
@@ -199,7 +247,10 @@ impl<T> Pile<T> {
 /// Specialized methods for handling language messages
 impl Pile<LanguageMessage> {
     /// Get all messages for a specific recipient
-    pub fn get_messages_for_recipient(&self, recipient_id: &Uuid) -> PileResult<Vec<LanguageMessage>> {
+    pub fn get_messages_for_recipient(
+        &self,
+        recipient_id: &Uuid,
+    ) -> PileResult<Vec<LanguageMessage>> {
         self.filter(|msg| msg.recipient_ids.contains(recipient_id))
     }
 
@@ -209,15 +260,22 @@ impl Pile<LanguageMessage> {
     }
 
     /// Get all messages of a specific type
-    pub fn get_messages_by_type(&self, msg_type: LanguageMessageType) -> PileResult<Vec<LanguageMessage>> {
+    pub fn get_messages_by_type(
+        &self,
+        msg_type: LanguageMessageType,
+    ) -> PileResult<Vec<LanguageMessage>> {
         self.filter(|msg| msg.message_type == msg_type)
     }
 
     /// Get the conversation history between two participants
-    pub fn get_conversation_history(&self, participant1: &Uuid, participant2: &Uuid) -> PileResult<Vec<LanguageMessage>> {
+    pub fn get_conversation_history(
+        &self,
+        participant1: &Uuid,
+        participant2: &Uuid,
+    ) -> PileResult<Vec<LanguageMessage>> {
         self.filter(|msg| {
-            (msg.sender_id == *participant1 && msg.recipient_ids.contains(participant2)) ||
-            (msg.sender_id == *participant2 && msg.recipient_ids.contains(participant1))
+            (msg.sender_id == *participant1 && msg.recipient_ids.contains(participant2))
+                || (msg.sender_id == *participant2 && msg.recipient_ids.contains(participant1))
         })
     }
 }

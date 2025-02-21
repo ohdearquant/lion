@@ -1,10 +1,10 @@
 use futures::{Stream, StreamExt};
+use serde::{Deserialize, Serialize};
 use std::{convert::Infallible, time::Duration};
+use thiserror::Error;
 use tokio::sync::broadcast;
 use tokio_stream::wrappers::BroadcastStream;
-use serde::{Serialize, Deserialize};
 use uuid::Uuid;
-use thiserror::Error;
 
 use crate::types::traits::{LanguageMessage, LanguageMessageType};
 
@@ -101,11 +101,10 @@ pub struct EventStream<T> {
 impl<T: Clone + Send + 'static> EventStream<T> {
     /// Create a new event stream from a broadcast receiver
     pub fn new(rx: broadcast::Receiver<T>) -> Self {
-        let stream = BroadcastStream::new(rx)
-            .map(|msg| match msg {
-                Ok(value) => Ok(value),
-                Err(e) => panic!("Error receiving message: {}", e),
-            });
+        let stream = BroadcastStream::new(rx).map(|msg| match msg {
+            Ok(value) => Ok(value),
+            Err(e) => panic!("Error receiving message: {}", e),
+        });
 
         Self {
             stream: Box::new(stream),
@@ -177,7 +176,8 @@ impl NetworkEventSender {
     pub fn send_message(&self, message: LanguageMessage) -> Result<(), SseError> {
         self.tx
             .send(NetworkEvent::Message(message))
-            .map(|_| ()).map_err(|e| SseError::SendError(e.to_string()))
+            .map(|_| ())
+            .map_err(|e| SseError::SendError(e.to_string()))
     }
 
     /// Send a partial output
@@ -195,22 +195,20 @@ impl NetworkEventSender {
                 message_id,
                 sequence,
             })
-            .map(|_| ()).map_err(|e| SseError::SendError(e.to_string()))
+            .map(|_| ())
+            .map_err(|e| SseError::SendError(e.to_string()))
     }
 
     /// Send an agent status update
-    pub fn send_agent_status(
-        &self,
-        agent_id: Uuid,
-        status: String,
-    ) -> Result<(), SseError> {
+    pub fn send_agent_status(&self, agent_id: Uuid, status: String) -> Result<(), SseError> {
         self.tx
             .send(NetworkEvent::AgentStatus {
                 agent_id,
                 status,
                 timestamp: chrono::Utc::now(),
             })
-            .map(|_| ()).map_err(|e| SseError::SendError(e.to_string()))
+            .map(|_| ())
+            .map_err(|e| SseError::SendError(e.to_string()))
     }
 
     /// Send a plugin event
@@ -226,22 +224,20 @@ impl NetworkEventSender {
                 event_type,
                 data,
             })
-            .map(|_| ()).map_err(|e| SseError::SendError(e.to_string()))
+            .map(|_| ())
+            .map_err(|e| SseError::SendError(e.to_string()))
     }
 
     /// Send a system event
-    pub fn send_system_event(
-        &self,
-        event_type: String,
-        message: String,
-    ) -> Result<(), SseError> {
+    pub fn send_system_event(&self, event_type: String, message: String) -> Result<(), SseError> {
         self.tx
             .send(NetworkEvent::System {
                 event_type,
                 message,
                 timestamp: chrono::Utc::now(),
             })
-            .map(|_| ()).map_err(|e| SseError::SendError(e.to_string()))
+            .map(|_| ())
+            .map_err(|e| SseError::SendError(e.to_string()))
     }
 
     /// Subscribe to events
@@ -297,7 +293,9 @@ mod tests {
             id: Uuid::new_v4(),
             content: "test".to_string(),
             sender_id: Uuid::new_v4(),
-            recipient_ids: vec![Uuid::new_v4()].into_iter().collect::<std::collections::HashSet<_>>(),
+            recipient_ids: vec![Uuid::new_v4()]
+                .into_iter()
+                .collect::<std::collections::HashSet<_>>(),
             message_type: LanguageMessageType::Text,
             metadata: serde_json::json!({}),
             timestamp: chrono::Utc::now(),

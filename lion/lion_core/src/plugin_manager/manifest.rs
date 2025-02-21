@@ -1,11 +1,10 @@
+use crate::types::{
+    traits::{Describable, Validatable, Versionable},
+    Error, Result,
+};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use uuid::Uuid;
-use crate::types::{
-    Error,
-    Result,
-    traits::{Describable, Validatable, Versionable},
-};
 
 /// Language processing capabilities of a plugin
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -116,7 +115,12 @@ impl PluginManifest {
     }
 
     /// Add a dependency
-    pub fn add_dependency(&mut self, name: impl Into<String>, version_req: impl Into<String>, optional: bool) {
+    pub fn add_dependency(
+        &mut self,
+        name: impl Into<String>,
+        version_req: impl Into<String>,
+        optional: bool,
+    ) {
         self.dependencies.push(PluginDependency {
             name: name.into(),
             version_req: version_req.into(),
@@ -135,7 +139,9 @@ impl Validatable for PluginManifest {
             return Err(Error::InvalidState("Plugin version cannot be empty".into()));
         }
         if self.description.is_empty() {
-            return Err(Error::InvalidState("Plugin description cannot be empty".into()));
+            return Err(Error::InvalidState(
+                "Plugin description cannot be empty".into(),
+            ));
         }
 
         // Validate security settings
@@ -197,28 +203,16 @@ mod tests {
 
     #[test]
     fn test_manifest_validation() {
-        let valid = PluginManifest::new(
-            "test-plugin",
-            "1.0.0",
-            "A test plugin",
-        );
+        let valid = PluginManifest::new("test-plugin", "1.0.0", "A test plugin");
         assert!(valid.validate().is_ok());
 
-        let invalid = PluginManifest::new(
-            "",
-            "1.0.0",
-            "A test plugin",
-        );
+        let invalid = PluginManifest::new("", "1.0.0", "A test plugin");
         assert!(invalid.validate().is_err());
     }
 
     #[test]
     fn test_language_capabilities() {
-        let mut manifest = PluginManifest::new(
-            "test-plugin",
-            "1.0.0",
-            "A test plugin",
-        );
+        let mut manifest = PluginManifest::new("test-plugin", "1.0.0", "A test plugin");
 
         let mut capabilities = LanguageCapabilities::default();
         capabilities.language_processor = true;
@@ -227,8 +221,14 @@ mod tests {
         // Should fail without supported models/languages
         assert!(manifest.validate().is_err());
 
-        manifest.language_capabilities.supported_models.insert("gpt-4".to_string());
-        manifest.language_capabilities.supported_languages.insert("en".to_string());
+        manifest
+            .language_capabilities
+            .supported_models
+            .insert("gpt-4".to_string());
+        manifest
+            .language_capabilities
+            .supported_languages
+            .insert("en".to_string());
 
         // Should pass with supported models/languages
         assert!(manifest.validate().is_ok());
@@ -236,11 +236,7 @@ mod tests {
 
     #[test]
     fn test_security_settings() {
-        let mut manifest = PluginManifest::new(
-            "test-plugin",
-            "1.0.0",
-            "A test plugin",
-        );
+        let mut manifest = PluginManifest::new("test-plugin", "1.0.0", "A test plugin");
 
         manifest.security.sandboxed = true;
         manifest.security.memory_limit_mb = 0;

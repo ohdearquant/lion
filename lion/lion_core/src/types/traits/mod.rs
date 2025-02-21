@@ -1,7 +1,7 @@
+use super::{Error, ParticipantState, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use uuid::Uuid;
-use super::{Error, ParticipantState, Result};
 
 /// A message in the language network protocol
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -47,13 +47,13 @@ pub enum LanguageMessageType {
 pub trait LanguageParticipant {
     /// Get the unique ID of this participant
     fn id(&self) -> Uuid;
-    
+
     /// Get the current state of this participant
     fn state(&self) -> ParticipantState;
-    
+
     /// Process an incoming language message
     fn process_message(&mut self, message: LanguageMessage) -> Result<Option<LanguageMessage>>;
-    
+
     /// Generate a new message
     fn generate_message(&self, content: String, recipients: HashSet<Uuid>) -> LanguageMessage {
         LanguageMessage {
@@ -78,10 +78,10 @@ pub trait Identifiable {
 pub trait Stateful {
     /// Get the current state
     fn state(&self) -> ParticipantState;
-    
+
     /// Update the state
     fn set_state(&mut self, state: ParticipantState);
-    
+
     /// Check if in a specific state
     fn is_in_state(&self, state: ParticipantState) -> bool {
         self.state() == state
@@ -92,7 +92,7 @@ pub trait Stateful {
 pub trait Initializable {
     /// Initialize the object
     fn initialize(&mut self) -> Result<()>;
-    
+
     /// Check if initialized
     fn is_initialized(&self) -> bool;
 }
@@ -101,10 +101,10 @@ pub trait Initializable {
 pub trait Toggleable {
     /// Enable the object
     fn enable(&mut self) -> Result<()>;
-    
+
     /// Disable the object
     fn disable(&mut self) -> Result<()>;
-    
+
     /// Check if enabled
     fn is_enabled(&self) -> bool;
 }
@@ -115,10 +115,10 @@ pub trait TaskProcessor {
     type Task;
     /// The type of result this processor produces
     type Result;
-    
+
     /// Process a task
     fn process(&mut self, task: Self::Task) -> Result<Self::Result>;
-    
+
     /// Check if can process a specific task
     fn can_process(&self, task: &Self::Task) -> bool;
 }
@@ -127,7 +127,7 @@ pub trait TaskProcessor {
 pub trait MetricsProvider {
     /// Get current metrics as JSON
     fn metrics(&self) -> serde_json::Value;
-    
+
     /// Reset metrics to initial state
     fn reset_metrics(&mut self);
 }
@@ -136,7 +136,7 @@ pub trait MetricsProvider {
 pub trait Validatable {
     /// Validate the object
     fn validate(&self) -> Result<()>;
-    
+
     /// Check if valid
     fn is_valid(&self) -> bool {
         self.validate().is_ok()
@@ -147,7 +147,7 @@ pub trait Validatable {
 pub trait Versionable {
     /// Get the version string
     fn version(&self) -> &str;
-    
+
     /// Check if version is compatible with a requirement
     fn is_compatible_with(&self, requirement: &str) -> bool;
 }
@@ -156,10 +156,10 @@ pub trait Versionable {
 pub trait Describable {
     /// Get the name
     fn name(&self) -> &str;
-    
+
     /// Get the description
     fn description(&self) -> &str;
-    
+
     /// Get additional metadata
     fn metadata(&self) -> &serde_json::Value;
 }

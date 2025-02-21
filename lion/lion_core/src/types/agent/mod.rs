@@ -1,8 +1,8 @@
+use super::traits::{Describable, Validatable, Versionable};
+use super::{Error, ParticipantState, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use uuid::Uuid;
-use super::traits::{Describable, Validatable, Versionable};
-use super::{Error, ParticipantState, Result};
 
 /// Represents the state of an agent in the system
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -224,7 +224,7 @@ mod tests {
     #[test]
     fn test_agent_info_validation() {
         let capabilities = AgentCapabilities::default();
-        
+
         let valid_info = AgentInfo::new(
             Uuid::new_v4(),
             "test-agent",
@@ -234,13 +234,8 @@ mod tests {
         );
         assert!(valid_info.validate().is_ok());
 
-        let invalid_info = AgentInfo::new(
-            Uuid::new_v4(),
-            "",
-            "A test agent",
-            "1.0.0",
-            capabilities,
-        );
+        let invalid_info =
+            AgentInfo::new(Uuid::new_v4(), "", "A test agent", "1.0.0", capabilities);
         assert!(invalid_info.validate().is_err());
     }
 }
