@@ -53,9 +53,10 @@ pub struct PluginManager {
 impl PluginManager {
     pub fn new() -> Self {
         debug!("Creating new PluginManager with no manifest directory");
+        let storage = Arc::new(FileStorage::new("plugins/data"));
         Self {
             manifest_dir: None,
-            storage: Arc::new(FileStorage::new("plugins/data")),
+            storage,
         }
     }
 
@@ -66,16 +67,19 @@ impl PluginManager {
             dir
         );
 
-        // Create storage in the plugins directory
-        let storage = if dir.ends_with("plugins") {
-            FileStorage::with_parent(&dir, "data")
+        // Create storage path relative to manifest directory
+        let storage_path = if dir.ends_with("plugins") {
+            dir.join("data")
         } else {
-            FileStorage::with_parent(&dir.join("plugins"), "data")
+            dir.join("plugins").join("data")
         };
+
+        debug!("Using storage path: {:?}", storage_path);
+        let storage = Arc::new(FileStorage::new(storage_path));
 
         Self {
             manifest_dir: Some(dir),
-            storage: Arc::new(storage),
+            storage,
         }
     }
 
@@ -88,6 +92,10 @@ impl PluginManager {
         let mut manifests = Vec::new();
 
         if !manifest_dir.exists() {
+            debug!(
+                "Manifest directory does not exist: {}",
+                manifest_dir.display()
+            );
             return Err(PluginError::ManifestError(format!(
                 "Manifest directory does not exist: {}",
                 manifest_dir.display()
@@ -101,17 +109,21 @@ impl PluginManager {
                 PluginError::ManifestError(format!("Failed to read directory entry: {}", e))
             })?;
             let path = entry.path();
+            debug!("Checking path: {:?}", path);
 
             if path.is_dir() {
                 let manifest_path = path.join("manifest.toml");
+                debug!("Looking for manifest at: {:?}", manifest_path);
                 if manifest_path.exists() {
                     debug!("Found manifest file: {:?}", manifest_path);
                     let content = fs::read_to_string(&manifest_path).map_err(|e| {
                         PluginError::ManifestError(format!("Failed to read manifest file: {}", e))
                     })?;
+                    debug!("Manifest content: {}", content);
                     let manifest: PluginManifest = toml::from_str(&content).map_err(|e| {
                         PluginError::ManifestError(format!("Failed to parse manifest: {}", e))
                     })?;
+                    debug!("Successfully parsed manifest for plugin: {}", manifest.name);
                     manifests.push(manifest);
                 }
             }
@@ -253,9 +265,9 @@ impl PluginManager {
 
         // Write input to stdin
         if let Some(mut stdin) = child.stdin.take() {
-            stdin
-                .write_all(input.as_bytes())
-                .map_err(|e| PluginError::ProcessError(format!("Failed to write to stdin: {}", e)))?;
+            stdin.write_all(input.as_bytes()).map_err(|e| {
+                PluginError::ProcessError(format!("Failed to write to stdin: {}", e))
+            })?;
         }
 
         // Read output from stdout
@@ -307,8 +319,8 @@ impl PluginManager {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tempfile::tempdir;
     use std::fs;
+    use tempfile::tempdir;
 
     fn create_test_manifest() -> PluginManifest {
         PluginManifest {

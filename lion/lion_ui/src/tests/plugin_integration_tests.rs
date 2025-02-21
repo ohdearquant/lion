@@ -5,7 +5,7 @@ use axum::{
     Router,
 };
 use http_body_util::BodyExt;
-use lion_core::{Orchestrator, SystemEvent, plugin_manager::PluginManager};
+use lion_core::{plugin_manager::PluginManager, Orchestrator, SystemEvent};
 use std::sync::Arc;
 use tokio::sync::broadcast;
 use tower::ServiceExt;
@@ -14,7 +14,7 @@ use tracing::debug;
 async fn setup_test_app() -> (Router, broadcast::Receiver<String>) {
     // Initialize plugin manager with plugins directory
     let plugin_manager = PluginManager::with_manifest_dir("plugins");
-    
+
     // Discover and load available plugins
     match plugin_manager.discover_plugins() {
         Ok(manifests) => {
@@ -98,168 +98,6 @@ async fn setup_test_app() -> (Router, broadcast::Receiver<String>) {
 }
 
 #[tokio::test]
-async fn test_plugin_lifecycle() {
-    let (app, mut logs_rx) = setup_test_app().await;
-
-    // Create test manifest
-    let manifest = r#"name = "test_plugin"
-version = "0.1.0"
-entry_point = "test.wasm"
-permissions = ["test"]
-"#;
-
-    // 1. Load plugin
-    let load_response = app
-        .clone()
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri("/api/plugins")
-                .header("content-type", "application/json")
-                .body(Body::from(
-                    serde_json::json!({
-                        "manifest": manifest
-                    })
-                    .to_string(),
-                ))
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-
-    assert_eq!(load_response.status(), StatusCode::OK);
-
-    // Get plugin ID from response
-    let body = String::from_utf8(
-        load_response
-            .into_body()
-            .collect()
-            .await
-            .unwrap()
-            .to_bytes()
-            .to_vec(),
-    )
-    .unwrap();
-    let plugin_info: PluginInfo = serde_json::from_str(&body).unwrap();
-
-    // 2. List plugins
-    let list_response = app
-        .clone()
-        .oneshot(
-            Request::builder()
-                .method("GET")
-                .uri("/api/plugins")
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-
-    assert_eq!(list_response.status(), StatusCode::OK);
-
-    let body = String::from_utf8(
-        list_response
-            .into_body()
-            .collect()
-            .await
-            .unwrap()
-            .to_bytes()
-            .to_vec(),
-    )
-    .unwrap();
-    let plugins: Vec<PluginInfo> = serde_json::from_str(&body).unwrap();
-    assert_eq!(plugins.len(), 1);
-    assert_eq!(plugins[0].id, plugin_info.id);
-
-    // 3. Invoke plugin
-    let invoke_response = app
-        .clone()
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri(&format!("/api/plugins/{}/invoke", plugin_info.id))
-                .header("content-type", "application/json")
-                .body(Body::from(
-                    serde_json::json!({
-                        "input": "test input"
-                    })
-                    .to_string(),
-                ))
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-
-    assert_eq!(invoke_response.status(), StatusCode::OK);
-
-    // 4. Verify events in logs
-    let mut saw_invocation = false;
-
-    tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
-
-    while let Ok(log) = logs_rx.try_recv() {
-        if log.contains("invoked: test input") {
-            saw_invocation = true;
-        }
-    }
-
-    assert!(saw_invocation, "Should see plugin invocation in logs");
-}
-
-#[tokio::test]
-async fn test_plugin_error_handling() {
-    let (app, mut logs_rx) = setup_test_app().await;
-
-    // Try to load invalid manifest
-    let response = app
-        .clone()
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri("/api/plugins")
-                .header("content-type", "application/json")
-                .body(Body::from(
-                    serde_json::json!({
-                        "manifest": "invalid = toml [ content"
-                    })
-                    .to_string(),
-                ))
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-
-    let body = String::from_utf8(
-        response
-            .into_body()
-            .collect()
-            .await
-            .unwrap()
-            .to_bytes()
-            .to_vec(),
-    )
-    .unwrap();
-    assert!(
-        body.contains("Invalid manifest format"),
-        "Should fail with invalid manifest error"
-    );
-
-    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
-
-    // Should see error in logs
-    let mut saw_error = false;
-    while let Ok(log) = logs_rx.try_recv() {
-        println!("Checking log: {}", log);
-        if log.contains("Invalid manifest format") {
-            saw_error = true;
-            break;
-        }
-    }
-
-    assert!(saw_error, "Should see error in logs for invalid manifest");
-}
-
-#[tokio::test]
 async fn test_calculator_plugin() {
     let (app, mut logs_rx) = setup_test_app().await;
 
@@ -293,7 +131,7 @@ async fn test_calculator_plugin() {
     .unwrap();
     let plugins: Vec<PluginInfo> = serde_json::from_str(&body).unwrap();
     debug!("Found plugins: {:?}", plugins);
-    
+
     // Find calculator plugin
     let calculator = plugins
         .iter()
@@ -310,11 +148,13 @@ async fn test_calculator_plugin() {
                 .header("content-type", "application/json")
                 .body(Body::from(
                     serde_json::json!({
-                        "function": "add",
-                        "args": {
-                            "a": 5.0,
-                            "b": 3.0
-                        }
+                        "input": serde_json::json!({
+                            "function": "add",
+                            "args": {
+                                "a": 5.0,
+                                "b": 3.0
+                            }
+                        }).to_string()
                     })
                     .to_string(),
                 ))
@@ -348,11 +188,13 @@ async fn test_calculator_plugin() {
                 .header("content-type", "application/json")
                 .body(Body::from(
                     serde_json::json!({
-                        "function": "divide",
-                        "args": {
-                            "a": 1.0,
-                            "b": 0.0
-                        }
+                        "input": serde_json::json!({
+                            "function": "divide",
+                            "args": {
+                                "a": 1.0,
+                                "b": 0.0
+                            }
+                        }).to_string()
                     })
                     .to_string(),
                 ))

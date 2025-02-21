@@ -34,6 +34,11 @@ impl FileStorage {
 
     pub fn with_parent<P: AsRef<Path>>(parent_dir: P, storage_name: &str) -> Self {
         let base_path = parent_dir.as_ref().join(storage_name);
+        debug!(
+            "Creating FileStorage with parent dir: {:?}, storage name: {}",
+            parent_dir.as_ref(),
+            storage_name
+        );
         Self::new(base_path)
     }
 
@@ -121,17 +126,22 @@ impl FileStorage {
     }
 
     pub fn list(&self) -> Vec<ElementData> {
-        debug!("Listing all elements in FileStorage");
+        debug!(
+            "Listing all elements in FileStorage at {:?}",
+            self.base_path
+        );
         let mut elements = Vec::new();
 
         // Read all files in the directory
         match fs::read_dir(&self.base_path) {
             Ok(entries) => {
                 for entry in entries.flatten() {
+                    debug!("Found entry: {:?}", entry.path());
                     if let Some(extension) = entry.path().extension() {
                         if extension == "json" {
                             debug!("Found JSON file: {:?}", entry.path());
                             if let Ok(content) = fs::read_to_string(entry.path()) {
+                                debug!("File contents: {}", content);
                                 match serde_json::from_str::<ElementData>(&content) {
                                     Ok(element) => {
                                         debug!("Successfully parsed element {}", element.id);

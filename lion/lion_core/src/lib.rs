@@ -5,8 +5,8 @@ pub mod orchestrator;
 pub mod pile;
 pub mod plugin_manager;
 pub mod progression;
-pub mod store;
 pub mod storage;
+pub mod store;
 
 // Re-export commonly used types
 pub use agent::{AgentEvent, AgentProtocol, MockStreamingAgent};
