@@ -9,6 +9,7 @@ pub struct PluginDiscovery {
     manifest_dir: PathBuf,
 }
 
+#[allow(unknown_lints)]
 #[allow(clippy::unnecessary_map_or)]
 impl PluginDiscovery {
     pub fn new<P: AsRef<Path>>(manifest_dir: P) -> Self {
@@ -35,17 +36,6 @@ impl PluginDiscovery {
             )));
         }
 
-        // First check for calculator plugin specifically
-        let calculator_manifest = self.manifest_dir.join("calculator").join("manifest.toml");
-        debug!(
-            "Looking for calculator manifest at: {:?}",
-            calculator_manifest
-        );
-        if let Some(manifest) = PluginManifest::try_load(&calculator_manifest) {
-            debug!("Successfully loaded calculator manifest");
-            manifests.push((manifest, calculator_manifest));
-        }
-
         // Then check for other plugins in subdirectories
         for entry in fs::read_dir(&self.manifest_dir).map_err(|e| {
             PluginError::ManifestError(format!("Failed to read manifest directory: {}", e))
@@ -56,8 +46,8 @@ impl PluginDiscovery {
             let path = entry.path();
             debug!("Checking path: {:?}", path);
 
-            // Skip data directory and calculator directory (already checked)
-            if path.ends_with("data") || path.ends_with("calculator") {
+            // Skip data directory
+            if path.ends_with("data") {
                 continue;
             }
 
@@ -96,11 +86,14 @@ mod tests {
     #[test]
     fn test_discover_plugins() {
         let temp_dir = tempdir().unwrap();
-        let plugin_dir = temp_dir.path().join("calculator");
+
+        // Create test plugin directory
+        let plugin_dir = temp_dir.path().join("test_plugin");
         fs::create_dir(&plugin_dir).unwrap();
 
+        // Create manifest for test plugin
         let manifest = PluginManifest {
-            name: "calculator".to_string(),
+            name: "test_plugin".to_string(),
             version: "0.1.0".to_string(),
             description: "Test plugin".to_string(),
             entry_point: "nonexistent".to_string(),
@@ -108,13 +101,15 @@ mod tests {
             driver: None,
             functions: std::collections::HashMap::new(),
         };
+
         let manifest_content = toml::to_string(&manifest).unwrap();
         let manifest_path = plugin_dir.join("manifest.toml");
         fs::write(manifest_path, manifest_content).unwrap();
 
+        // Test discovery
         let discovery = PluginDiscovery::new(temp_dir.path());
         let discovered = discovery.discover_plugins().unwrap();
         assert_eq!(discovered.len(), 1);
-        assert_eq!(discovered[0].0.name, "calculator");
+        assert_eq!(discovered[0].0.name, "test_plugin");
     }
 }

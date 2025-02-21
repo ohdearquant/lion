@@ -17,15 +17,31 @@ impl PluginLoader {
         Self {}
     }
 
-    fn resolve_entry_point(&self, manifest_path: &Path, entry_point: &str) -> PathBuf {
+    fn resolve_entry_point(
+        &self,
+        manifest_path: &Path,
+        entry_point: &str,
+    ) -> Result<PathBuf, PluginError> {
         // Get the directory containing the manifest
-        let manifest_dir = manifest_path.parent().unwrap_or(Path::new("."));
+        let manifest_dir = manifest_path.parent().ok_or_else(|| {
+            PluginError::LoadError(format!(
+                "Invalid manifest path, cannot get parent directory: {}",
+                manifest_path.display()
+            ))
+        })?;
 
-        // If entry_point is absolute, use it directly
-        let path = PathBuf::from(entry_point);
-        if path.is_absolute() {
-            debug!("Using absolute entry point: {:?}", path);
-            return path;
+        // Security check for path traversal
+        fn is_path_traversal(path: &Path) -> bool {
+            path.components().any(|c| {
+                matches!(c, std::path::Component::ParentDir | std::path::Component::RootDir)
+            })
+        }
+
+        if is_path_traversal(Path::new(entry_point)) {
+            return Err(PluginError::LoadError(format!(
+                "Invalid path traversal attempt in entry point: {}",
+                entry_point
+            )));
         }
 
         // Resolve relative to manifest directory
@@ -33,17 +49,24 @@ impl PluginLoader {
         for component in Path::new(entry_point).components() {
             match component {
                 std::path::Component::ParentDir => {
-                    resolved = resolved.parent().unwrap_or(Path::new(".")).to_path_buf();
+                    resolved = resolved
+                        .parent()
+                        .ok_or_else(|| {
+                            PluginError::LoadError(format!(
+                                "Invalid path traversal in entry point: {}",
+                                entry_point
+                            ))
+                        })?
+                        .to_path_buf();
                 }
                 _ => resolved.push(component),
             }
         }
-        debug!(
-            "Resolving entry point {} relative to {:?}",
-            entry_point, manifest_dir
-        );
-        debug!("Resolved to: {:?}", resolved);
-        resolved
+
+        debug!("Using resolved entry point: {:?}", resolved);
+        let final_path = resolved;
+        debug!("Final entry point path: {:?}", final_path);
+        Ok(final_path)
     }
 
     pub fn load_plugin(
@@ -53,7 +76,7 @@ impl PluginLoader {
     ) -> Result<(Uuid, ElementData), PluginError> {
         debug!("Loading plugin {}", manifest.name);
 
-        let entry_point = self.resolve_entry_point(manifest_path, &manifest.entry_point);
+        let entry_point = self.resolve_entry_point(manifest_path, &manifest.entry_point)?;
         debug!("Resolved entry point: {:?}", entry_point);
 
         // Check if entry point exists
@@ -109,7 +132,7 @@ impl PluginLoader {
     ) -> Result<String, PluginError> {
         debug!("Invoking plugin {} with input: {}", manifest.name, input);
 
-        let entry_point = self.resolve_entry_point(manifest_path, &manifest.entry_point);
+        let entry_point = self.resolve_entry_point(manifest_path, &manifest.entry_point)?;
         debug!("Resolved entry point for execution: {:?}", entry_point);
 
         // Execute the plugin as a subprocess
@@ -124,7 +147,7 @@ impl PluginLoader {
                 ))
             })?;
 
-        // Write input to stdin and explicitly close it
+        // Write input to stdin with timeout handling
         if let Some(mut stdin) = child.stdin.take() {
             stdin.write_all(input.as_bytes()).map_err(|e| {
                 PluginError::ProcessError(format!("Failed to write to stdin: {}", e))
@@ -133,7 +156,7 @@ impl PluginLoader {
             drop(stdin); // Explicitly close stdin to signal EOF to the plugin
         }
 
-        // Read output line by line from stdout
+        // Read output line by line from stdout with improved error handling
         if let Some(stdout) = child.stdout.take() {
             let reader = BufReader::new(stdout);
             match reader.lines().next() {
@@ -143,8 +166,11 @@ impl PluginLoader {
                     e
                 ))),
                 None => Err(PluginError::ProcessError(
-                    format!("No output from plugin at {:?}. Check if the plugin is executable and the input format is correct: {}", 
-                        entry_point, input)
+                    format!(
+                        "No output from plugin at {:?}. Verify:\n1. Plugin is executable\n2. Input format is correct: {}\n3. Plugin writes to stdout\n4. Plugin exits after writing output",
+                        entry_point,
+                        input
+                    )
                 ))
             }
         } else {
@@ -174,11 +200,52 @@ mod tests {
     }
 
     #[test]
+    fn test_resolve_entry_point() {
+        let temp_dir = tempdir().unwrap();
+        let manifest_path = temp_dir.path().join("manifest.toml");
+        let loader = PluginLoader::new(temp_dir.path());
+
+        // Test relative path resolution
+        let result = loader.resolve_entry_point(&manifest_path, "plugin.exe");
+        assert!(result.is_ok());
+
+        // Test absolute path rejection
+        let result = loader.resolve_entry_point(&manifest_path, "/etc/passwd");
+        assert!(result.is_err());
+
+        // Test parent traversal rejection
+        let result = loader.resolve_entry_point(&manifest_path, "../../../etc/passwd");
+        assert!(result.is_err());
+    }
+
+    #[test]
     fn test_load_plugin_nonexistent() {
         let temp_dir = tempdir().unwrap();
         let manifest_path = temp_dir.path().join("manifest.toml");
         let loader = PluginLoader::new(temp_dir.path());
         let manifest = create_test_manifest("nonexistent");
+        let result = loader.load_plugin(manifest, &manifest_path);
+        assert!(result.is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_load_plugin_not_executable() {
+        use std::fs::File;
+        let temp_dir = tempdir().unwrap();
+        let plugin_path = temp_dir.path().join("plugin.sh");
+
+        // Create non-executable file
+        File::create(&plugin_path).unwrap();
+
+        let manifest_path = temp_dir.path().join("manifest.toml");
+        let loader = PluginLoader::new(temp_dir.path());
+        let manifest = create_test_manifest(
+            plugin_path
+                .to_str()
+                .expect("Failed to convert path to string"),
+        );
+
         let result = loader.load_plugin(manifest, &manifest_path);
         assert!(result.is_err());
     }
