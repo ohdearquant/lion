@@ -24,6 +24,8 @@ pub struct AppState {
     pub agents: RwLock<HashMap<Uuid, String>>,
     /// Active plugins and their IDs
     pub plugins: RwLock<HashMap<Uuid, PluginInfo>>,
+    /// Plugin manager manifest directory
+    pub plugins_dir: RwLock<String>,
 }
 
 #[allow(dead_code)]
@@ -38,6 +40,7 @@ impl AppState {
             orchestrator_sender,
             agents: RwLock::new(HashMap::new()),
             plugins: RwLock::new(HashMap::new()),
+            plugins_dir: RwLock::new(String::from("plugins")),
         }
     }
 
@@ -51,6 +54,7 @@ impl AppState {
             orchestrator_sender,
             agents: RwLock::new(HashMap::new()),
             plugins: RwLock::new(HashMap::new()),
+            plugins_dir: RwLock::new(String::from("plugins")),
         }
     }
 }

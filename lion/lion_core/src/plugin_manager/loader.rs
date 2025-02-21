@@ -2,7 +2,7 @@ use super::error::PluginError;
 use super::manifest::PluginManifest;
 use crate::element::ElementData;
 use serde_json::json;
-use std::io::Write;
+use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use tracing::{debug, error, info};
@@ -110,29 +110,32 @@ impl PluginLoader {
             .spawn()
             .map_err(|e| PluginError::ProcessError(format!("Failed to spawn process: {}", e)))?;
 
-        // Write input to stdin
+        // Write input to stdin and explicitly close it
         if let Some(mut stdin) = child.stdin.take() {
             stdin.write_all(input.as_bytes()).map_err(|e| {
                 PluginError::ProcessError(format!("Failed to write to stdin: {}", e))
             })?;
+            drop(stdin); // Explicitly close stdin to signal EOF to the plugin
         }
 
-        // Read output from stdout
-        let output = child
-            .wait_with_output()
-            .map_err(|e| PluginError::ProcessError(format!("Failed to read output: {}", e)))?;
-
-        if !output.status.success() {
-            return Err(PluginError::ProcessError(format!(
-                "Plugin process exited with status: {}",
-                output.status
-            )));
+        // Read output line by line from stdout
+        if let Some(stdout) = child.stdout.take() {
+            let reader = BufReader::new(stdout);
+            match reader.lines().next() {
+                Some(Ok(line)) => Ok(line),
+                Some(Err(e)) => Err(PluginError::ProcessError(format!(
+                    "Failed to read stdout: {}",
+                    e
+                ))),
+                None => Err(PluginError::ProcessError(
+                    "No output from plugin".to_string(),
+                )),
+            }
+        } else {
+            Err(PluginError::ProcessError(
+                "Failed to capture stdout".to_string(),
+            ))
         }
-
-        let result = String::from_utf8(output.stdout)
-            .map_err(|e| PluginError::ProcessError(format!("Invalid UTF-8 output: {}", e)))?;
-
-        Ok(result)
     }
 }
 

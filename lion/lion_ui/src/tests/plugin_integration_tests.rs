@@ -48,14 +48,41 @@ async fn setup_test_app() -> (Router, broadcast::Receiver<String>) {
     let mut plugin_manager = PluginManager::with_manifest_dir(&plugins_dir);
     info!("Created plugin manager");
 
+    // Create orchestrator first to get sender
+    let orchestrator = Orchestrator::with_plugin_manager(100, plugin_manager.clone());
+    let orchestrator_sender = orchestrator.sender();
+    let mut completion_rx = orchestrator.completion_receiver();
+
+    // Create channels and state
+    let (logs_tx, logs_rx) = broadcast::channel::<String>(100);
+    let logs_tx_clone = logs_tx.clone();
+    let state = Arc::new(AppState::new_with_logs(
+        orchestrator_sender.clone(),
+        logs_tx.clone(),
+    ));
+    let state_clone = Arc::clone(&state);
+
+    // Set the plugins directory in state
+    {
+        let mut plugins_dir_lock = state_clone.plugins_dir.write().await;
+        *plugins_dir_lock = plugins_dir.to_string_lossy().into_owned();
+    }
+
     // Discover and load available plugins
     match plugin_manager.discover_plugins() {
         Ok(manifests) => {
             debug!("Discovered {} plugins", manifests.len());
             for manifest in manifests {
                 debug!("Found plugin manifest: {:?}", manifest);
-                if let Err(e) = plugin_manager.load_plugin(manifest) {
-                    eprintln!("Warning: Failed to load plugin: {}", e);
+                let manifest_clone = manifest.clone();
+                match plugin_manager.load_plugin(manifest) {
+                    Ok(plugin_id) => {
+                        // Create and store plugin info in app state
+                        let mut info = PluginInfo::from(&manifest_clone);
+                        info.id = plugin_id;
+                        state_clone.plugins.write().await.insert(plugin_id, info);
+                    }
+                    Err(e) => eprintln!("Warning: Failed to load plugin: {}", e),
                 }
             }
         }
@@ -63,14 +90,6 @@ async fn setup_test_app() -> (Router, broadcast::Receiver<String>) {
             eprintln!("Failed to discover plugins: {}", e);
         }
     }
-
-    // Create orchestrator with the plugin manager
-    let orchestrator = Orchestrator::with_plugin_manager(100, plugin_manager);
-    let orchestrator_sender = orchestrator.sender();
-    let mut completion_rx = orchestrator.completion_receiver();
-
-    let (logs_tx, logs_rx) = broadcast::channel::<String>(100);
-    let logs_tx_clone = logs_tx.clone();
 
     // Spawn orchestrator and ensure it's running
     tokio::spawn(orchestrator.run());
@@ -105,12 +124,6 @@ async fn setup_test_app() -> (Router, broadcast::Receiver<String>) {
             }
         }
     });
-
-    // Create state with the same logs channel
-    let state = Arc::new(AppState::new_with_logs(
-        orchestrator_sender,
-        logs_tx.clone(),
-    ));
 
     let app = Router::new()
         .nest("/api", crate::plugins::create_plugin_router())

@@ -1,18 +1,20 @@
+use crate::events::AppState;
 use axum::{
     extract::{Multipart, Path as AxumPath, State},
     response::Json,
     routing::post,
     Router,
 };
-use lion_core::plugin_manager::{PluginManager, PluginManifest};
+use chrono::Utc;
+use lion_core::orchestrator::{EventMetadata, SystemEvent};
+use lion_core::plugin_manager::PluginManifest;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path as StdPath;
 use std::sync::Arc;
+use tokio::sync::broadcast;
 use tracing::{debug, error};
 use uuid::Uuid;
-
-use crate::events::AppState;
 
 /// Information about a loaded plugin
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -51,14 +53,23 @@ pub async fn load_plugin_handler(
             let content = String::from_utf8(content.to_vec()).unwrap();
             let manifest: PluginManifest = toml::from_str(&content).unwrap();
 
-            let mut plugin_manager = PluginManager::with_manifest_dir("plugins");
-            let plugin_id = plugin_manager.load_plugin(manifest.clone()).unwrap();
+            // Create plugin info with temporary ID
+            let info = PluginInfo::from(&manifest);
 
-            let mut info = PluginInfo::from(&manifest);
-            info.id = plugin_id;
+            // Send load plugin event to orchestrator
+            let event = SystemEvent::TaskSubmitted {
+                task_id: Uuid::new_v4(),
+                payload: serde_json::to_string(&manifest).unwrap(),
+                metadata: EventMetadata {
+                    event_id: Uuid::new_v4(),
+                    timestamp: Utc::now(),
+                    correlation_id: None,
+                    context: serde_json::json!({}),
+                },
+            };
+            state.orchestrator_sender.send(event).await.unwrap();
 
-            state.plugins.write().await.insert(plugin_id, info.clone());
-
+            // Return the info (ID will be updated when plugin is loaded)
             return Json(info);
         }
     }
@@ -73,7 +84,7 @@ pub async fn list_plugins_handler(State(state): State<Arc<AppState>>) -> Json<Ve
 
 /// Handler for invoking a plugin function
 pub async fn invoke_plugin_handler(
-    State(_state): State<Arc<AppState>>,
+    State(state): State<Arc<AppState>>,
     AxumPath(plugin_id): AxumPath<Uuid>,
     Json(request): Json<InvokePluginRequest>,
 ) -> Json<serde_json::Value> {
@@ -82,10 +93,13 @@ pub async fn invoke_plugin_handler(
         "args": request.args,
     });
 
-    let plugin_manager = PluginManager::with_manifest_dir("plugins");
-    let result = plugin_manager
-        .invoke_plugin(plugin_id, &input.to_string())
-        .unwrap();
+    // Send plugin invocation event to orchestrator
+    let event = SystemEvent::new_plugin_invocation(plugin_id, input.to_string(), None);
+    state.orchestrator_sender.send(event).await.unwrap();
+
+    // Wait for result from logs channel
+    let mut logs_rx = state.logs_tx.subscribe();
+    let result = wait_for_plugin_result(&mut logs_rx).await;
 
     Json(serde_json::from_str(&result).unwrap())
 }
@@ -149,83 +163,29 @@ pub fn save_manifest<P: AsRef<StdPath>>(manifest: &PluginManifest, path: P) -> s
     fs::write(path, content)
 }
 
-/// Load a plugin from a manifest file
-#[allow(dead_code)]
-pub fn load_plugin_from_file<P: AsRef<StdPath>>(path: P) -> Option<Uuid> {
-    let path = path.as_ref();
-    debug!("Loading plugin from manifest {}", path.display());
+#[allow(clippy::let_and_return)]
+async fn wait_for_plugin_result(logs_rx: &mut broadcast::Receiver<String>) -> String {
+    use std::time::Duration;
+    use tokio::time::timeout;
 
-    let manifest = load_manifest(path)?;
-    debug!("Loaded manifest for plugin {}", manifest.name);
-
-    let mut plugin_manager = PluginManager::with_manifest_dir("plugins");
-    match plugin_manager.load_plugin(manifest) {
-        Ok(id) => {
-            debug!("Successfully loaded plugin with ID {}", id);
-            Some(id)
-        }
-        Err(e) => {
-            error!("Failed to load plugin: {}", e);
-            None
-        }
-    }
-}
-
-/// Load all plugins from a directory
-#[allow(dead_code)]
-pub fn load_plugins_from_dir<P: AsRef<StdPath>>(dir: P) -> Vec<Uuid> {
-    let dir = dir.as_ref();
-    debug!("Loading plugins from directory {}", dir.display());
-
-    let mut loaded_plugins = Vec::new();
-    let mut plugin_manager = PluginManager::with_manifest_dir("plugins");
-
-    // Read directory entries
-    let entries = match fs::read_dir(dir) {
-        Ok(entries) => entries,
-        Err(e) => {
-            error!("Failed to read directory: {}", e);
-            return loaded_plugins;
-        }
-    };
-
-    // Process each entry
-    for entry in entries {
-        let entry = match entry {
-            Ok(entry) => entry,
-            Err(e) => {
-                error!("Failed to read directory entry: {}", e);
-                continue;
+    let timeout_duration = Duration::from_secs(5);
+    let result = timeout(timeout_duration, async {
+        while let Ok(log) = logs_rx.recv().await {
+            debug!("Received log: {}", log);
+            // Check for plugin output in the logs
+            if log.contains(r#""result":"#) || log.contains(r#""error":"#) {
+                // Extract the JSON part from the log
+                let json_start = log.find('{').unwrap_or(0);
+                let json_end = log.rfind('}').map(|i| i + 1).unwrap_or(log.len());
+                let json = &log[json_start..json_end];
+                return json.to_string();
             }
-        };
-
-        let path = entry.path();
-
-        // Skip non-manifest files
-        if !path.is_file() || path.extension().map_or(true, |ext| ext != "toml") {
-            continue;
         }
-
-        debug!("Found manifest file: {}", path.display());
-
-        // Load the manifest
-        let manifest = match load_manifest(&path) {
-            Some(manifest) => manifest,
-            None => continue,
-        };
-
-        // Load the plugin
-        if let Ok(plugin_id) = plugin_manager.load_plugin(manifest.clone()) {
-            debug!(
-                "Successfully loaded plugin {} with ID {}",
-                manifest.name, plugin_id
-            );
-            loaded_plugins.push(plugin_id);
-        }
-    }
-
-    debug!("Loaded {} plugins", loaded_plugins.len());
-    loaded_plugins
+        panic!("Plugin result not found in logs");
+    })
+    .await
+    .expect("Plugin invocation timed out");
+    result
 }
 
 #[cfg(test)]
@@ -258,29 +218,6 @@ mod tests {
         assert_eq!(loaded.name, manifest.name);
         assert_eq!(loaded.version, manifest.version);
         assert_eq!(loaded.description, manifest.description);
-    }
-
-    #[test]
-    fn test_load_plugin_from_file() {
-        let temp_dir = tempdir().unwrap();
-        let manifest_path = temp_dir.path().join("manifest.toml");
-
-        let manifest = create_test_manifest();
-        save_manifest(&manifest, &manifest_path).unwrap();
-
-        assert!(load_plugin_from_file(&manifest_path).is_none());
-    }
-
-    #[test]
-    fn test_load_plugins_from_dir() {
-        let temp_dir = tempdir().unwrap();
-        let manifest_path = temp_dir.path().join("test_plugin.toml");
-
-        let manifest = create_test_manifest();
-        save_manifest(&manifest, &manifest_path).unwrap();
-
-        let loaded = load_plugins_from_dir(temp_dir.path());
-        assert!(loaded.is_empty());
     }
 
     #[test]

@@ -9,9 +9,9 @@ pub use manifest::{PluginFunction, PluginManifest};
 use crate::storage::FileStorage;
 use discovery::PluginDiscovery;
 use loader::PluginLoader;
-use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::Arc;
+
 use tracing::{debug, error};
 use uuid::Uuid;
 
@@ -20,7 +20,6 @@ pub struct PluginManager {
     storage: Arc<FileStorage>,
     discovery: Option<PluginDiscovery>,
     loader: Option<PluginLoader>,
-    manifest_paths: HashMap<Uuid, PathBuf>,
 }
 
 impl Default for PluginManager {
@@ -37,7 +36,6 @@ impl PluginManager {
             storage,
             discovery: None,
             loader: None,
-            manifest_paths: HashMap::new(),
         }
     }
 
@@ -75,7 +73,6 @@ impl PluginManager {
             storage,
             discovery: Some(discovery),
             loader: Some(loader),
-            manifest_paths: HashMap::new(),
         }
     }
 
@@ -117,9 +114,10 @@ impl PluginManager {
                 ))
             })?;
 
+        // Store manifest path before loading plugin
+        let manifest_path = manifest_path.to_path_buf();
         let (id, element) = loader.load_plugin(manifest, &manifest_path)?;
         debug!("Successfully loaded plugin with ID: {}", id);
-        self.manifest_paths.insert(id, manifest_path);
         self.storage.store(element);
         Ok(id)
     }
@@ -145,14 +143,18 @@ impl PluginManager {
             PluginError::LoadError("No manifest directory configured".to_string())
         })?;
 
-        let manifest_path = self.manifest_paths.get(&plugin_id).ok_or_else(|| {
-            PluginError::InvokeError(format!(
-                "Could not find manifest path for plugin {}",
-                plugin_id
-            ))
+        // Get the manifest path from discovery
+        let discovery = self.discovery.as_ref().ok_or_else(|| {
+            PluginError::LoadError("No manifest directory configured".to_string())
         })?;
+        let manifests = discovery.discover_plugins()?;
+        let manifest_path_buf = manifests
+            .iter()
+            .find(|(m, _)| m.name == manifest.name)
+            .map(|(_, p)| p.clone())
+            .unwrap();
 
-        loader.invoke_plugin(&manifest, manifest_path, input)
+        loader.invoke_plugin(&manifest, manifest_path_buf.as_path(), input)
     }
 
     pub fn list_plugins(&self) -> Vec<(Uuid, PluginManifest)> {
