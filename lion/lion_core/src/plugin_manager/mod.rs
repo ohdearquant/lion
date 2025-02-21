@@ -58,7 +58,7 @@ impl PluginManager {
 
         // If the path ends with "plugins/data", use its parent as the manifest directory
         let manifest_dir =
-            if dir.ends_with("data") && dir.parent().map_or(false, |p| p.ends_with("plugins")) {
+            if dir.ends_with("data") && dir.parent().is_some_and(|p| p.ends_with("plugins")) {
                 dir.parent().unwrap().parent().unwrap().to_path_buf()
             } else {
                 dir

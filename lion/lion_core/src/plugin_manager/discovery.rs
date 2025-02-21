@@ -19,6 +19,7 @@ impl PluginDiscovery {
         Self { manifest_dir: dir }
     }
 
+    #[allow(clippy::unnecessary_map_or)]
     pub fn discover_plugins(&self) -> Result<Vec<(PluginManifest, PathBuf)>, PluginError> {
         debug!("Discovering plugins in directory: {:?}", self.manifest_dir);
         let mut manifests = Vec::new();
