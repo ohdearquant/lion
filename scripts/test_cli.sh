@@ -1,6 +1,9 @@
 #!/bin/bash
 set -e # Exit on any error
 
+# Move to the project root
+cd "$(dirname "$0")/.."
+
 # Colors for output
 GREEN='\033[0;32m'
 RED='\033[0;31m'
@@ -37,6 +40,9 @@ run_command() {
 echo "Building CLI..."
 cargo build
 echo -e "${GREEN}✓ Build successful${NC}\n"
+
+# Run CLI-specific tests
+cargo test -p lion_cli
 
 # Generate a test UUID for correlation
 TEST_UUID="123e4567-e89b-12d3-a456-426614174000"

@@ -1,10 +1,10 @@
 [package]
-name = "agentic_cli"
-version = "0.0.1-stage1-phase5"
+name = "lion_cli"
+version = "0.0.1-stage2-phase3"
 edition = "2021"
 
 [dependencies]
-agentic_core = { path = "../agentic_core" }
+lion_core = { path = "../lion_core" }
 tokio = { version = "1.0", features = ["full"] }
 clap = { version = "4.0", features = ["derive"] }
 uuid = { version = "1.0", features = ["v4"] }

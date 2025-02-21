@@ -1,6 +1,6 @@
 [package]
-name = "agentic_core"
-version = "0.0.1-stage1-phase5"
+name = "lion_core"
+version = "0.0.1-stage2-phase3"
 edition = "2021"
 
 [dependencies]

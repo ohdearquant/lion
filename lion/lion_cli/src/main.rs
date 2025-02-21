@@ -1,9 +1,9 @@
-use agentic_core::plugin_manager::PluginManifest;
-use agentic_core::{
+use clap::{Parser, Subcommand};
+use lion_core::plugin_manager::PluginManifest;
+use lion_core::{
     orchestrator::{Orchestrator, SystemEvent},
     EventLog,
 };
-use clap::{Parser, Subcommand};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::time::timeout;

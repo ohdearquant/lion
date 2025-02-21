@@ -5,13 +5,13 @@ use crate::{
     agents::{list_agents, spawn_agent},
     events::sse_handler,
 };
-use agentic_core::{Orchestrator, SystemEvent};
 use axum::{
     response::{Html, IntoResponse},
     routing::{get, post},
     Router,
 };
 use events::AppState;
+use lion_core::{Orchestrator, SystemEvent};
 use std::{net::SocketAddr, sync::Arc};
 use tracing::{info, Level};
 use tracing_subscriber::FmtSubscriber;

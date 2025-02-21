@@ -1,9 +1,9 @@
-use agentic_core::SystemEvent;
 use axum::{
     extract::State,
     response::{sse::Event, Sse},
 };
 use futures::{stream::Stream, StreamExt};
+use lion_core::SystemEvent;
 use std::collections::HashMap;
 use std::convert::Infallible;
 use std::sync::Arc;
