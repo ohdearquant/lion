@@ -144,7 +144,7 @@ async fn test_calculator_plugin() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri(&format!("/api/plugins/{}/invoke", calculator.id))
+                .uri(format!("/api/plugins/{}/invoke", calculator.id))
                 .header("content-type", "application/json")
                 .body(Body::from(
                     serde_json::json!({
@@ -184,7 +184,7 @@ async fn test_calculator_plugin() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri(&format!("/api/plugins/{}/invoke", calculator.id))
+                .uri(format!("/api/plugins/{}/invoke", calculator.id))
                 .header("content-type", "application/json")
                 .body(Body::from(
                     serde_json::json!({
