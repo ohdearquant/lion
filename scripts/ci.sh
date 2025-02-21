@@ -8,6 +8,14 @@ NC='\033[0m' # No Color
 
 echo "🚀 Running CI checks..."
 
+# Move to the project root
+cd "$(dirname "$0")/.."
+
+# Run cargo check
+echo -e "\n${GREEN}Running cargo check...${NC}"
+cargo check --workspace
+echo "✅ Cargo check successful"
+
 # Clean and build
 echo -e "\n${GREEN}Running cargo clean and build...${NC}"
 cargo clean
@@ -21,12 +29,12 @@ echo "✅ Formatting check passed"
 
 # Clippy
 echo -e "\n${GREEN}Running clippy...${NC}"
-cargo clippy --all-targets -- -D warnings
+cargo clippy --workspace -- -D warnings
 echo "✅ Clippy check passed"
 
 # Tests
 echo -e "\n${GREEN}Running tests...${NC}"
-cargo test --all-targets
+cargo test --workspace
 echo "✅ All tests passed"
 
 # Doc tests

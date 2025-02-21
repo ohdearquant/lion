@@ -18,13 +18,13 @@ CONFIG_FILE=~/.cargo/config.toml
 cat > "$CONFIG_FILE" << 'EOL'
 [alias]
 # Build and check commands
-ci = "run --quiet -p agentic_cli -- ci"
-test-cli = "run --quiet -p agentic_cli -- test-cli"
+ci = "run --quiet -p lion_cli -- ci"
+test-cli = "run --quiet -p lion_cli -- test-cli"
 
 # Demo commands
-demo = "run -p agentic_cli -- demo --data test-message --correlation-id 123e4567-e89b-12d3-a456-426614174000"
-plugin = "run -p agentic_cli -- load-plugin --manifest examples/hello_plugin/manifest.toml"
-agent = "run -p agentic_cli -- spawn-agent --prompt test-prompt --correlation-id 123e4567-e89b-12d3-a456-426614174000"
+demo = "run -p lion_cli -- demo --data test-message --correlation-id 123e4567-e89b-12d3-a456-426614174000"
+plugin = "run -p lion_cli -- load-plugin --manifest examples/hello_plugin/manifest.toml"
+agent = "run -p lion_cli -- spawn-agent --prompt test-prompt --correlation-id 123e4567-e89b-12d3-a456-426614174000"
 EOL
 
 echo -e "\n${GREEN}✨ Setup complete! You can now use:${NC}"

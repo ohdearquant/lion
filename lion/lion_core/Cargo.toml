@@ -1,5 +1,5 @@
 [package]
-name = "agentic_core"
+name = "lion_core"
 version = "0.0.1-stage1-phase5"
 edition = "2021"
 

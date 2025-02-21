@@ -20,14 +20,14 @@ permissions = ["net"]
 
 1. Load the plugin:
 ```bash
-cargo run -p agentic_cli -- load-plugin --manifest examples/hello_plugin/manifest.toml
+cargo run -p lion_cli -- load-plugin --manifest examples/hello_plugin/manifest.toml
 ```
 
 2. Note the plugin ID (UUID) from the output.
 
 3. Invoke the plugin:
 ```bash
-cargo run -p agentic_cli -- invoke-plugin --plugin-id <UUID> --input "test message"
+cargo run -p lion_cli -- invoke-plugin --plugin-id <UUID> --input "test message"
 ```
 
 The plugin will respond with a greeting containing your input message.
