@@ -1,9 +1,4 @@
-use super::{
-    error::PluginError,
-    manifest::PluginManifest,
-    registry::PluginRegistry,
-    Result,
-};
+use super::{error::PluginError, manifest::PluginManifest, registry::PluginRegistry, Result};
 use crate::types::{plugin::PluginState, traits::Validatable};
 use std::path::{Path, PathBuf};
 use tokio::fs;
@@ -89,8 +84,7 @@ impl PluginLoader {
             }
             Err(e) => {
                 error!("Failed to initialize plugin: {}", e);
-                self.registry
-                    .update_state(plugin_id, PluginState::Error)?;
+                self.registry.update_state(plugin_id, PluginState::Error)?;
                 Err(e)
             }
         }

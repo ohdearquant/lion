@@ -21,7 +21,7 @@ pub enum AgentEvent {
         /// Agent ID
         agent_id: Uuid,
         /// Partial output
-        output: String,
+        chunk: String,
         /// Event metadata
         metadata: EventMetadata,
     },
@@ -47,7 +47,11 @@ pub enum AgentEvent {
 
 impl AgentEvent {
     /// Create a new agent spawn event
-    pub fn spawn(agent_id: Uuid, prompt: impl Into<String>, correlation_id: Option<Uuid>) -> SystemEvent {
+    pub fn spawn(
+        agent_id: Uuid,
+        prompt: impl Into<String>,
+        correlation_id: Option<Uuid>,
+    ) -> SystemEvent {
         SystemEvent::Agent(AgentEvent::Spawned {
             agent_id,
             prompt: prompt.into(),
@@ -63,13 +67,17 @@ impl AgentEvent {
     ) -> SystemEvent {
         SystemEvent::Agent(AgentEvent::PartialOutput {
             agent_id,
-            output: output.into(),
+            chunk: output.into(),
             metadata: create_metadata(correlation_id),
         })
     }
 
     /// Create a new agent completion event
-    pub fn complete(agent_id: Uuid, result: impl Into<String>, correlation_id: Option<Uuid>) -> SystemEvent {
+    pub fn complete(
+        agent_id: Uuid,
+        result: impl Into<String>,
+        correlation_id: Option<Uuid>,
+    ) -> SystemEvent {
         SystemEvent::Agent(AgentEvent::Completed {
             agent_id,
             result: result.into(),
@@ -78,7 +86,11 @@ impl AgentEvent {
     }
 
     /// Create a new agent error event
-    pub fn error(agent_id: Uuid, error: impl Into<String>, correlation_id: Option<Uuid>) -> SystemEvent {
+    pub fn error(
+        agent_id: Uuid,
+        error: impl Into<String>,
+        correlation_id: Option<Uuid>,
+    ) -> SystemEvent {
         SystemEvent::Agent(AgentEvent::Error {
             agent_id,
             error: error.into(),
@@ -114,7 +126,7 @@ mod tests {
         match AgentEvent::partial_output(agent_id, "test output", correlation_id) {
             SystemEvent::Agent(AgentEvent::PartialOutput {
                 agent_id: aid,
-                output,
+                chunk: output,
                 metadata,
             }) => {
                 assert_eq!(aid, agent_id);

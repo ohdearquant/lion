@@ -69,7 +69,11 @@ impl PluginEvent {
     }
 
     /// Create a new plugin invocation event
-    pub fn invoke(plugin_id: Uuid, input: impl Into<String>, correlation_id: Option<Uuid>) -> SystemEvent {
+    pub fn invoke(
+        plugin_id: Uuid,
+        input: impl Into<String>,
+        correlation_id: Option<Uuid>,
+    ) -> SystemEvent {
         SystemEvent::Plugin(PluginEvent::Invoked {
             plugin_id,
             input: input.into(),
@@ -78,7 +82,11 @@ impl PluginEvent {
     }
 
     /// Create a new plugin result event
-    pub fn result(plugin_id: Uuid, result: impl Into<String>, correlation_id: Option<Uuid>) -> SystemEvent {
+    pub fn result(
+        plugin_id: Uuid,
+        result: impl Into<String>,
+        correlation_id: Option<Uuid>,
+    ) -> SystemEvent {
         SystemEvent::Plugin(PluginEvent::Result {
             plugin_id,
             result: result.into(),
@@ -87,7 +95,11 @@ impl PluginEvent {
     }
 
     /// Create a new plugin error event
-    pub fn error(plugin_id: Uuid, error: impl Into<String>, correlation_id: Option<Uuid>) -> SystemEvent {
+    pub fn error(
+        plugin_id: Uuid,
+        error: impl Into<String>,
+        correlation_id: Option<Uuid>,
+    ) -> SystemEvent {
         SystemEvent::Plugin(PluginEvent::Error {
             plugin_id,
             error: error.into(),

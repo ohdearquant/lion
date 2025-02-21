@@ -21,16 +21,18 @@ pub trait DataFormat: Serialize + for<'de> Deserialize<'de> {}
 #[async_trait]
 pub trait Storable: Identifiable + DataFormat {
     type Error;
-    
+
     async fn save(&self) -> Result<(), Self::Error>;
-    async fn load(id: Uuid) -> Result<Self, Self::Error> where Self: Sized;
+    async fn load(id: Uuid) -> Result<Self, Self::Error>
+    where
+        Self: Sized;
     async fn delete(id: Uuid) -> Result<(), Self::Error>;
 }
 
 /// A trait for entities that can be validated
 pub trait Validatable {
     type Error;
-    
+
     fn validate(&self) -> Result<(), Self::Error>;
 }
 
@@ -43,7 +45,9 @@ pub trait Modifiable: Clone {
 /// A trait for entities that can be converted to/from JSON
 pub trait JsonFormat {
     fn to_json(&self) -> serde_json::Result<serde_json::Value>;
-    fn from_json(value: serde_json::Value) -> serde_json::Result<Self> where Self: Sized;
+    fn from_json(value: serde_json::Value) -> serde_json::Result<Self>
+    where
+        Self: Sized;
 }
 
 /// A trait for entities that can be versioned
@@ -81,5 +85,7 @@ pub trait Initializable {
     type Config;
     type Error;
 
-    async fn initialize(config: Self::Config) -> Result<Self, Self::Error> where Self: Sized;
+    async fn initialize(config: Self::Config) -> Result<Self, Self::Error>
+    where
+        Self: Sized;
 }

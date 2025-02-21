@@ -1,8 +1,5 @@
 use super::{
-    error::PluginError,
-    loader::PluginLoader,
-    manifest::PluginManifest,
-    registry::PluginMetadata,
+    error::PluginError, loader::PluginLoader, manifest::PluginManifest, registry::PluginMetadata,
     Result,
 };
 use crate::types::plugin::PluginState;
@@ -186,11 +183,7 @@ mod tests {
         let manager = PluginManager::new();
 
         // Create invalid manifest
-        let manifest = PluginManifest::new(
-            "".to_string(),
-            "1.0.0".to_string(),
-            "".to_string(),
-        );
+        let manifest = PluginManifest::new("".to_string(), "1.0.0".to_string(), "".to_string());
 
         // Try to load plugin
         let result = manager

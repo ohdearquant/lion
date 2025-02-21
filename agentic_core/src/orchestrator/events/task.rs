@@ -38,7 +38,11 @@ pub enum TaskEvent {
 
 impl TaskEvent {
     /// Create a new task submission event
-    pub fn submit(task_id: Uuid, payload: impl Into<String>, correlation_id: Option<Uuid>) -> SystemEvent {
+    pub fn submit(
+        task_id: Uuid,
+        payload: impl Into<String>,
+        correlation_id: Option<Uuid>,
+    ) -> SystemEvent {
         SystemEvent::Task(TaskEvent::Submitted {
             task_id,
             payload: payload.into(),
@@ -47,7 +51,11 @@ impl TaskEvent {
     }
 
     /// Create a new task completion event
-    pub fn complete(task_id: Uuid, result: impl Into<String>, correlation_id: Option<Uuid>) -> SystemEvent {
+    pub fn complete(
+        task_id: Uuid,
+        result: impl Into<String>,
+        correlation_id: Option<Uuid>,
+    ) -> SystemEvent {
         SystemEvent::Task(TaskEvent::Completed {
             task_id,
             result: result.into(),
@@ -56,7 +64,11 @@ impl TaskEvent {
     }
 
     /// Create a new task error event
-    pub fn error(task_id: Uuid, error: impl Into<String>, correlation_id: Option<Uuid>) -> SystemEvent {
+    pub fn error(
+        task_id: Uuid,
+        error: impl Into<String>,
+        correlation_id: Option<Uuid>,
+    ) -> SystemEvent {
         SystemEvent::Task(TaskEvent::Error {
             task_id,
             error: error.into(),
