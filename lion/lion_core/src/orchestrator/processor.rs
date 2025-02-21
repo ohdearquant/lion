@@ -1,8 +1,9 @@
 use super::events::{EventMetadata, SystemEvent};
 use crate::agent::{AgentEvent, AgentProtocol, MockStreamingAgent};
 use crate::event_log::EventLog;
-use crate::plugin_manager::PluginManager;
+use crate::plugin_manager::{PluginManager, PluginManifest};
 use chrono::Utc;
+use serde_json::json;
 use tracing::info;
 use uuid::Uuid;
 
@@ -44,6 +45,44 @@ impl EventProcessor {
                 metadata,
             } => self.process_agent(agent_id, prompt, metadata).await,
 
+            SystemEvent::PluginLoadRequested {
+                plugin_id,
+                manifest,
+                metadata,
+            } => {
+                info!("Processing plugin load request");
+                match toml::from_str::<PluginManifest>(&manifest) {
+                    Ok(manifest) => match self.plugin_manager.load_plugin(manifest.clone()) {
+                        Ok(_) => {
+                            let loaded_event = SystemEvent::PluginLoaded {
+                                plugin_id,
+                                name: manifest.name,
+                                version: manifest.version,
+                                description: manifest.description,
+                                metadata: EventMetadata {
+                                    event_id: Uuid::new_v4(),
+                                    timestamp: Utc::now(),
+                                    correlation_id: metadata.correlation_id,
+                                    context: metadata.context,
+                                },
+                            };
+                            self.event_log.append(loaded_event.clone());
+                            Some(loaded_event)
+                        }
+                        Err(e) => Some(SystemEvent::PluginError {
+                            plugin_id,
+                            error: e.to_string(),
+                            metadata,
+                        }),
+                    },
+                    Err(e) => Some(SystemEvent::PluginError {
+                        plugin_id,
+                        error: format!("Failed to parse manifest: {}", e),
+                        metadata,
+                    }),
+                }
+            }
+            SystemEvent::PluginLoaded { .. } => None, // This event doesn't require additional processing
             // These events don't require processing
             SystemEvent::TaskCompleted { .. }
             | SystemEvent::TaskError { .. }
@@ -67,23 +106,73 @@ impl EventProcessor {
             "Processing task"
         );
 
-        // Simulate some processing
-        let result = format!("Processed: {}", payload);
+        // Try to parse payload as plugin manifest
+        match toml::from_str::<PluginManifest>(&payload) {
+            Ok(manifest) => {
+                info!("Received plugin manifest for {}", manifest.name);
 
-        let completion = SystemEvent::TaskCompleted {
-            task_id,
-            result,
-            metadata: EventMetadata {
-                event_id: Uuid::new_v4(),
-                timestamp: Utc::now(),
-                correlation_id: metadata.correlation_id,
-                context: metadata.context,
-            },
-        };
+                // Create plugin load event
+                let plugin_id = Uuid::new_v4();
+                let load_event = SystemEvent::PluginLoadRequested {
+                    plugin_id,
+                    manifest: payload.clone(),
+                    metadata: EventMetadata {
+                        event_id: Uuid::new_v4(),
+                        timestamp: Utc::now(),
+                        correlation_id: metadata.correlation_id,
+                        context: json!({
+                            "type": "plugin_load",
+                            "name": manifest.name,
+                        }),
+                    },
+                };
 
-        // Log the completion event
-        self.event_log.append(completion.clone());
-        Some(completion)
+                // Log the load request
+                self.event_log.append(load_event.clone());
+
+                // Try to load the plugin
+                match self.plugin_manager.load_plugin(manifest.clone()) {
+                    Ok(_) => {
+                        let loaded_event = SystemEvent::PluginLoaded {
+                            plugin_id,
+                            name: manifest.name,
+                            version: manifest.version,
+                            description: manifest.description,
+                            metadata: EventMetadata {
+                                event_id: Uuid::new_v4(),
+                                timestamp: Utc::now(),
+                                correlation_id: metadata.correlation_id,
+                                context: metadata.context,
+                            },
+                        };
+                        self.event_log.append(loaded_event.clone());
+                        Some(loaded_event)
+                    }
+                    Err(e) => Some(SystemEvent::PluginError {
+                        plugin_id,
+                        error: e.to_string(),
+                        metadata,
+                    }),
+                }
+            }
+            Err(_) => {
+                // Not a plugin manifest, treat as regular task
+                let result = format!("Processed: {}", payload);
+                let completion = SystemEvent::TaskCompleted {
+                    task_id,
+                    result,
+                    metadata: EventMetadata {
+                        event_id: Uuid::new_v4(),
+                        timestamp: Utc::now(),
+                        correlation_id: metadata.correlation_id,
+                        context: metadata.context,
+                    },
+                };
+
+                self.event_log.append(completion.clone());
+                Some(completion)
+            }
+        }
     }
 
     fn process_plugin(

@@ -1,6 +1,6 @@
 use crate::events::AppState;
 use axum::{
-    extract::{Multipart, Path as AxumPath, State},
+    extract::{Json as AxumJson, Path as AxumPath, State},
     response::Json,
     routing::post,
     Router,
@@ -42,38 +42,56 @@ pub struct InvokePluginRequest {
     args: serde_json::Value,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct LoadPluginRequest {
+    pub manifest: String,
+}
+
 /// Handler for loading a plugin from a manifest file
 pub async fn load_plugin_handler(
     State(state): State<Arc<AppState>>,
-    mut multipart: Multipart,
+    AxumJson(request): AxumJson<LoadPluginRequest>,
 ) -> Json<PluginInfo> {
-    while let Some(field) = multipart.next_field().await.unwrap() {
-        if field.name().unwrap() == "manifest" {
-            let content = field.bytes().await.unwrap();
-            let content = String::from_utf8(content.to_vec()).unwrap();
-            let manifest: PluginManifest = toml::from_str(&content).unwrap();
-
-            // Create plugin info with temporary ID
-            let info = PluginInfo::from(&manifest);
-
-            // Send load plugin event to orchestrator
-            let event = SystemEvent::TaskSubmitted {
-                task_id: Uuid::new_v4(),
-                payload: serde_json::to_string(&manifest).unwrap(),
-                metadata: EventMetadata {
-                    event_id: Uuid::new_v4(),
-                    timestamp: Utc::now(),
-                    correlation_id: None,
-                    context: serde_json::json!({}),
-                },
-            };
-            state.orchestrator_sender.send(event).await.unwrap();
-
-            // Return the info (ID will be updated when plugin is loaded)
-            return Json(info);
+    let manifest: PluginManifest = match toml::from_str(&request.manifest) {
+        Ok(manifest) => manifest,
+        Err(e) => {
+            error!("Failed to parse manifest: {}", e);
+            panic!("Invalid manifest format: {}", e);
         }
+    };
+
+    // Generate a single ID to use for both the plugin info and the load request
+    let plugin_id = Uuid::new_v4();
+
+    // Create plugin info with the ID
+    let info = PluginInfo {
+        id: plugin_id,
+        name: manifest.name.clone(),
+        version: manifest.version.clone(),
+        description: manifest.description.clone(),
+    };
+
+    // Send load plugin event to orchestrator
+    let event = SystemEvent::PluginLoadRequested {
+        plugin_id,
+        manifest: request.manifest,
+        metadata: EventMetadata {
+            event_id: Uuid::new_v4(),
+            timestamp: Utc::now(),
+            correlation_id: None,
+            context: serde_json::json!({
+                "type": "plugin_load",
+                "name": manifest.name,
+            }),
+        },
+    };
+    if let Err(e) = state.orchestrator_sender.send(event).await {
+        error!("Failed to send plugin load event: {}", e);
+        panic!("Failed to load plugin: {}", e);
     }
-    panic!("No manifest field found in request");
+
+    // Return the info (ID will be updated when plugin is loaded)
+    Json(info)
 }
 
 /// Handler for listing all loaded plugins
@@ -107,11 +125,8 @@ pub async fn invoke_plugin_handler(
 /// Create router for plugin endpoints
 pub fn create_plugin_router() -> Router<Arc<AppState>> {
     Router::new()
-        .route(
-            "/plugins",
-            post(load_plugin_handler).get(list_plugins_handler),
-        )
-        .route("/plugins/{plugin_id}/invoke", post(invoke_plugin_handler))
+        .route("/", post(load_plugin_handler).get(list_plugins_handler))
+        .route("/{plugin_id}/invoke", post(invoke_plugin_handler))
 }
 
 /// Load a plugin manifest from a file

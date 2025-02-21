@@ -87,6 +87,34 @@ pub async fn print_event_log(event_log: &EventLog) {
                     println!("  Correlation ID: {}", corr_id);
                 }
             }
+            SystemEvent::PluginLoadRequested {
+                plugin_id,
+                manifest,
+                metadata,
+            } => {
+                println!("  Type: PluginLoadRequested");
+                println!("  Plugin ID: {}", plugin_id);
+                println!("  Manifest: {}", manifest);
+                if let Some(corr_id) = metadata.correlation_id {
+                    println!("  Correlation ID: {}", corr_id);
+                }
+            }
+            SystemEvent::PluginLoaded {
+                plugin_id,
+                name,
+                version,
+                description,
+                metadata,
+            } => {
+                println!("  Type: PluginLoaded");
+                println!("  Plugin ID: {}", plugin_id);
+                println!("  Name: {}", name);
+                println!("  Version: {}", version);
+                println!("  Description: {}", description);
+                if let Some(corr_id) = metadata.correlation_id {
+                    println!("  Correlation ID: {}", corr_id);
+                }
+            }
             SystemEvent::AgentSpawned {
                 agent_id,
                 prompt,

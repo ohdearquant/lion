@@ -38,6 +38,20 @@ pub enum SystemEvent {
         error: String,
         metadata: EventMetadata,
     },
+    /// A plugin is being loaded
+    PluginLoadRequested {
+        plugin_id: Uuid,
+        manifest: String,
+        metadata: EventMetadata,
+    },
+    /// A plugin has been loaded successfully
+    PluginLoaded {
+        plugin_id: Uuid,
+        name: String,
+        version: String,
+        description: String,
+        metadata: EventMetadata,
+    },
     /// A plugin is being invoked
     PluginInvoked {
         plugin_id: Uuid,
@@ -97,6 +111,22 @@ impl SystemEvent {
         }
     }
 
+    /// Create a new PluginLoadRequested event
+    pub fn new_plugin_load(manifest: String, correlation_id: Option<Uuid>) -> Self {
+        SystemEvent::PluginLoadRequested {
+            plugin_id: Uuid::new_v4(),
+            manifest,
+            metadata: EventMetadata {
+                event_id: Uuid::new_v4(),
+                timestamp: Utc::now(),
+                correlation_id,
+                context: json!({
+                    "type": "plugin_load",
+                }),
+            },
+        }
+    }
+
     /// Create a new PluginInvoked event
     pub fn new_plugin_invocation(
         plugin_id: Uuid,
@@ -135,6 +165,8 @@ impl SystemEvent {
             SystemEvent::TaskSubmitted { metadata, .. } => metadata,
             SystemEvent::TaskCompleted { metadata, .. } => metadata,
             SystemEvent::TaskError { metadata, .. } => metadata,
+            SystemEvent::PluginLoadRequested { metadata, .. } => metadata,
+            SystemEvent::PluginLoaded { metadata, .. } => metadata,
             SystemEvent::PluginInvoked { metadata, .. } => metadata,
             SystemEvent::PluginResult { metadata, .. } => metadata,
             SystemEvent::PluginError { metadata, .. } => metadata,

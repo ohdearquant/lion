@@ -4,7 +4,7 @@ mod plugins;
 
 use crate::{
     agents::{list_agents, spawn_agent},
-    events::sse_handler,
+    events::{search_logs_handler, sse_handler, LogLine},
     plugins::PluginInfo,
 };
 use axum::{
@@ -13,7 +13,7 @@ use axum::{
     Router,
 };
 use events::AppState;
-use lion_core::{Orchestrator, PluginManifest, SystemEvent};
+use lion_core::{Orchestrator, SystemEvent};
 use std::{net::SocketAddr, sync::Arc};
 use tracing::{info, Level};
 use tracing_subscriber::FmtSubscriber;
@@ -44,8 +44,7 @@ pub async fn ping_handler() -> &'static str {
     "Pong from lion_ui microkernel!"
 }
 
-#[tokio::main]
-async fn main() {
+pub async fn run_server() {
     // Initialize logging
     FmtSubscriber::builder()
         .with_max_level(Level::INFO)
@@ -54,8 +53,12 @@ async fn main() {
 
     info!("Starting lion_ui server...");
 
-    // Initialize orchestrator
-    let orchestrator = Orchestrator::new(100);
+    // Initialize plugin manager with plugins directory
+    let plugin_manager =
+        lion_core::plugin_manager::PluginManager::with_manifest_dir("../../plugins");
+
+    // Initialize orchestrator with plugin manager
+    let orchestrator = Orchestrator::with_plugin_manager(100, plugin_manager);
     let orchestrator_sender = orchestrator.sender();
     let mut completion_rx = orchestrator.completion_receiver();
 
@@ -75,18 +78,35 @@ async fn main() {
                     chunk,
                     metadata: _,
                 } => {
-                    let _ = state_clone
-                        .logs_tx
-                        .send(format!("Agent {}: {}", agent_id, chunk));
+                    state_clone
+                        .add_log(LogLine {
+                            timestamp: chrono::Utc::now(),
+                            agent_id: Some(*agent_id),
+                            plugin_id: None,
+                            correlation_id: None,
+                            message: format!("Agent {}: {}", agent_id, chunk),
+                        })
+                        .await;
+
+                    // Agent status is still tracked separately
+                    let mut agents = state_clone.agents.write().await;
+                    agents.insert(*agent_id, "running".to_string());
                 }
                 SystemEvent::AgentCompleted {
                     agent_id,
                     result,
                     metadata: _,
                 } => {
-                    let _ = state_clone
-                        .logs_tx
-                        .send(format!("Agent {} completed: {}", agent_id, result));
+                    state_clone
+                        .add_log(LogLine {
+                            timestamp: chrono::Utc::now(),
+                            agent_id: Some(*agent_id),
+                            plugin_id: None,
+                            correlation_id: None,
+                            message: format!("Agent {} completed: {}", agent_id, result),
+                        })
+                        .await;
+
                     let mut agents = state_clone.agents.write().await;
                     agents.insert(*agent_id, "completed".to_string());
                 }
@@ -95,9 +115,17 @@ async fn main() {
                     error,
                     metadata: _,
                 } => {
-                    let _ = state_clone
-                        .logs_tx
-                        .send(format!("Agent {} error: {}", agent_id, error));
+                    state_clone
+                        .add_log(LogLine {
+                            timestamp: chrono::Utc::now(),
+                            agent_id: Some(*agent_id),
+                            plugin_id: None,
+                            correlation_id: None,
+                            message: format!("Agent {} error: {}", agent_id, error),
+                        })
+                        .await;
+
+                    // Update agent status
                     let mut agents = state_clone.agents.write().await;
                     agents.insert(*agent_id, "error".to_string());
                 }
@@ -106,48 +134,87 @@ async fn main() {
                     input,
                     metadata: _,
                 } => {
-                    let _ = state_clone.logs_tx.send(format!(
-                        "Plugin {} invoked with input: {}",
-                        plugin_id, input
-                    ));
-
-                    // If this is a load operation, track the plugin
-                    if let Some(manifest_str) = input.strip_prefix("load:") {
-                        let mut plugins = state_clone.plugins.write().await;
-                        if let Ok(manifest) = toml::from_str::<PluginManifest>(manifest_str) {
-                            plugins.insert(
-                                *plugin_id,
-                                PluginInfo {
-                                    id: *plugin_id,
-                                    name: manifest.name,
-                                    version: manifest.version,
-                                    description: manifest.description,
-                                },
-                            );
-                        } else {
-                            let _ = state_clone
-                                .logs_tx
-                                .send(format!("Failed to parse manifest for plugin {}", plugin_id));
-                        }
-                    }
+                    state_clone
+                        .add_log(LogLine {
+                            timestamp: chrono::Utc::now(),
+                            agent_id: None,
+                            plugin_id: Some(*plugin_id),
+                            correlation_id: None,
+                            message: format!("Plugin {} invoked with input: {}", plugin_id, input),
+                        })
+                        .await;
+                }
+                SystemEvent::PluginLoadRequested {
+                    plugin_id,
+                    manifest: _,
+                    metadata: _,
+                } => {
+                    state_clone
+                        .add_log(LogLine {
+                            timestamp: chrono::Utc::now(),
+                            agent_id: None,
+                            plugin_id: Some(*plugin_id),
+                            correlation_id: None,
+                            message: format!("Loading plugin {}", plugin_id),
+                        })
+                        .await;
+                }
+                SystemEvent::PluginLoaded {
+                    plugin_id,
+                    name,
+                    version,
+                    description,
+                    metadata: _,
+                } => {
+                    let mut plugins = state_clone.plugins.write().await;
+                    plugins.insert(
+                        *plugin_id,
+                        PluginInfo {
+                            id: *plugin_id,
+                            name: name.clone(),
+                            version: version.clone(),
+                            description: description.clone(),
+                        },
+                    );
+                    state_clone
+                        .add_log(LogLine {
+                            timestamp: chrono::Utc::now(),
+                            agent_id: None,
+                            plugin_id: Some(*plugin_id),
+                            correlation_id: None,
+                            message: format!("Plugin {} loaded successfully", name),
+                        })
+                        .await;
                 }
                 SystemEvent::PluginResult {
                     plugin_id,
                     output,
                     metadata: _,
                 } => {
-                    let _ = state_clone
-                        .logs_tx
-                        .send(format!("Plugin {} result: {}", plugin_id, output));
+                    state_clone
+                        .add_log(LogLine {
+                            timestamp: chrono::Utc::now(),
+                            agent_id: None,
+                            plugin_id: Some(*plugin_id),
+                            correlation_id: None,
+                            message: format!("Plugin {} result: {}", plugin_id, output),
+                        })
+                        .await;
                 }
                 SystemEvent::PluginError {
                     plugin_id,
                     error,
                     metadata: _,
                 } => {
-                    let _ = state_clone
-                        .logs_tx
-                        .send(format!("Plugin {} error: {}", plugin_id, error));
+                    state_clone
+                        .add_log(LogLine {
+                            timestamp: chrono::Utc::now(),
+                            agent_id: None,
+                            plugin_id: Some(*plugin_id),
+                            correlation_id: None,
+                            message: format!("Plugin {} error: {}", plugin_id, error),
+                        })
+                        .await;
                 }
                 _ => {}
             }
@@ -158,8 +225,10 @@ async fn main() {
     let app = Router::new()
         .route("/", get(index_handler))
         .route("/events", get(sse_handler))
+        .route("/api/logs", get(search_logs_handler))
         .route("/api/agents", post(spawn_agent).get(list_agents))
-        .nest("/api", plugins::create_plugin_router())
+        .nest("/api/plugins", plugins::create_plugin_router())
+        .fallback(get(index_handler))  // Serve index.html for all unmatched routes
         .with_state(state);
 
     // Run it on localhost:8080
@@ -170,6 +239,11 @@ async fn main() {
     info!("Server started successfully");
 
     axum::serve(listener, app).await.unwrap();
+}
+
+#[tokio::main]
+async fn main() {
+    run_server().await;
 }
 
 #[cfg(test)]

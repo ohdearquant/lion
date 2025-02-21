@@ -9,6 +9,8 @@ pub struct ReplaySummary {
     pub tasks_completed: usize,
     pub tasks_failed: usize,
     pub plugins_invoked: usize,
+    pub plugins_loaded: usize,
+    pub plugins_load_requested: usize,
     pub plugins_completed: usize,
     pub plugins_failed: usize,
     pub agents_spawned: usize,
@@ -32,6 +34,8 @@ impl EventLog {
             tasks_completed: 0,
             tasks_failed: 0,
             plugins_invoked: 0,
+            plugins_loaded: 0,
+            plugins_load_requested: 0,
             plugins_completed: 0,
             plugins_failed: 0,
             agents_spawned: 0,
@@ -72,6 +76,35 @@ impl EventLog {
                         .entry(*task_id)
                         .or_default()
                         .push(format!("Failed with error: {}", error));
+                }
+                SystemEvent::PluginLoadRequested {
+                    plugin_id,
+                    manifest,
+                    ..
+                } => {
+                    summary.plugins_load_requested += 1;
+                    summary
+                        .plugin_statuses
+                        .entry(*plugin_id)
+                        .or_default()
+                        .push(format!("Load requested with manifest: {}", manifest));
+                }
+                SystemEvent::PluginLoaded {
+                    plugin_id,
+                    name,
+                    version,
+                    description,
+                    ..
+                } => {
+                    summary.plugins_loaded += 1;
+                    summary
+                        .plugin_statuses
+                        .entry(*plugin_id)
+                        .or_default()
+                        .push(format!(
+                            "Loaded plugin {} v{}: {}",
+                            name, version, description
+                        ));
                 }
                 SystemEvent::PluginInvoked {
                     plugin_id, input, ..
@@ -163,6 +196,11 @@ fn format_summary(summary: &ReplaySummary) -> String {
     output.push_str("\nPlugin Statistics:\n");
     output.push_str("-----------------\n");
     output.push_str(&format!("Plugins Invoked: {}\n", summary.plugins_invoked));
+    output.push_str(&format!(
+        "Plugins Load Requested: {}\n",
+        summary.plugins_load_requested
+    ));
+    output.push_str(&format!("Plugins Loaded: {}\n", summary.plugins_loaded));
     output.push_str(&format!(
         "Plugins Completed: {}\n",
         summary.plugins_completed

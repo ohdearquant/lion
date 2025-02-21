@@ -120,6 +120,18 @@ async fn setup_test_app() -> (Router, broadcast::Receiver<String>) {
                     // Forward error directly from plugin manager
                     let _ = logs_tx_clone.send(error.to_string());
                 }
+                SystemEvent::PluginLoaded {
+                    plugin_id,
+                    name,
+                    version,
+                    description: _,
+                    metadata: _,
+                } => {
+                    let _ = logs_tx_clone.send(format!(
+                        "Plugin {} loaded: {} v{}",
+                        plugin_id, name, version
+                    ));
+                }
                 _ => {}
             }
         }
@@ -251,4 +263,80 @@ async fn test_calculator_plugin() {
     }
 
     assert!(saw_error, "Should see division by zero error in logs");
+}
+
+#[tokio::test]
+async fn test_plugin_loading() {
+    let (app, mut logs_rx) = setup_test_app().await;
+
+    // Read the calculator manifest
+    let manifest = std::fs::read_to_string("../../plugins/calculator/manifest.toml").unwrap();
+
+    // Send manifest to load plugin
+    let load_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/plugins")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    serde_json::json!({
+                        "manifest": manifest
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(load_response.status(), StatusCode::OK);
+
+    // Wait for plugin to be loaded
+    let mut saw_loaded = false;
+    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+
+    debug!("Checking logs for plugin loaded message...");
+    while let Ok(log) = logs_rx.try_recv() {
+        debug!("Received log: {}", log);
+        if log.contains("Plugin") && log.contains("loaded: calculator") {
+            saw_loaded = true;
+            break;
+        }
+    }
+
+    assert!(saw_loaded, "Should see plugin loaded message in logs");
+
+    // Verify plugin appears in list
+    let list_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/api/plugins")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(list_response.status(), StatusCode::OK);
+
+    let body = String::from_utf8(
+        list_response
+            .into_body()
+            .collect()
+            .await
+            .unwrap()
+            .to_bytes()
+            .to_vec(),
+    )
+    .unwrap();
+    let plugins: Vec<PluginInfo> = serde_json::from_str(&body).unwrap();
+
+    assert!(
+        plugins.iter().any(|p| p.name == "calculator"),
+        "Calculator plugin should appear in plugin list"
+    );
 }
