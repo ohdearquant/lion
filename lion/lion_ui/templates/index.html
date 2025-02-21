@@ -32,6 +32,19 @@
         min-height: 100px;
         margin: 10px 0;
       }
+      .search-form {
+        display: flex;
+        gap: 10px;
+        margin-bottom: 10px;
+      }
+      .search-form input {
+        flex: 1;
+        padding: 5px;
+      }
+      .search-results {
+        margin-top: 10px;
+        border-top: 1px solid #eee;
+      }
     </style>
   </head>
   <body>
@@ -56,10 +69,37 @@
           id="manifestInput"
           placeholder="Enter plugin manifest (TOML format)"
         >
-name = "hello_plugin"
+name = "calculator"
 version = "0.1.0"
-entry_point = "examples/hello_plugin/hello_plugin.wasm"
-permissions = ["net"]</textarea
+description = "A simple calculator plugin that can perform basic arithmetic operations"
+entry_point = "../../target/debug/calculator_plugin"
+permissions = []
+driver = "native"
+
+[functions.add]
+name = "add"
+description = "Add two numbers"
+input_schema = { type = "object", properties = { a = { type = "number" }, b = { type = "number" } } }
+output_schema = { type = "object", properties = { result = { type = "number" } } }
+
+[functions.subtract]
+name = "subtract"
+description = "Subtract two numbers"
+input_schema = { type = "object", properties = { a = { type = "number" }, b = { type = "number" } } }
+output_schema = { type = "object", properties = { result = { type = "number" } } }
+
+[functions.multiply]
+name = "multiply"
+description = "Multiply two numbers"
+input_schema = { type = "object", properties = { a = { type = "number" }, b = { type = "number" } } }
+output_schema = { type = "object", properties = { result = { type = "number" } } }
+
+[functions.divide]
+name = "divide"
+description = "Divide two numbers"
+input_schema = { type = "object", properties = { a = { type = "number" }, b = { type = "number" } } }
+output_schema = { type = "object", properties = { result = { type = "number" } } }
+</textarea
         >
         <button id="loadPluginBtn">Load Plugin</button>
       </div>
@@ -74,13 +114,24 @@ permissions = ["net"]</textarea
         <select id="pluginSelect">
           <option value="">Select a plugin...</option>
         </select>
-        <input type="text" id="pluginInput" placeholder="Enter plugin input" />
+        <input type="text" id="pluginInput" placeholder='{"a": 5, "b": 3}' />
         <button id="invokePluginBtn">Invoke Plugin</button>
       </div>
     </div>
 
     <div class="section">
       <h2>Real-time Logs</h2>
+      <div class="search-form">
+        <input type="text" id="agentSearch" placeholder="Agent ID" />
+        <input type="text" id="pluginSearch" placeholder="Plugin ID" />
+        <input type="text" id="textSearch" placeholder="Search text" />
+        <button id="searchBtn">Search</button>
+      </div>
+
+      <div class="search-results" id="searchResults" style="display: none">
+        <h3>Search Results</h3>
+        <div id="searchContent"></div>
+      </div>
       <div id="logs"></div>
     </div>
 
@@ -233,7 +284,10 @@ permissions = ["net"]</textarea
           const res = await fetch(`/api/plugins/${pluginId}/invoke`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ input }),
+            body: JSON.stringify({
+              function: "add",
+              args: JSON.parse(input),
+            }),
           });
 
           if (!res.ok) {
@@ -249,12 +303,56 @@ permissions = ["net"]</textarea
         }
       }
 
+      // Function to search logs
+      async function searchLogs() {
+        const agent = document.getElementById("agentSearch").value
+          .trim();
+        const plugin = document.getElementById("pluginSearch").value
+          .trim();
+        const text = document.getElementById("textSearch").value.trim();
+
+        if (!agent && !plugin && !text) {
+          document.getElementById("searchResults").style.display =
+            "none";
+          return;
+        }
+
+        try {
+          const params = new URLSearchParams();
+          if (agent) params.append("agent", agent);
+          if (plugin) params.append("plugin", plugin);
+          if (text) params.append("text", text);
+
+          const res = await fetch(`/api/logs?${params.toString()}`);
+          const logs = await res.json();
+
+          const searchResults = document.getElementById(
+            "searchResults",
+          );
+          const searchContent = document.getElementById(
+            "searchContent",
+          );
+
+          searchResults.style.display = "block";
+          searchContent.innerHTML = logs.map((log) => `
+            <div>[${
+            new Date(log.timestamp).toLocaleString()
+          }] ${log.message}</div>
+          `).join("");
+        } catch (e) {
+          console.error("Error searching logs:", e);
+          alert("Error searching logs: " + e);
+        }
+      }
+
       // Set up event listeners
       document.getElementById("spawnBtn").onclick = spawnAgent;
       document.getElementById("loadPluginBtn").onclick = loadPlugin;
       document.getElementById("invokePluginBtn").onclick = invokePlugin;
+      document.getElementById("searchBtn").onclick = searchLogs;
 
       // Initial data fetch
+      document.getElementById("searchResults").style.display = "none";
       fetchAgents();
       fetchPlugins();
 

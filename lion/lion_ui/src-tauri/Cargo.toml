@@ -1,0 +1,25 @@
+[package]
+name = "lion-ui-tauri"
+version = "0.1.0"
+description = "Lion UI Desktop App"
+authors = ["Lion Team"]
+edition = "2021"
+rust-version = "1.70"
+
+[build-dependencies]
+tauri-build = { version = "2.0.5", features = [] }
+
+[dependencies]
+serde_json = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+tauri = { version = "2.2.5", features = ["shell-open"] }
+tokio = { version = "1.0", features = ["full", "rt-multi-thread"] }
+lion_ui = { path = "..", features = ["desktop"] }
+
+[features]
+# this feature is used for production builds or when `devPath` points to the filesystem
+# DO NOT REMOVE!!
+custom-protocol = ["tauri/custom-protocol"]
+
+[profile.release]
+panic = "abort" # Strip expensive panic clean-up logic
