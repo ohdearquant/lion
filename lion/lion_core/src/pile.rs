@@ -45,6 +45,16 @@ impl<T> Pile<T> {
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
+
+    pub fn remove(&self, id: &Uuid) -> Option<T> {
+        let mut guard = self.inner.lock().unwrap();
+        guard.remove(id)
+    }
+
+    pub fn clear(&self) {
+        let mut guard = self.inner.lock().unwrap();
+        guard.clear();
+    }
 }
 
 impl<T> Default for Pile<T> {
@@ -99,5 +109,27 @@ mod tests {
         assert!(!pile.is_empty());
         assert_eq!(pile.len(), 1);
         assert!(pile.contains(&id));
+    }
+
+    #[test]
+    fn test_pile_remove() {
+        let pile = Pile::new();
+        let id = Uuid::new_v4();
+        pile.insert(id, "test".to_string());
+
+        assert_eq!(pile.remove(&id), Some("test".to_string()));
+        assert!(pile.is_empty());
+        assert!(!pile.contains(&id));
+    }
+
+    #[test]
+    fn test_pile_clear() {
+        let pile = Pile::new();
+        for _ in 0..3 {
+            pile.insert(Uuid::new_v4(), "test".to_string());
+        }
+        assert_eq!(pile.len(), 3);
+        pile.clear();
+        assert!(pile.is_empty());
     }
 }

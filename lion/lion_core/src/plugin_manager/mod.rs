@@ -6,7 +6,7 @@ mod manifest;
 pub use error::PluginError;
 pub use manifest::{PluginFunction, PluginManifest};
 
-use crate::storage::FileStorage;
+use crate::storage::{ElementStore, FileStorage};
 use discovery::PluginDiscovery;
 use loader::PluginLoader;
 use std::path::Path;
