@@ -33,7 +33,10 @@ impl PluginLoader {
         // Security check for path traversal
         fn is_path_traversal(path: &Path) -> bool {
             path.components().any(|c| {
-                matches!(c, std::path::Component::ParentDir | std::path::Component::RootDir)
+                matches!(
+                    c,
+                    std::path::Component::ParentDir | std::path::Component::RootDir
+                )
             })
         }
 
