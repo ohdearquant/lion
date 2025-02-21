@@ -19,7 +19,6 @@ impl PluginDiscovery {
         Self { manifest_dir: dir }
     }
 
-    #[allow(clippy::unnecessary_map_or)]
     pub fn discover_plugins(&self) -> Result<Vec<(PluginManifest, PathBuf)>, PluginError> {
         debug!("Discovering plugins in directory: {:?}", self.manifest_dir);
         let mut manifests = Vec::new();
@@ -110,7 +109,7 @@ mod tests {
         };
         let manifest_content = toml::to_string(&manifest).unwrap();
         let manifest_path = plugin_dir.join("manifest.toml");
-        fs::write(&manifest_path, manifest_content).unwrap();
+        fs::write(manifest_path, manifest_content).unwrap();
 
         let discovery = PluginDiscovery::new(temp_dir.path());
         let discovered = discovery.discover_plugins().unwrap();

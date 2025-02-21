@@ -14,6 +14,7 @@ use uuid::Uuid;
 
 use crate::plugins::PluginInfo;
 
+#[allow(dead_code)]
 /// Shared state for the UI server
 pub struct AppState {
     /// Channel for broadcasting log events to all connected clients
