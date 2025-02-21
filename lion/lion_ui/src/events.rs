@@ -12,6 +12,9 @@ use tokio::sync::RwLock;
 use tokio_stream::wrappers::BroadcastStream;
 use uuid::Uuid;
 
+use crate::plugins::PluginInfo;
+
+#[allow(dead_code)]
 /// Shared state for the UI server
 pub struct AppState {
     /// Channel for broadcasting log events to all connected clients
@@ -20,8 +23,13 @@ pub struct AppState {
     pub orchestrator_sender: tokio::sync::mpsc::Sender<SystemEvent>,
     /// Active agents and their status
     pub agents: RwLock<HashMap<Uuid, String>>,
+    /// Active plugins and their IDs
+    pub plugins: RwLock<HashMap<Uuid, PluginInfo>>,
+    /// Plugin manager manifest directory
+    pub plugins_dir: RwLock<String>,
 }
 
+#[allow(dead_code)]
 impl AppState {
     pub fn new(
         orchestrator_sender: tokio::sync::mpsc::Sender<SystemEvent>,
@@ -32,6 +40,22 @@ impl AppState {
             logs_tx,
             orchestrator_sender,
             agents: RwLock::new(HashMap::new()),
+            plugins: RwLock::new(HashMap::new()),
+            plugins_dir: RwLock::new(String::from("plugins")),
+        }
+    }
+
+    pub fn new_with_logs(
+        orchestrator_sender: tokio::sync::mpsc::Sender<SystemEvent>,
+        logs_tx: broadcast::Sender<String>,
+    ) -> Self {
+        // Use provided logs_tx instead of creating a new one
+        Self {
+            logs_tx,
+            orchestrator_sender,
+            agents: RwLock::new(HashMap::new()),
+            plugins: RwLock::new(HashMap::new()),
+            plugins_dir: RwLock::new(String::from("plugins")),
         }
     }
 }

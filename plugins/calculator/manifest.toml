@@ -1,0 +1,30 @@
+name = "calculator"
+version = "0.1.0"
+description = "A simple calculator plugin that can perform basic arithmetic operations"
+entry_point = "../../target/debug/calculator_plugin"
+permissions = []
+driver = "native"
+
+[functions.add]
+name = "add"
+description = "Add two numbers"
+input_schema = { type = "object", properties = { a = { type = "number" }, b = { type = "number" } } }
+output_schema = { type = "object", properties = { result = { type = "number" } } }
+
+[functions.subtract]
+name = "subtract"
+description = "Subtract two numbers"
+input_schema = { type = "object", properties = { a = { type = "number" }, b = { type = "number" } } }
+output_schema = { type = "object", properties = { result = { type = "number" } } }
+
+[functions.multiply]
+name = "multiply"
+description = "Multiply two numbers"
+input_schema = { type = "object", properties = { a = { type = "number" }, b = { type = "number" } } }
+output_schema = { type = "object", properties = { result = { type = "number" } } }
+
+[functions.divide]
+name = "divide"
+description = "Divide two numbers"
+input_schema = { type = "object", properties = { a = { type = "number" }, b = { type = "number" } } }
+output_schema = { type = "object", properties = { result = { type = "number" } } }

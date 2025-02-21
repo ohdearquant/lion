@@ -14,6 +14,7 @@ tracing = "0.1"
 futures = "0.3"
 async-trait = "0.1"
 tokio-stream = "0.1"
+toml = "0.8"
 
 [dev-dependencies]
 tokio-test = "0.4"

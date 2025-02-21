@@ -9,7 +9,7 @@ path = "src/main.rs"
 
 [dependencies]
 lion_core = { path = "../lion_core" }
-axum = { version = "0.8.1", features = ["ws"] }
+axum = { version = "0.8.1", features = ["ws", "multipart"] }
 tokio = { version = "1.0", features = ["full"] }
 tokio-stream = { version = "0.1", features = ["sync"] }
 futures = "0.3"
@@ -23,3 +23,11 @@ hyper = { version = "1.0", features = ["full"] }
 hyper-util = { version = "0.1", features = ["full"] }
 http-body-util = "0.1"
 uuid = { version = "1.0", features = ["v4", "serde"] }
+toml = "0.8"
+chrono = { version = "0.4", features = ["serde"] }
+thiserror = "2.0"
+
+
+[dev-dependencies]
+tempfile = "3.0"
+tokio-test = "0.4"

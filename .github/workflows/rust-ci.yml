@@ -2,9 +2,9 @@ name: Rust CI
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
-    branches: [ main ]
+    branches: [main]
 
 env:
   CARGO_TERM_COLOR: always
@@ -24,6 +24,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+      - name: Build plugins
+        run: cargo build --manifest-path plugins/calculator/Cargo.toml
       - run: cargo test --all-targets
 
   fmt:

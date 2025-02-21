@@ -6,6 +6,7 @@ use processor::EventProcessor;
 
 use crate::event_log::EventLog;
 use crate::plugin_manager::PluginManager;
+use std::path::PathBuf;
 use tokio::sync::{broadcast, mpsc};
 use tracing::info;
 
@@ -24,7 +25,35 @@ impl Orchestrator {
         let (completion_tx, _) = broadcast::channel(channel_capacity);
 
         let event_log = EventLog::new();
-        let plugin_manager = PluginManager::new();
+
+        // Find the plugins directory relative to CARGO_MANIFEST_DIR
+        let manifest_dir = std::env::var("CARGO_MANIFEST_DIR")
+            .map(PathBuf::from)
+            .unwrap_or_else(|_| {
+                std::env::current_dir()
+                    .unwrap_or_else(|_| PathBuf::from("."))
+                    .join("lion")
+                    .join("lion_core")
+            });
+        let plugins_dir = manifest_dir.join("..").join("..").join("plugins");
+
+        let plugin_manager = PluginManager::with_manifest_dir(plugins_dir);
+        let processor = EventProcessor::new(event_log, plugin_manager);
+
+        Self {
+            event_tx: tx,
+            event_rx: rx,
+            completion_tx,
+            processor,
+        }
+    }
+
+    /// Create a new orchestrator instance with a custom plugin manager
+    pub fn with_plugin_manager(channel_capacity: usize, plugin_manager: PluginManager) -> Self {
+        let (tx, rx) = mpsc::channel(channel_capacity);
+        let (completion_tx, _) = broadcast::channel(channel_capacity);
+
+        let event_log = EventLog::new();
         let processor = EventProcessor::new(event_log, plugin_manager);
 
         Self {
@@ -73,13 +102,27 @@ impl Orchestrator {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::plugin_manager::PluginManifest;
     use std::time::Duration;
     use tokio::time::timeout;
+    use tracing::debug;
+    use tracing_subscriber::fmt::format::FmtSpan;
     use uuid::Uuid;
+
+    fn init_test_logging() {
+        let _ = tracing_subscriber::fmt()
+            .with_max_level(tracing::Level::TRACE)
+            .with_test_writer()
+            .with_thread_ids(true)
+            .with_file(true)
+            .with_line_number(true)
+            .with_target(true)
+            .with_span_events(FmtSpan::CLOSE)
+            .try_init();
+    }
 
     #[tokio::test]
     async fn test_orchestrator_processes_task() {
+        init_test_logging();
         let orchestrator = Orchestrator::new(100);
         let sender = orchestrator.sender();
         let mut completion_rx = orchestrator.completion_receiver();
@@ -125,51 +168,76 @@ mod tests {
 
     #[tokio::test]
     async fn test_plugin_invocation() {
+        init_test_logging();
+        debug!("Starting plugin invocation test");
+
         let mut orchestrator = Orchestrator::new(100);
         let sender = orchestrator.sender();
         let mut completion_rx = orchestrator.completion_receiver();
 
-        // Create a test plugin
-        let manifest = PluginManifest {
-            name: "test_plugin".to_string(),
-            version: "0.1.0".to_string(),
-            entry_point: "/dev/null".to_string(), // dummy path for testing
-            permissions: vec![],
-        };
+        // Discover and load plugins
+        debug!("Attempting to discover plugins");
+        match orchestrator.plugin_manager().discover_plugins() {
+            Ok(manifests) => {
+                debug!("Discovered {} plugins", manifests.len());
+                for manifest in manifests {
+                    debug!("Found plugin manifest: {:?}", manifest);
+                    if manifest.name == "calculator" {
+                        debug!(
+                            "Loading calculator plugin with entry point: {}",
+                            manifest.entry_point
+                        );
+                        let plugin_id = orchestrator
+                            .plugin_manager()
+                            .load_plugin(manifest)
+                            .expect("Failed to load calculator plugin");
 
-        let plugin_id = orchestrator
-            .plugin_manager()
-            .load_plugin(manifest)
-            .expect("Failed to load plugin");
+                        // Spawn the orchestrator
+                        tokio::spawn(orchestrator.run());
 
-        // Spawn the orchestrator
-        tokio::spawn(orchestrator.run());
+                        // Create and send a plugin invocation
+                        let input = serde_json::json!({
+                            "function": "add",
+                            "args": {
+                                "a": 5,
+                                "b": 3
+                            }
+                        });
 
-        // Create and send a plugin invocation
-        let event = SystemEvent::new_plugin_invocation(plugin_id, "test input".to_string(), None);
-        sender.send(event).await.expect("Failed to send event");
+                        let event =
+                            SystemEvent::new_plugin_invocation(plugin_id, input.to_string(), None);
+                        sender.send(event).await.expect("Failed to send event");
 
-        // Wait for completion with timeout
-        let completion = timeout(Duration::from_secs(1), completion_rx.recv())
-            .await
-            .expect("Timeout waiting for completion")
-            .expect("Channel closed");
+                        // Wait for completion with timeout
+                        let completion = timeout(Duration::from_secs(1), completion_rx.recv())
+                            .await
+                            .expect("Timeout waiting for completion")
+                            .expect("Channel closed");
 
-        match completion {
-            SystemEvent::PluginResult {
-                plugin_id: completed_id,
-                output,
-                ..
-            } => {
-                assert_eq!(completed_id, plugin_id);
-                assert!(output.contains("test input"));
+                        match completion {
+                            SystemEvent::PluginResult {
+                                plugin_id: completed_id,
+                                output,
+                                ..
+                            } => {
+                                assert_eq!(completed_id, plugin_id);
+                                assert!(output.contains(r#""result":8.0"#));
+                                return;
+                            }
+                            _ => panic!("Expected PluginResult event"),
+                        }
+                    }
+                }
+                debug!("Calculator plugin not found in discovered plugins");
+                panic!("Calculator plugin not found");
             }
-            _ => panic!("Expected PluginResult event"),
+            Err(e) => panic!("Failed to discover plugins: {}", e),
         }
     }
 
     #[tokio::test]
     async fn test_correlation_id_propagation() {
+        init_test_logging();
         let orchestrator = Orchestrator::new(100);
         let sender = orchestrator.sender();
         let mut completion_rx = orchestrator.completion_receiver();
@@ -196,6 +264,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_agent_spawn_and_completion() {
+        init_test_logging();
         let orchestrator = Orchestrator::new(100);
         let sender = orchestrator.sender();
         let mut completion_rx = orchestrator.completion_receiver();
@@ -258,4 +327,6 @@ mod tests {
             "Fourth event should be AgentCompleted"
         );
     }
+
+    mod state_consistency;
 }

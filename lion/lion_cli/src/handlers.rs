@@ -1,7 +1,7 @@
 use crate::event_printer::print_event_log;
 use lion_core::{
     orchestrator::{Orchestrator, SystemEvent},
-    plugin_manager::PluginManifest,
+    plugin_manager::{PluginManager, PluginManifest},
 };
 use std::{sync::Arc, time::Duration};
 use tokio::time::timeout;
@@ -128,17 +128,28 @@ pub async fn handle_demo(data: String, correlation_id: Option<String>) {
 }
 
 pub fn handle_load_plugin(manifest: String) {
-    let mut orchestrator = Orchestrator::new(100);
+    // Get the directory containing the manifest
+    let manifest_path = std::path::Path::new(&manifest);
+    let manifest_dir = manifest_path
+        .parent()
+        .unwrap_or_else(|| std::path::Path::new("."));
+
+    let mut plugin_manager = PluginManager::with_manifest_dir(manifest_dir);
 
     // Read and parse the manifest file
     let manifest_content = std::fs::read_to_string(manifest).expect("Failed to read manifest file");
     let manifest: PluginManifest =
         toml::from_str(&manifest_content).expect("Failed to parse manifest");
 
+    println!("\n=== Loading Plugin ===");
+    println!("Name: {}", manifest.name);
+    println!("Version: {}", manifest.version);
+    println!("Entry Point: {}", manifest.entry_point);
+
     // Load the plugin
-    match orchestrator.plugin_manager().load_plugin(manifest) {
+    match plugin_manager.load_plugin(manifest) {
         Ok(plugin_id) => {
-            println!("Plugin loaded successfully!");
+            println!("\nPlugin loaded successfully!");
             println!("Plugin ID: {}", plugin_id);
         }
         Err(e) => {
@@ -153,19 +164,38 @@ pub async fn handle_invoke_plugin(
     input: String,
     correlation_id: Option<String>,
 ) {
-    let orchestrator = Orchestrator::new(100);
-    let sender = orchestrator.sender();
-    let mut completion_rx = orchestrator.completion_receiver();
-    let event_log = Arc::new(orchestrator.event_log().clone());
-
-    // Spawn the orchestrator
-    tokio::spawn(orchestrator.run());
-
     let plugin_uuid = Uuid::parse_str(&plugin_id).expect("Invalid plugin ID format");
     let correlation_uuid = correlation_id
         .map(|id| Uuid::parse_str(&id))
         .transpose()
         .expect("Invalid correlation ID format");
+
+    // Initialize plugin manager with the same directory where the plugin was loaded
+    let mut plugin_manager = PluginManager::with_manifest_dir("plugins/calculator");
+
+    // Discover and load available plugins
+    match plugin_manager.discover_plugins() {
+        Ok(manifests) => {
+            for manifest in manifests {
+                if let Err(e) = plugin_manager.load_plugin(manifest) {
+                    eprintln!("Warning: Failed to load plugin: {}", e);
+                }
+            }
+        }
+        Err(e) => {
+            eprintln!("Warning: Failed to discover plugins: {}", e);
+        }
+    }
+
+    let orchestrator = Orchestrator::with_plugin_manager(100, plugin_manager);
+    let sender = orchestrator.sender();
+    let mut completion_rx = orchestrator.completion_receiver();
+
+    // Get a clone of the event log before moving orchestrator
+    let event_log = Arc::new(orchestrator.event_log().clone());
+
+    // Spawn the orchestrator
+    tokio::spawn(orchestrator.run());
 
     println!("\n=== Invoking Plugin ===");
     let event = SystemEvent::new_plugin_invocation(plugin_uuid, input, correlation_uuid);

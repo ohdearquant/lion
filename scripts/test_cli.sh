@@ -50,21 +50,22 @@ TEST_UUID="123e4567-e89b-12d3-a456-426614174000"
 # Test 1: Submit a basic task
 run_test "Basic Task Submission" "cargo run --bin lion_cli -- demo --data 'Hello, World!' --correlation-id $TEST_UUID"
 
-# Test 2: Load the hello plugin
-echo "Loading hello plugin..."
-output=$(run_command "cargo run --bin lion_cli -- load-plugin --manifest examples/hello_plugin/manifest.toml")
+# Test 2: Load and invoke the calculator plugin
+echo "Loading calculator plugin..."
+output=$(run_command "cargo run --bin lion_cli -- load-plugin --manifest plugins/calculator/manifest.toml")
 PLUGIN_ID=$(echo "$output" | grep "Plugin ID:" | cut -d' ' -f3)
 if [ -z "$PLUGIN_ID" ]; then
     echo -e "${RED}Failed to get plugin ID${NC}"
     echo "Output was: $output"
     exit 1
 fi
-echo -e "${GREEN}✓ Plugin loaded with ID: $PLUGIN_ID${NC}\n"
+echo -e "${GREEN}✓ Calculator plugin loaded with ID: $PLUGIN_ID${NC}\n"
 sleep 1
 
-# Test 3: Invoke the hello plugin
+# Test 3: Invoke the calculator plugin to add numbers
 echo "Invoking plugin..."
-output=$(run_command "cargo run --bin lion_cli -- invoke-plugin --plugin-id $PLUGIN_ID --input 'Hello from test script!' --correlation-id $TEST_UUID")
+# Use printf to properly escape the JSON string
+output=$(printf 'cargo run --bin lion_cli -- invoke-plugin --plugin-id %s --input '\''{"function":"add","args":{"a":5,"b":3}}'\'' --correlation-id %s' "$PLUGIN_ID" "$TEST_UUID" | sh)
 if [ $? -eq 0 ]; then
     echo "$output"
     echo -e "${GREEN}✓ Plugin invocation successful${NC}\n"

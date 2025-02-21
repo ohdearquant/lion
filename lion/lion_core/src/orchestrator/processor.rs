@@ -21,7 +21,7 @@ impl EventProcessor {
     }
 
     /// Process a single event, returning a completion event if successful
-    pub async fn process_event(&self, event: SystemEvent) -> Option<SystemEvent> {
+    pub async fn process_event(&mut self, event: SystemEvent) -> Option<SystemEvent> {
         // Log the incoming event
         self.event_log.append(event.clone());
 
@@ -56,7 +56,7 @@ impl EventProcessor {
     }
 
     fn process_task(
-        &self,
+        &mut self,
         task_id: Uuid,
         payload: String,
         metadata: EventMetadata,
@@ -87,7 +87,7 @@ impl EventProcessor {
     }
 
     fn process_plugin(
-        &self,
+        &mut self,
         plugin_id: Uuid,
         input: String,
         metadata: EventMetadata,
@@ -131,7 +131,7 @@ impl EventProcessor {
     }
 
     async fn process_agent(
-        &self,
+        &mut self,
         agent_id: Uuid,
         prompt: String,
         metadata: EventMetadata,
