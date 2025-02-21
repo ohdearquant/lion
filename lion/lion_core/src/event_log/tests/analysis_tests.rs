@@ -189,3 +189,91 @@ fn test_mixed_events_summary() {
     );
     assert!(summary.contains(&agent_id.to_string()), "Missing agent ID");
 }
+
+#[test]
+fn test_plugin_load_success_summary() {
+    let log = EventLog::new();
+    let plugin_id = Uuid::new_v4();
+    let manifest = r#"
+        name = "test_plugin"
+        version = "0.1.0"
+        description = "Test plugin"
+        entry_point = "/path/to/plugin"
+        driver = "wasm"
+    "#
+    .to_string();
+
+    // Create and append test plugin load events
+    let events = create_test_plugin_load_events(plugin_id, manifest, true);
+    for event in events {
+        log.append(event);
+    }
+
+    let summary = log.replay_summary();
+    println!("Plugin Load Success Summary:\n{}", summary);
+
+    assert!(
+        summary.contains("Plugins Load Requested: 1"),
+        "Missing plugins load requested count"
+    );
+    assert!(
+        summary.contains("Plugins Loaded: 1"),
+        "Missing plugins loaded count"
+    );
+    assert!(
+        summary.contains("Plugins Failed: 0"),
+        "Missing plugins failed count"
+    );
+    assert!(
+        summary.contains(&plugin_id.to_string()),
+        "Missing plugin ID"
+    );
+    assert!(
+        summary.contains("test_plugin v0.1.0"),
+        "Missing plugin version info"
+    );
+}
+
+#[test]
+fn test_plugin_load_failure_summary() {
+    let log = EventLog::new();
+    let plugin_id = Uuid::new_v4();
+    let manifest = r#"
+        name = "test_plugin"
+        version = "0.1.0"
+        description = "Test plugin"
+        entry_point = "/path/to/plugin"
+        driver = "wasm"
+    "#
+    .to_string();
+
+    // Create and append test plugin load events with failure
+    let events = create_test_plugin_load_events(plugin_id, manifest, false);
+    for event in events {
+        log.append(event);
+    }
+
+    let summary = log.replay_summary();
+    println!("Plugin Load Failure Summary:\n{}", summary);
+
+    assert!(
+        summary.contains("Plugins Load Requested: 1"),
+        "Missing plugins load requested count"
+    );
+    assert!(
+        summary.contains("Plugins Loaded: 0"),
+        "Missing plugins loaded count"
+    );
+    assert!(
+        summary.contains("Plugins Failed: 1"),
+        "Missing plugins failed count"
+    );
+    assert!(
+        summary.contains(&plugin_id.to_string()),
+        "Missing plugin ID"
+    );
+    assert!(
+        summary.contains("Failed to load plugin"),
+        "Missing error message"
+    );
+}

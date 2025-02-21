@@ -32,6 +32,36 @@ pub(in crate::event_log::tests) fn create_test_task_events(
     ]
 }
 
+pub(in crate::event_log::tests) fn create_test_plugin_load_events(
+    plugin_id: Uuid,
+    manifest: String,
+    success: bool,
+) -> Vec<SystemEvent> {
+    let mut events = vec![SystemEvent::PluginLoadRequested {
+        plugin_id,
+        manifest: manifest.clone(),
+        metadata: create_test_metadata(None),
+    }];
+
+    if success {
+        events.push(SystemEvent::PluginLoaded {
+            plugin_id,
+            name: "test_plugin".into(),
+            version: "0.1.0".into(),
+            description: "Test plugin".into(),
+            metadata: create_test_metadata(None),
+        });
+    } else {
+        events.push(SystemEvent::PluginError {
+            plugin_id,
+            error: "Failed to load plugin".into(),
+            metadata: create_test_metadata(None),
+        });
+    }
+
+    events
+}
+
 pub(in crate::event_log::tests) fn create_test_plugin_events(plugin_id: Uuid) -> Vec<SystemEvent> {
     vec![
         SystemEvent::PluginInvoked {

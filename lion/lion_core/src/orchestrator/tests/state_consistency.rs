@@ -1,5 +1,5 @@
 use super::*;
-use crate::plugin_manager::{PluginFunction, PluginManifest};
+use crate::plugin_manager::{init_test_logging, PluginFunction, PluginManifest};
 use std::collections::HashMap;
 use std::fs;
 use std::os::unix::fs::PermissionsExt;

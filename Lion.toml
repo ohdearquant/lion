@@ -1,0 +1,3 @@
+[plugins]
+data_dir = "plugins/data"
+calculator_manifest = "plugins/calculator/manifest.toml"

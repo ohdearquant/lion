@@ -13,4 +13,6 @@ pub enum PluginError {
     ProcessError(String),
     #[error("Failed to read manifest: {0}")]
     ManifestError(String),
+    #[error("Configuration error: {0}")]
+    ConfigError(String),
 }
