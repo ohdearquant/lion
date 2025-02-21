@@ -1,21 +1,20 @@
-use crate::element::ElementData;
-use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
 use tracing::{debug, error};
 use uuid::Uuid;
+
+use super::{cache::Cache, ElementStore};
+use crate::element::ElementData;
 
 #[derive(Debug)]
 pub struct FileStorage {
     base_path: PathBuf,
-    cache: Arc<Mutex<HashMap<Uuid, ElementData>>>,
+    cache: Cache,
 }
 
 impl FileStorage {
     pub fn new<P: AsRef<Path>>(base_path: P) -> Self {
         let base_path = base_path.as_ref().to_path_buf();
-
         debug!("Creating FileStorage with base path: {:?}", base_path);
 
         // Create directory if it doesn't exist
@@ -28,7 +27,7 @@ impl FileStorage {
 
         Self {
             base_path,
-            cache: Arc::new(Mutex::new(HashMap::new())),
+            cache: Cache::new(),
         }
     }
 
@@ -47,8 +46,10 @@ impl FileStorage {
         debug!("Element path for {}: {:?}", id, path);
         path
     }
+}
 
-    pub fn store(&self, element: ElementData) {
+impl ElementStore for FileStorage {
+    fn store(&self, element: ElementData) {
         debug!("Storing element {} in FileStorage", element.id);
         let path = self.get_element_path(&element.id);
 
@@ -74,21 +75,17 @@ impl FileStorage {
 
         // Update cache
         debug!("Updating cache with element {}", element.id);
-        let mut cache = self.cache.lock().unwrap();
-        cache.insert(element.id, element);
+        self.cache.insert(element);
         debug!("Cache updated successfully");
     }
 
-    pub fn get(&self, id: &Uuid) -> Option<ElementData> {
+    fn get(&self, id: &Uuid) -> Option<ElementData> {
         debug!("Getting element {} from FileStorage", id);
 
         // Check cache first
-        {
-            let cache = self.cache.lock().unwrap();
-            if let Some(element) = cache.get(id) {
-                debug!("Found element {} in cache", id);
-                return Some(element.clone());
-            }
+        if let Some(element) = self.cache.get(id) {
+            debug!("Found element {} in cache", id);
+            return Some(element);
         }
 
         debug!("Element {} not in cache, checking file storage", id);
@@ -108,8 +105,7 @@ impl FileStorage {
                     Ok(element) => {
                         debug!("Successfully deserialized element");
                         // Update cache
-                        let mut cache = self.cache.lock().unwrap();
-                        cache.insert(*id, element.clone());
+                        self.cache.insert(element.clone());
                         Some(element)
                     }
                     Err(e) => {
@@ -125,7 +121,7 @@ impl FileStorage {
         }
     }
 
-    pub fn list(&self) -> Vec<ElementData> {
+    fn list(&self) -> Vec<ElementData> {
         debug!(
             "Listing all elements in FileStorage at {:?}",
             self.base_path
@@ -161,7 +157,7 @@ impl FileStorage {
         elements
     }
 
-    pub fn remove(&self, id: &Uuid) -> bool {
+    fn remove(&self, id: &Uuid) -> bool {
         debug!("Removing element {} from FileStorage", id);
         let path = self.get_element_path(id);
         if path.exists() {
@@ -169,8 +165,7 @@ impl FileStorage {
                 Ok(_) => {
                     debug!("Successfully removed file");
                     // Update cache
-                    let mut cache = self.cache.lock().unwrap();
-                    cache.remove(id);
+                    self.cache.remove(id);
                     true
                 }
                 Err(e) => {
@@ -184,7 +179,7 @@ impl FileStorage {
         }
     }
 
-    pub fn clear(&self) {
+    fn clear(&self) {
         debug!("Clearing all elements from FileStorage");
         if let Ok(entries) = fs::read_dir(&self.base_path) {
             for entry in entries.flatten() {
@@ -198,8 +193,7 @@ impl FileStorage {
         }
 
         // Clear cache
-        let mut cache = self.cache.lock().unwrap();
-        cache.clear();
+        self.cache.clear();
         debug!("Cache cleared");
     }
 }

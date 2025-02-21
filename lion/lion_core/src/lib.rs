@@ -6,7 +6,6 @@ pub mod pile;
 pub mod plugin_manager;
 pub mod progression;
 pub mod storage;
-pub mod store;
 
 // Re-export commonly used types
 pub use agent::{AgentEvent, AgentProtocol, MockStreamingAgent};
@@ -16,4 +15,4 @@ pub use orchestrator::{Orchestrator, SystemEvent};
 pub use pile::Pile;
 pub use plugin_manager::{PluginError, PluginFunction, PluginManager, PluginManifest};
 pub use progression::Progression;
-pub use store::InMemoryStore;
+pub use storage::InMemoryStore;
