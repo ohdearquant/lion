@@ -9,6 +9,7 @@ pub struct PluginDiscovery {
     manifest_dir: PathBuf,
 }
 
+#[allow(clippy::unnecessary_map_or)]
 impl PluginDiscovery {
     pub fn new<P: AsRef<Path>>(manifest_dir: P) -> Self {
         let dir = manifest_dir.as_ref().to_path_buf();
