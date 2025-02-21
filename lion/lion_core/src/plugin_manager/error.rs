@@ -1,8 +1,12 @@
 use thiserror::Error;
 use uuid::Uuid;
 
-#[derive(Debug, Error)]
+/// Errors that can occur in plugin operations
+#[derive(Error, Debug)]
 pub enum PluginError {
+    #[error("Invalid manifest: {0}")]
+    InvalidManifest(String),
+
     #[error("Plugin not found: {0}")]
     NotFound(Uuid),
 
@@ -12,18 +16,21 @@ pub enum PluginError {
     #[error("Failed to invoke plugin: {0}")]
     InvokeError(String),
 
-    #[error("IO error: {0}")]
-    IoError(#[from] std::io::Error),
+    #[error("Plugin initialization failed: {0}")]
+    InitializationError(String),
 
-    #[error("TOML error: {0}")]
-    TomlError(#[from] toml::de::Error),
+    #[error("Plugin validation failed: {0}")]
+    ValidationError(String),
 
-    #[error("Invalid manifest: {0}")]
-    InvalidManifest(String),
+    #[error("Plugin security error: {0}")]
+    SecurityError(String),
 
-    #[error("Plugin runtime error: {0}")]
-    RuntimeError(String),
+    #[error("Plugin dependency error: {0}")]
+    DependencyError(String),
 
-    #[error("Plugin initialization error: {0}")]
-    InitError(String),
+    #[error("Plugin state error: {0}")]
+    StateError(String),
 }
+
+/// Result type for plugin operations
+pub type Result<T> = std::result::Result<T, PluginError>;

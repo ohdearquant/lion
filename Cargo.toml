@@ -1,8 +1,8 @@
 [workspace]
 members = [
-    "lion_core",
-    "lion_cli",
-    "lion_ui",
+    "lion/lion_core",
+    "lion/lion_cli",
+    "lion/lion_ui",
     "plugins/calculator_plugin"
 ]
 resolver = "2"

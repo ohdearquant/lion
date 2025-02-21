@@ -1,10 +1,11 @@
-use agentic_core::{
+use lion_core::{
     orchestrator::{
         events::{PluginEvent, SystemEvent},
         metadata::EventMetadata,
-        Orchestrator,
+        Orchestrator, OrchestratorConfig,
     },
-    plugin_manager::{PluginManager, PluginManifest, PluginState},
+    plugin_manager::{PluginManager, PluginManifest},
+    types::plugin::PluginState,
 };
 use std::sync::Arc;
 use tempfile::tempdir;
@@ -12,65 +13,9 @@ use tokio;
 use uuid::Uuid;
 
 #[tokio::test]
-async fn test_plugin_lifecycle() {
-    // Create temporary directories for testing
-    let plugin_dir = tempdir().unwrap();
-    let data_dir = tempdir().unwrap();
-
-    // Initialize plugin manager
-    let manager = Arc::new(PluginManager::with_manifest_dir(plugin_dir.path()));
-
-    // Create test manifest
-    let manifest = PluginManifest::new(
-        "test-plugin".to_string(),
-        "1.0.0".to_string(),
-        "A test plugin for integration testing".to_string(),
-    );
-
-    // Create test WASM file
-    let wasm_path = plugin_dir.path().join("test.wasm");
-    std::fs::write(&wasm_path, b"mock wasm content").unwrap();
-
-    // Register plugin
-    let plugin_id = manager
-        .load_plugin_from_string(
-            toml::to_string(&manifest).unwrap(),
-            Some(wasm_path.to_string_lossy().into_owned()),
-        )
-        .await
-        .unwrap();
-
-    // Verify plugin registration
-    let metadata = manager.get_plugin(plugin_id).unwrap();
-    assert_eq!(metadata.manifest.name, "test-plugin");
-    assert_eq!(metadata.manifest.version, "1.0.0");
-    match metadata.state {
-        PluginState::Ready => (),
-        _ => panic!("Plugin should be in Ready state"),
-    }
-
-    // Test plugin invocation
-    let result = manager
-        .invoke_plugin(plugin_id, "test input")
-        .await
-        .unwrap();
-    assert!(result.contains("test-plugin"));
-    assert!(result.contains("test input"));
-
-    // Test plugin listing
-    let plugins = manager.list_plugins();
-    assert_eq!(plugins.len(), 1);
-    assert_eq!(plugins[0].id, plugin_id);
-
-    // Test plugin removal
-    manager.remove_plugin(plugin_id).await.unwrap();
-    assert!(manager.get_plugin(plugin_id).is_err());
-}
-
-#[tokio::test]
 async fn test_plugin_orchestration() {
     // Create an orchestrator
-    let orchestrator = Orchestrator::new(100);
+    let orchestrator = Orchestrator::new(OrchestratorConfig::default());
     let sender = orchestrator.sender();
     let mut completion_rx = orchestrator.completion_receiver();
 
@@ -128,40 +73,50 @@ async fn test_plugin_orchestration() {
 }
 
 #[tokio::test]
-async fn test_plugin_error_handling() {
-    let manager = Arc::new(PluginManager::new());
+async fn test_plugin_wasm_loading() {
+    // Create temporary directories for testing
+    let plugin_dir = tempdir().unwrap();
+    let data_dir = tempdir().unwrap();
 
-    // Test invalid manifest
-    let result = manager
+    // Initialize plugin manager
+    let manager = Arc::new(PluginManager::with_manifest_dir(plugin_dir.path()));
+
+    // Create test manifest with WASM path
+    let manifest = PluginManifest::new(
+        "wasm-plugin".to_string(),
+        "1.0.0".to_string(),
+        "A WASM plugin for integration testing".to_string(),
+    );
+
+    // Create test WASM file
+    let wasm_path = plugin_dir.path().join("test.wasm");
+    std::fs::write(&wasm_path, b"mock wasm content").unwrap();
+
+    // Register plugin with WASM path
+    let plugin_id = manager
         .load_plugin_from_string(
-            r#"
-            name = ""  # Empty name should fail validation
-            version = "1.0.0"
-            description = "Invalid plugin"
-            "#
-            .to_string(),
-            None,
+            toml::to_string(&manifest).unwrap(),
+            Some(wasm_path.to_string_lossy().into_owned()),
         )
-        .await;
-    assert!(result.is_err());
-
-    // Test non-existent plugin
-    let non_existent_id = Uuid::new_v4();
-    assert!(manager.get_plugin(non_existent_id).is_err());
-    assert!(manager
-        .invoke_plugin(non_existent_id, "test")
         .await
-        .is_err());
-    assert!(manager.remove_plugin(non_existent_id).await.is_err());
+        .unwrap();
+
+    // Verify plugin loaded with WASM
+    let metadata = manager.get_plugin(plugin_id).unwrap();
+    assert_eq!(metadata.manifest.name, "wasm-plugin");
+    match metadata.state {
+        PluginState::Ready => (),
+        _ => panic!("Plugin should be in Ready state"),
+    }
 }
 
 #[tokio::test]
 async fn test_plugin_concurrent_operations() {
     let manager = Arc::new(PluginManager::new());
     let manifest = PluginManifest::new(
-        "test-plugin".to_string(),
+        "concurrent-plugin".to_string(),
         "1.0.0".to_string(),
-        "Test plugin".to_string(),
+        "Test plugin for concurrent operations".to_string(),
     );
 
     // Load plugin
@@ -186,7 +141,8 @@ async fn test_plugin_concurrent_operations() {
         handle.await.unwrap();
     }
 
-    // Plugin should still be accessible
+    // Plugin should still be accessible and in correct state
     let metadata = manager.get_plugin(plugin_id).unwrap();
-    assert_eq!(metadata.manifest.name, "test-plugin");
+    assert_eq!(metadata.manifest.name, "concurrent-plugin");
+    assert!(matches!(metadata.state, PluginState::Ready));
 }

@@ -1,152 +1,50 @@
+//! # Orchestrator
+//! 
+//! The orchestrator is the core component of the Lion framework, responsible for managing
+//! multi-agent concurrency, event routing, and system coordination.
+//!
+//! ## Architecture
+//!
+//! The orchestrator follows a message-passing architecture where different components
+//! (agents, plugins, tasks) communicate through events. This ensures loose coupling and
+//! enables scalable concurrent operations.
+//!
+//! ## Components
+//!
+//! - `events`: Defines the core event types (Agent, Plugin, System, Task) that flow
+//!   through the system.
+//!
+//! - `metadata`: Provides event metadata tracking and correlation capabilities.
+//!   Note: The `create_metadata` function is deprecated in favor of `EventMetadata::new`.
+//!
+//! - `processor`: Contains the main orchestrator implementation that processes events
+//!   and manages system state.
+//!
+//! - `types`: Common type definitions used throughout the orchestrator system.
+//!
+//! ## Event Flow
+//!
+//! Events flow through the system in a predictable pattern:
+//! 1. Events are created and tagged with metadata
+//! 2. The orchestrator processes events based on type
+//! 3. Results are emitted as completion events
+//! 4. Subscribers receive and handle completion events
+
 pub mod events;
-pub mod handlers;
 pub mod metadata;
-pub mod processor;
-pub mod types;
+mod processor;
+mod agent_manager;
+mod metrics_manager;
+mod types;
 
 pub use events::{AgentEvent, PluginEvent, SystemEvent, TaskEvent};
-pub use handlers::EventHandler;
+#[deprecated(note = "use EventMetadata::new instead")]
+pub use metadata::create_metadata;
 pub use metadata::EventMetadata;
-pub use processor::Orchestrator;
+pub use metrics_manager::MetricsManager;
+pub use agent_manager::AgentManager;
+pub use processor::{Orchestrator, OrchestratorConfig, OrchestratorError};
 pub use types::*;
 
-// Provide constructor functions for backward compatibility
-impl SystemEvent {
-    pub fn task_submitted(
-        task_id: uuid::Uuid,
-        payload: String,
-        correlation_id: Option<uuid::Uuid>,
-    ) -> Self {
-        SystemEvent::Task(TaskEvent::Submitted {
-            task_id,
-            payload,
-            metadata: EventMetadata::new(correlation_id),
-        })
-    }
-
-    pub fn task_completed(
-        task_id: uuid::Uuid,
-        result: String,
-        correlation_id: Option<uuid::Uuid>,
-    ) -> Self {
-        SystemEvent::Task(TaskEvent::Completed {
-            task_id,
-            result,
-            metadata: EventMetadata::new(correlation_id),
-        })
-    }
-
-    pub fn task_error(
-        task_id: uuid::Uuid,
-        error: String,
-        correlation_id: Option<uuid::Uuid>,
-    ) -> Self {
-        SystemEvent::Task(TaskEvent::Error {
-            task_id,
-            error,
-            metadata: EventMetadata::new(correlation_id),
-        })
-    }
-
-    pub fn plugin_load(
-        plugin_id: uuid::Uuid,
-        manifest: crate::plugin_manager::PluginManifest,
-        manifest_path: Option<String>,
-        correlation_id: Option<uuid::Uuid>,
-    ) -> Self {
-        SystemEvent::Plugin(PluginEvent::Load {
-            plugin_id,
-            manifest,
-            manifest_path,
-            metadata: EventMetadata::new(correlation_id),
-        })
-    }
-
-    pub fn plugin_invoked(
-        plugin_id: uuid::Uuid,
-        input: String,
-        correlation_id: Option<uuid::Uuid>,
-    ) -> Self {
-        SystemEvent::Plugin(PluginEvent::Invoked {
-            plugin_id,
-            input,
-            metadata: EventMetadata::new(correlation_id),
-        })
-    }
-
-    pub fn plugin_result(
-        plugin_id: uuid::Uuid,
-        result: String,
-        correlation_id: Option<uuid::Uuid>,
-    ) -> Self {
-        SystemEvent::Plugin(PluginEvent::Result {
-            plugin_id,
-            result,
-            metadata: EventMetadata::new(correlation_id),
-        })
-    }
-
-    pub fn plugin_error(
-        plugin_id: uuid::Uuid,
-        error: String,
-        correlation_id: Option<uuid::Uuid>,
-    ) -> Self {
-        SystemEvent::Plugin(PluginEvent::Error {
-            plugin_id,
-            error,
-            metadata: EventMetadata::new(correlation_id),
-        })
-    }
-
-    pub fn list_plugins() -> Self {
-        SystemEvent::Plugin(PluginEvent::List)
-    }
-
-    pub fn agent_spawned(
-        agent_id: uuid::Uuid,
-        prompt: String,
-        correlation_id: Option<uuid::Uuid>,
-    ) -> Self {
-        SystemEvent::Agent(AgentEvent::Spawned {
-            agent_id,
-            prompt,
-            metadata: EventMetadata::new(correlation_id),
-        })
-    }
-
-    pub fn agent_partial_output(
-        agent_id: uuid::Uuid,
-        chunk: String,
-        correlation_id: Option<uuid::Uuid>,
-    ) -> Self {
-        SystemEvent::Agent(AgentEvent::PartialOutput {
-            agent_id,
-            chunk,
-            metadata: EventMetadata::new(correlation_id),
-        })
-    }
-
-    pub fn agent_completed(
-        agent_id: uuid::Uuid,
-        result: String,
-        correlation_id: Option<uuid::Uuid>,
-    ) -> Self {
-        SystemEvent::Agent(AgentEvent::Completed {
-            agent_id,
-            result,
-            metadata: EventMetadata::new(correlation_id),
-        })
-    }
-
-    pub fn agent_error(
-        agent_id: uuid::Uuid,
-        error: String,
-        correlation_id: Option<uuid::Uuid>,
-    ) -> Self {
-        SystemEvent::Agent(AgentEvent::Error {
-            agent_id,
-            error,
-            metadata: EventMetadata::new(correlation_id),
-        })
-    }
-}
+/// Result type for orchestrator operations
+pub type Result<T> = std::result::Result<T, OrchestratorError>;

@@ -60,7 +60,7 @@ impl PluginLoader {
         debug!("Loading plugin: {}", manifest.name);
 
         // Validate manifest
-        manifest.validate().map_err(PluginError::InvalidManifest)?;
+        manifest.validate().map_err(|e| PluginError::InvalidManifest(e.to_string()))?;
 
         // Check WASM file if specified
         if let Some(wasm_path) = manifest.wasm_path.as_ref() {

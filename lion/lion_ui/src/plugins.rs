@@ -1,16 +1,16 @@
 use crate::state::AppState;
-use agentic_core::{
+use axum::{
+    extract::{Path, State},
+    response::IntoResponse,
+    Json,
+};
+use lion_core::{
     orchestrator::{
         events::{PluginEvent, SystemEvent},
         metadata::create_metadata,
     },
     plugin_manager::PluginManifest,
     types::plugin::PluginResponse,
-};
-use axum::{
-    extract::{Path, State},
-    response::IntoResponse,
-    Json,
 };
 use serde::Deserialize;
 use std::sync::Arc;
@@ -41,7 +41,12 @@ pub async fn load_plugin_handler(
     };
 
     let plugin_id = manifest.id;
-    let event = SystemEvent::new_plugin_load(plugin_id, manifest.clone(), req.manifest_path, None);
+    let event = SystemEvent::Plugin(PluginEvent::Load {
+        plugin_id,
+        manifest: manifest.clone(),
+        manifest_path: req.manifest_path,
+        metadata: create_metadata(None),
+    });
 
     if let Err(e) = state.orchestrator_tx.send(event).await {
         error!("Failed to send plugin load event: {}", e);
@@ -51,7 +56,12 @@ pub async fn load_plugin_handler(
         )));
     }
 
-    Json(manifest.into_response().with_status("loading"))
+    Json(PluginResponse::new(
+        manifest.id,
+        manifest.name,
+        manifest.version,
+        manifest.description,
+    ).with_status("loading"))
 }
 
 pub async fn list_plugins_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
@@ -59,7 +69,7 @@ pub async fn list_plugins_handler(State(state): State<Arc<AppState>>) -> impl In
 
     if let Err(e) = state
         .orchestrator_tx
-        .send(SystemEvent::new_plugin_list())
+        .send(SystemEvent::Plugin(PluginEvent::List))
         .await
     {
         error!("Failed to send list plugins event: {}", e);
@@ -82,7 +92,11 @@ pub async fn invoke_plugin_handler(
 ) -> impl IntoResponse {
     debug!("Invoking plugin {}", plugin_id);
 
-    let event = SystemEvent::new_plugin_invocation(plugin_id, input.to_string(), None);
+    let event = SystemEvent::Plugin(PluginEvent::Invoked {
+        plugin_id,
+        input: input.to_string(),
+        metadata: create_metadata(None),
+    });
 
     if let Err(e) = state.orchestrator_tx.send(event).await {
         error!("Failed to send plugin invoke event: {}", e);

@@ -1,11 +1,34 @@
 use crate::{
-    orchestrator::metadata::{create_metadata, EventMetadata},
-    plugin_manager::PluginManifest,
+    orchestrator::metadata::EventMetadata,
+    plugin_manager::PluginManifest
 };
 use serde::{Deserialize, Serialize};
+use std::fmt;
 use uuid::Uuid;
 
 use super::SystemEvent;
+
+impl fmt::Display for PluginEvent {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            PluginEvent::Load { plugin_id, manifest, manifest_path, .. } => {
+                write!(f, "Plugin {} loading from {}: {}", plugin_id, 
+                    manifest_path.as_deref().unwrap_or("memory"), 
+                    manifest.name)
+            }
+            PluginEvent::Invoked { plugin_id, input, .. } => {
+                write!(f, "Plugin {} invoked with input: {}", plugin_id, input)
+            }
+            PluginEvent::List => write!(f, "Listing plugins"),
+            PluginEvent::Result { plugin_id, result, .. } => {
+                write!(f, "Plugin {} result: {}", plugin_id, result)
+            }
+            PluginEvent::Error { plugin_id, error, .. } => {
+                write!(f, "Plugin {} error: {}", plugin_id, error)
+            }
+        }
+    }
+}
 
 /// Events related to plugin operations
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -64,7 +87,7 @@ impl PluginEvent {
             plugin_id,
             manifest,
             manifest_path,
-            metadata: create_metadata(correlation_id),
+            metadata: EventMetadata::new(correlation_id),
         })
     }
 
@@ -73,7 +96,7 @@ impl PluginEvent {
         SystemEvent::Plugin(PluginEvent::Invoked {
             plugin_id,
             input: input.into(),
-            metadata: create_metadata(correlation_id),
+            metadata: EventMetadata::new(correlation_id),
         })
     }
 
@@ -82,7 +105,7 @@ impl PluginEvent {
         SystemEvent::Plugin(PluginEvent::Result {
             plugin_id,
             result: result.into(),
-            metadata: create_metadata(correlation_id),
+            metadata: EventMetadata::new(correlation_id),
         })
     }
 
@@ -91,7 +114,7 @@ impl PluginEvent {
         SystemEvent::Plugin(PluginEvent::Error {
             plugin_id,
             error: error.into(),
-            metadata: create_metadata(correlation_id),
+            metadata: EventMetadata::new(correlation_id),
         })
     }
 
@@ -199,7 +222,7 @@ mod tests {
             plugin_id,
             manifest: manifest.clone(),
             manifest_path: Some("manifest.toml".to_string()),
-            metadata: create_metadata(correlation_id),
+            metadata: EventMetadata::new(correlation_id),
         };
 
         let serialized = serde_json::to_string(&event).unwrap();

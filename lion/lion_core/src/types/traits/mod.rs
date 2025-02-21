@@ -1,242 +1,181 @@
-use async_trait::async_trait;
-use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
-use uuid::Uuid;
 use std::collections::HashSet;
-
-/// A trait for entities that can be uniquely identified
-pub trait Identifiable {
-    fn id(&self) -> Uuid;
-}
-
-/// A trait for entities that have timestamps
-pub trait Timestamped {
-    fn created_at(&self) -> DateTime<Utc>;
-    fn updated_at(&self) -> Option<DateTime<Utc>>;
-}
-
-/// A trait for entities that can be serialized/deserialized
-pub trait DataFormat: Serialize + for<'de> Deserialize<'de> {}
-
-/// A trait for entities that can be stored and retrieved
-#[async_trait]
-pub trait Storable: Identifiable + DataFormat {
-    type Error;
-    
-    async fn save(&self) -> Result<(), Self::Error>;
-    async fn load(id: Uuid) -> Result<Self, Self::Error> where Self: Sized;
-    async fn delete(id: Uuid) -> Result<(), Self::Error>;
-}
-
-/// A trait for entities that can be validated
-pub trait Validatable {
-    type Error;
-    
-    fn validate(&self) -> Result<(), Self::Error>;
-}
-
-/// A trait for entities that can be cloned with modifications
-pub trait Modifiable: Clone {
-    fn with_id(self, id: Uuid) -> Self;
-    fn with_timestamp(self, timestamp: DateTime<Utc>) -> Self;
-}
-
-/// A trait for entities that can be converted to/from JSON
-pub trait JsonFormat {
-    fn to_json(&self) -> serde_json::Result<Value>;
-    fn from_json(value: Value) -> serde_json::Result<Self> where Self: Sized;
-}
-
-/// A trait for entities that can be versioned
-pub trait Versionable {
-    fn version(&self) -> String;
-    fn is_compatible_with(&self, other_version: &str) -> bool;
-}
-
-/// A trait for entities that can be described
-pub trait Describable {
-    fn name(&self) -> &str;
-    fn description(&self) -> &str;
-}
-
-/// A trait for entities that can be enabled/disabled
-pub trait Toggleable {
-    fn is_enabled(&self) -> bool;
-    fn enable(&mut self);
-    fn disable(&mut self);
-}
-
-/// A trait for entities that can handle events
-#[async_trait]
-pub trait EventHandler {
-    type Event;
-    type Response;
-    type Error;
-
-    async fn handle(&self, event: Self::Event) -> Result<Self::Response, Self::Error>;
-}
-
-/// A trait for entities that can be initialized
-#[async_trait]
-pub trait Initializable {
-    type Config;
-    type Error;
-
-    async fn initialize(config: Self::Config) -> Result<Self, Self::Error> where Self: Sized;
-}
+use uuid::Uuid;
+use super::{Error, ParticipantState, Result};
 
 /// A message in the language network protocol
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LanguageMessage {
-    /// Unique identifier for the message
+    /// Unique identifier for this message
     pub id: Uuid,
-    /// The content of the message
+    /// The actual content of the message
     pub content: String,
-    /// The sender of the message
+    /// ID of the agent that sent this message
     pub sender_id: Uuid,
-    /// The intended recipient(s) of the message
+    /// IDs of agents that should receive this message
     pub recipient_ids: HashSet<Uuid>,
-    /// The type of message
+    /// Type of message
     pub message_type: LanguageMessageType,
-    /// Additional metadata
-    pub metadata: Value,
-    /// Timestamp of the message
-    pub timestamp: DateTime<Utc>,
+    /// Additional metadata as JSON
+    pub metadata: serde_json::Value,
+    /// When this message was created
+    pub timestamp: chrono::DateTime<chrono::Utc>,
 }
 
-/// Types of language messages
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
-#[serde(rename_all = "snake_case")]
+/// Types of language messages that can be exchanged
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum LanguageMessageType {
-    /// Regular text message
+    /// Plain text message
     Text,
-    /// Function call request
-    FunctionCall,
-    /// Function call response
-    FunctionResponse,
-    /// Error message
+    /// A question requiring a response
+    Question,
+    /// A response to a question
+    Answer,
+    /// A command to be executed
+    Command,
+    /// Result of a command execution
+    CommandResult,
+    /// An error message
     Error,
-    /// System message
+    /// System-level message
     System,
-    /// Control message (e.g., start/stop)
-    Control,
+    /// Custom message type with string identifier
+    Custom(String),
 }
 
-/// A trait for entities that can process language messages
-#[async_trait]
-pub trait LanguageProcessor {
-    type Error;
-
-    /// Process an incoming language message
-    async fn process_message(&self, message: LanguageMessage) -> Result<LanguageMessage, Self::Error>;
-
-    /// Check if this processor can handle a specific message type
-    fn can_handle_message_type(&self, message_type: &LanguageMessageType) -> bool;
-
-    /// Get the supported language models
-    fn supported_models(&self) -> HashSet<String>;
-}
-
-/// A trait for entities that can participate in the network
-#[async_trait]
-pub trait NetworkParticipant {
-    type Error;
-
-    /// Check if the participant can access a specific domain
-    fn can_access_domain(&self, domain: &str) -> bool;
-
-    /// Get the network permissions
-    fn network_permissions(&self) -> &NetworkPermissions;
-
-    /// Send a message to another participant
-    async fn send_message(&self, message: LanguageMessage) -> Result<(), Self::Error>;
-
-    /// Receive a message from another participant
-    async fn receive_message(&self, message: LanguageMessage) -> Result<(), Self::Error>;
-}
-
-/// Network permissions for a participant
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct NetworkPermissions {
-    /// Whether network access is enabled
-    pub enabled: bool,
-    /// Allowed domains
-    pub allowed_domains: HashSet<String>,
-    /// Rate limit (requests per minute)
-    pub rate_limit: usize,
-}
-
-/// A trait for participants in the language network
-#[async_trait]
-pub trait Participant: 
-    Identifiable + 
-    Describable + 
-    Versionable + 
-    Validatable + 
-    EventHandler + 
-    LanguageProcessor + 
-    NetworkParticipant 
-{
-    /// Get the participant's capabilities
-    fn capabilities(&self) -> &ParticipantCapabilities;
-
-    /// Check if the participant can interact with another participant
-    fn can_interact_with(&self, other_id: Uuid) -> bool;
-
-    /// Get the participant's current state
+/// Trait for types that can participate in the language network
+pub trait LanguageParticipant {
+    /// Get the unique ID of this participant
+    fn id(&self) -> Uuid;
+    
+    /// Get the current state of this participant
     fn state(&self) -> ParticipantState;
-}
-
-/// Capabilities of a participant
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ParticipantCapabilities {
-    /// Whether the participant can initiate conversations
-    pub can_initiate: bool,
-    /// Whether the participant can use plugins
-    pub can_use_plugins: bool,
-    /// Maximum concurrent conversations
-    pub max_concurrent_conversations: usize,
-    /// Supported message types
-    pub supported_message_types: HashSet<LanguageMessageType>,
-}
-
-/// State of a participant
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum ParticipantState {
-    /// Participant is initializing
-    Initializing,
-    /// Participant is ready
-    Ready,
-    /// Participant is processing
-    Processing,
-    /// Participant is waiting
-    Waiting,
-    /// Participant has completed
-    Completed,
-    /// Participant has failed
-    Failed,
-    /// Participant is disabled
-    Disabled,
-}
-
-impl Default for NetworkPermissions {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            allowed_domains: HashSet::new(),
-            rate_limit: 60,
+    
+    /// Process an incoming language message
+    fn process_message(&mut self, message: LanguageMessage) -> Result<Option<LanguageMessage>>;
+    
+    /// Generate a new message
+    fn generate_message(&self, content: String, recipients: HashSet<Uuid>) -> LanguageMessage {
+        LanguageMessage {
+            id: Uuid::new_v4(),
+            content,
+            sender_id: self.id(),
+            recipient_ids: recipients,
+            message_type: LanguageMessageType::Text,
+            metadata: serde_json::json!({}),
+            timestamp: chrono::Utc::now(),
         }
     }
 }
 
-impl Default for ParticipantCapabilities {
-    fn default() -> Self {
-        Self {
-            can_initiate: false,
-            can_use_plugins: false,
-            max_concurrent_conversations: 1,
-            supported_message_types: [LanguageMessageType::Text].into_iter().collect(),
-        }
+/// Trait for types that can be identified uniquely
+pub trait Identifiable {
+    /// Get the unique ID of this entity
+    fn id(&self) -> Uuid;
+}
+
+/// Trait for types that maintain state
+pub trait Stateful {
+    /// Get the current state
+    fn state(&self) -> ParticipantState;
+    
+    /// Update the state
+    fn set_state(&mut self, state: ParticipantState);
+    
+    /// Check if in a specific state
+    fn is_in_state(&self, state: ParticipantState) -> bool {
+        self.state() == state
     }
 }
+
+/// Trait for types that can be initialized
+pub trait Initializable {
+    /// Initialize the object
+    fn initialize(&mut self) -> Result<()>;
+    
+    /// Check if initialized
+    fn is_initialized(&self) -> bool;
+}
+
+/// Trait for types that can be enabled/disabled
+pub trait Toggleable {
+    /// Enable the object
+    fn enable(&mut self) -> Result<()>;
+    
+    /// Disable the object
+    fn disable(&mut self) -> Result<()>;
+    
+    /// Check if enabled
+    fn is_enabled(&self) -> bool;
+}
+
+/// Trait for types that can process tasks
+pub trait TaskProcessor {
+    /// The type of task this processor handles
+    type Task;
+    /// The type of result this processor produces
+    type Result;
+    
+    /// Process a task
+    fn process(&mut self, task: Self::Task) -> Result<Self::Result>;
+    
+    /// Check if can process a specific task
+    fn can_process(&self, task: &Self::Task) -> bool;
+}
+
+/// Trait for types that maintain metrics
+pub trait MetricsProvider {
+    /// Get current metrics as JSON
+    fn metrics(&self) -> serde_json::Value;
+    
+    /// Reset metrics to initial state
+    fn reset_metrics(&mut self);
+}
+
+/// Trait for types that can be validated
+pub trait Validatable {
+    /// Validate the object
+    fn validate(&self) -> Result<()>;
+    
+    /// Check if valid
+    fn is_valid(&self) -> bool {
+        self.validate().is_ok()
+    }
+}
+
+/// Trait for types that have a version
+pub trait Versionable {
+    /// Get the version string
+    fn version(&self) -> &str;
+    
+    /// Check if version is compatible with a requirement
+    fn is_compatible_with(&self, requirement: &str) -> bool;
+}
+
+/// Trait for types that have a description
+pub trait Describable {
+    /// Get the name
+    fn name(&self) -> &str;
+    
+    /// Get the description
+    fn description(&self) -> &str;
+    
+    /// Get additional metadata
+    fn metadata(&self) -> &serde_json::Value;
+}
+
+/// Trait for types that can be serialized to/from JSON
+pub trait JsonSerializable: serde::Serialize + serde::de::DeserializeOwned {
+    /// Convert the object to a JSON string
+    fn to_json(&self) -> Result<String> {
+        serde_json::to_string(self).map_err(|e| Error::Internal(e.to_string()))
+    }
+
+    /// Parse an object from a JSON string
+    fn from_json(json: &str) -> Result<Self> {
+        serde_json::from_str(json).map_err(|e| Error::Internal(e.to_string()))
+    }
+}
+
+/// Implement JsonSerializable for any type that implements Serialize and DeserializeOwned
+impl<T: serde::Serialize + serde::de::DeserializeOwned> JsonSerializable for T {}

@@ -130,7 +130,7 @@ fn test_event_log_with_agent() {
     // Agent produces partial output
     log.append(SystemEvent::Agent(AgentEvent::PartialOutput {
         agent_id,
-        chunk: "partial result".into(),
+        output: "partial result".into(),
         metadata: EventMetadata::new(None),
     }));
 

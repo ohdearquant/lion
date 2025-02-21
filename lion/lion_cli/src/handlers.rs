@@ -1,10 +1,8 @@
-use agentic_core::orchestrator::{
+use lion_core::orchestrator::{
     events::{AgentEvent, PluginEvent, SystemEvent, TaskEvent},
     metadata::EventMetadata,
-    Orchestrator,
+    Orchestrator, OrchestratorConfig,
 };
-use agentic_core::plugin_manager::PluginManifest;
-use std::path::PathBuf;
 use tokio::sync::mpsc;
 use tracing::{debug, error, info};
 use uuid::Uuid;
@@ -38,7 +36,7 @@ pub fn handle_test_cli() {
 }
 
 pub async fn handle_spawn_agent(prompt: String, correlation_id: Option<String>) {
-    let orchestrator = Orchestrator::new(100);
+    let orchestrator = Orchestrator::new(OrchestratorConfig::default());
     let sender = orchestrator.sender();
     let mut completion_rx = orchestrator.completion_receiver();
 
@@ -74,7 +72,7 @@ pub async fn handle_spawn_agent(prompt: String, correlation_id: Option<String>) 
 }
 
 pub async fn handle_demo(data: String, correlation_id: Option<String>) {
-    let orchestrator = Orchestrator::new(100);
+    let orchestrator = Orchestrator::new(OrchestratorConfig::default());
     let sender = orchestrator.sender();
     let mut completion_rx = orchestrator.completion_receiver();
 
@@ -112,7 +110,7 @@ pub async fn handle_demo(data: String, correlation_id: Option<String>) {
 pub fn handle_load_plugin(manifest_path: String) {
     let rt = tokio::runtime::Runtime::new().unwrap();
     rt.block_on(async {
-        let orchestrator = Orchestrator::new(100);
+        let orchestrator = Orchestrator::new(OrchestratorConfig::default());
         let sender = orchestrator.sender();
         let mut completion_rx = orchestrator.completion_receiver();
 
@@ -150,7 +148,7 @@ pub async fn handle_invoke_plugin(
     input: String,
     correlation_id: Option<String>,
 ) {
-    let orchestrator = Orchestrator::new(100);
+    let orchestrator = Orchestrator::new(OrchestratorConfig::default());
     let sender = orchestrator.sender();
     let mut completion_rx = orchestrator.completion_receiver();
 

@@ -1,4 +1,4 @@
-use crate::types::agent::{AgentInfo, AgentStatus};
+use crate::types::agent::{AgentInfo, AgentState, AgentCapabilities};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -82,10 +82,16 @@ impl AgentEvent {
     pub fn agent_info(&self) -> AgentInfo {
         let id = self.agent_id();
         match self {
-            Self::Start { .. } => AgentInfo::new(id).with_status(AgentStatus::Initializing),
-            Self::PartialOutput { .. } => AgentInfo::new(id).with_status(AgentStatus::Running),
-            Self::Done { .. } => AgentInfo::new(id).with_status(AgentStatus::Completed),
-            Self::Error { error, .. } => AgentInfo::new(id).with_error(error),
+            Self::Start { .. } => AgentInfo::new(
+                id,
+                "agent",
+                "Agent instance",
+                "1.0.0",
+                AgentCapabilities::default(),
+            ).with_status(AgentState::Initializing),
+            Self::PartialOutput { .. } => AgentInfo::new(id, "agent", "Agent instance", "1.0.0", AgentCapabilities::default()).with_status(AgentState::Running),
+            Self::Done { .. } => AgentInfo::new(id, "agent", "Agent instance", "1.0.0", AgentCapabilities::default()).with_status(AgentState::Ready),
+            Self::Error { error, .. } => AgentInfo::new(id, "agent", "Agent instance", "1.0.0", AgentCapabilities::default()).with_error(error),
         }
     }
 }
@@ -159,29 +165,29 @@ mod tests {
         let event = AgentEvent::start(agent_id, "test prompt");
         let info = event.agent_info();
         assert_eq!(info.id, agent_id);
-        assert_eq!(info.status, AgentStatus::Initializing);
-        assert!(info.error.is_none());
+        assert_eq!(info.status.state, AgentState::Initializing);
+        assert_eq!(info.status.metadata, serde_json::json!({}));
 
         // Test partial output event info
         let event = AgentEvent::partial_output(agent_id, "test output");
         let info = event.agent_info();
         assert_eq!(info.id, agent_id);
-        assert_eq!(info.status, AgentStatus::Running);
-        assert!(info.error.is_none());
+        assert_eq!(info.status.state, AgentState::Running);
+        assert_eq!(info.status.metadata, serde_json::json!({}));
 
         // Test done event info
         let event = AgentEvent::done(agent_id, "test output");
         let info = event.agent_info();
         assert_eq!(info.id, agent_id);
-        assert_eq!(info.status, AgentStatus::Completed);
-        assert!(info.error.is_none());
+        assert_eq!(info.status.state, AgentState::Ready);
+        assert_eq!(info.status.metadata, serde_json::json!({}));
 
         // Test error event info
         let event = AgentEvent::error(agent_id, "test error");
         let info = event.agent_info();
         assert_eq!(info.id, agent_id);
-        assert_eq!(info.status, AgentStatus::Failed);
-        assert_eq!(info.error, Some("test error".to_string()));
+        assert_eq!(info.status.state, AgentState::Error);
+        assert_eq!(info.status.metadata, serde_json::json!({"error": "test error"}));
     }
 
     #[test]

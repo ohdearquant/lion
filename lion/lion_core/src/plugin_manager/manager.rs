@@ -1,19 +1,21 @@
 use super::{
     error::PluginError,
     loader::PluginLoader,
-    manifest::PluginManifest,
+    manifest::{PluginManifest, LanguageCapabilities, SecuritySettings},
     registry::PluginMetadata,
     Result,
 };
-use crate::types::plugin::{PluginState, LanguageCapabilities, SecuritySettings};
-use crate::types::traits::{LanguageMessage, LanguageMessageType};
+use crate::types::{
+    plugin::PluginState,
+    traits::{LanguageMessage, LanguageMessageType},
+};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
 use uuid::Uuid;
 use std::collections::HashMap;
-use std::time::Duration;
+use chrono::{DateTime, Utc};
 
 /// Resource usage metrics for a plugin
 #[derive(Debug, Clone, Default)]
@@ -27,7 +29,7 @@ pub struct PluginResourceMetrics {
     /// Number of file system operations
     pub fs_operations: usize,
     /// Last activity timestamp
-    pub last_activity: chrono::DateTime<chrono::Utc>,
+    pub last_activity: DateTime<Utc>,
 }
 
 /// Main plugin management interface that coordinates loading, initialization,
@@ -49,7 +51,7 @@ impl PluginManager {
     pub fn new() -> Self {
         debug!("Creating new PluginManager with no manifest directory");
         Self {
-            loader: PluginLoader::new("plugins/data"),
+            loader: PluginLoader::new("data"),
             manifest_dir: None,
             resource_metrics: Arc::new(RwLock::new(HashMap::new())),
             language_processors: Arc::new(RwLock::new(HashMap::new())),
@@ -65,7 +67,7 @@ impl PluginManager {
             manifest_dir
         );
         Self {
-            loader: PluginLoader::with_manifest_dir("plugins/data", &manifest_dir),
+            loader: PluginLoader::new(manifest_dir.join("data").to_str().unwrap()),
             manifest_dir: Some(manifest_dir),
             resource_metrics: Arc::new(RwLock::new(HashMap::new())),
             language_processors: Arc::new(RwLock::new(HashMap::new())),
@@ -150,7 +152,7 @@ impl PluginManager {
     }
 
     /// Check if a plugin can process a specific language message type
-    pub async fn can_process_message(&self, plugin_id: Uuid, message_type: &LanguageMessageType) -> bool {
+    pub async fn can_process_message(&self, plugin_id: Uuid, _message_type: &LanguageMessageType) -> bool {
         let processors = self.language_processors.read().await;
         if let Some(caps) = processors.get(&plugin_id) {
             caps.language_processor && (caps.can_generate || caps.can_modify)
@@ -212,6 +214,11 @@ impl PluginManager {
                     "Plugin is not initialized".to_string(),
                 ))
             }
+            PluginState::Initializing => {
+                return Err(PluginError::InvokeError(
+                    "Plugin is still initializing".to_string(),
+                ))
+            }
             PluginState::Running => {
                 return Err(PluginError::InvokeError(
                     "Plugin is already running".to_string(),
@@ -244,7 +251,7 @@ impl PluginManager {
         }
 
         // Update metrics
-        plugin_metrics.last_activity = chrono::Utc::now();
+        plugin_metrics.last_activity = Utc::now();
         plugin_metrics.network_requests += 1;
 
         // TODO: Implement actual WASM invocation with proper sandboxing
@@ -289,11 +296,11 @@ impl PluginManager {
         let security = self.security_settings.read().await;
 
         let plugin_metrics = metrics.get(&plugin_id).ok_or_else(|| {
-            PluginError::NotFound(format!("Plugin {} not found", plugin_id))
+            PluginError::NotFound(plugin_id)
         })?;
 
         let settings = security.get(&plugin_id).ok_or_else(|| {
-            PluginError::NotFound(format!("Plugin {} security settings not found", plugin_id))
+            PluginError::NotFound(plugin_id)
         })?;
 
         Ok(plugin_metrics.memory_usage >= settings.memory_limit_mb * 1024 * 1024
@@ -342,6 +349,7 @@ mod tests {
         let metadata = manager.get_plugin(plugin_id).unwrap();
         assert_eq!(metadata.manifest.name, "test-plugin");
         assert_eq!(metadata.manifest.version, "1.0.0");
+        assert_eq!(metadata.state, PluginState::Ready, "Plugin state should be Ready after initialization");
 
         // Check language capabilities
         let processors = manager.list_language_processors().await;
@@ -363,7 +371,7 @@ mod tests {
             recipient_ids: vec![Uuid::new_v4()].into_iter().collect(),
             message_type: LanguageMessageType::Text,
             metadata: serde_json::json!({}),
-            timestamp: chrono::Utc::now(),
+            timestamp: Utc::now(),
         };
 
         let can_process = manager.can_process_message(plugin_id, &message.message_type).await;

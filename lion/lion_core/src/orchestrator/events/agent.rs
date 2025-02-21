@@ -1,8 +1,28 @@
-use crate::orchestrator::metadata::{create_metadata, EventMetadata};
+use crate::orchestrator::metadata::EventMetadata;
 use serde::{Deserialize, Serialize};
+use std::fmt;
 use uuid::Uuid;
 
 use super::SystemEvent;
+
+impl fmt::Display for AgentEvent {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            AgentEvent::Spawned { agent_id, prompt, .. } => {
+                write!(f, "Agent {} spawned with prompt: {}", agent_id, prompt)
+            }
+            AgentEvent::PartialOutput { agent_id, output, .. } => {
+                write!(f, "Agent {} partial output: {}", agent_id, output)
+            }
+            AgentEvent::Completed { agent_id, result, .. } => {
+                write!(f, "Agent {} completed with result: {}", agent_id, result)
+            }
+            AgentEvent::Error { agent_id, error, .. } => {
+                write!(f, "Agent {} error: {}", agent_id, error)
+            }
+        }
+    }
+}
 
 /// Events related to agent operations
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -51,7 +71,7 @@ impl AgentEvent {
         SystemEvent::Agent(AgentEvent::Spawned {
             agent_id,
             prompt: prompt.into(),
-            metadata: create_metadata(correlation_id),
+            metadata: EventMetadata::new(correlation_id),
         })
     }
 
@@ -64,7 +84,7 @@ impl AgentEvent {
         SystemEvent::Agent(AgentEvent::PartialOutput {
             agent_id,
             output: output.into(),
-            metadata: create_metadata(correlation_id),
+            metadata: EventMetadata::new(correlation_id),
         })
     }
 
@@ -73,7 +93,7 @@ impl AgentEvent {
         SystemEvent::Agent(AgentEvent::Completed {
             agent_id,
             result: result.into(),
-            metadata: create_metadata(correlation_id),
+            metadata: EventMetadata::new(correlation_id),
         })
     }
 
@@ -82,7 +102,7 @@ impl AgentEvent {
         SystemEvent::Agent(AgentEvent::Error {
             agent_id,
             error: error.into(),
-            metadata: create_metadata(correlation_id),
+            metadata: EventMetadata::new(correlation_id),
         })
     }
 }
@@ -156,7 +176,7 @@ mod tests {
         let event = AgentEvent::Spawned {
             agent_id,
             prompt: "test prompt".to_string(),
-            metadata: create_metadata(correlation_id),
+            metadata: EventMetadata::new(correlation_id),
         };
         let serialized = serde_json::to_string(&event).unwrap();
         let deserialized: AgentEvent = serde_json::from_str(&serialized).unwrap();

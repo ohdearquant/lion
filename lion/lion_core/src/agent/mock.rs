@@ -1,5 +1,5 @@
 use super::events::AgentEvent;
-use crate::types::agent::AgentStatus;
+use crate::types::agent::AgentState;
 use async_trait::async_trait;
 use std::{error::Error, fmt};
 use tokio::sync::mpsc;
@@ -23,7 +23,7 @@ impl Error for MockError {}
 #[derive(Debug)]
 pub struct MockStreamingAgent {
     id: Uuid,
-    status: AgentStatus,
+    status: AgentState,
     chunks: Vec<String>,
     current_chunk: usize,
     event_tx: Option<mpsc::Sender<AgentEvent>>,
@@ -34,7 +34,7 @@ impl MockStreamingAgent {
     pub fn new(chunks: Vec<String>) -> Self {
         Self {
             id: Uuid::new_v4(),
-            status: AgentStatus::Initializing,
+            status: AgentState::Initializing,
             chunks,
             current_chunk: 0,
             event_tx: None,
@@ -65,12 +65,12 @@ impl AgentProtocol for MockStreamingAgent {
         self.id
     }
 
-    fn status(&self) -> AgentStatus {
-        self.status
+    fn status(&self) -> AgentState {
+        self.status.clone()
     }
 
     async fn initialize(&mut self) -> Result<(), Self::Error> {
-        self.status = AgentStatus::Running;
+        self.status = AgentState::Running;
         self.send_event(AgentEvent::start(self.id, "Mock agent initialized")).await;
         Ok(())
     }
@@ -78,7 +78,7 @@ impl AgentProtocol for MockStreamingAgent {
     async fn process(&mut self, input: Self::Input) -> Result<Self::Output, Self::Error> {
         if input.is_empty() {
             let error = MockError("Empty input".to_string());
-            self.status = AgentStatus::Failed;
+            self.status = AgentState::Error;
             self.send_event(AgentEvent::error(self.id, error.to_string())).await;
             return Err(error);
         }
@@ -88,7 +88,7 @@ impl AgentProtocol for MockStreamingAgent {
             output.push_str(&chunk);
         }
 
-        self.status = AgentStatus::Completed;
+        self.status = AgentState::Ready;
         self.send_event(AgentEvent::done(self.id, output.clone())).await;
         Ok(output)
     }
@@ -98,7 +98,7 @@ impl AgentProtocol for MockStreamingAgent {
     }
 
     async fn cleanup(&mut self) -> Result<(), Self::Error> {
-        self.status = AgentStatus::Completed;
+        self.status = AgentState::Ready;
         Ok(())
     }
 }
@@ -131,17 +131,18 @@ mod tests {
 
     #[tokio::test]
     async fn test_mock_streaming_agent() {
-        let chunks = vec![
+        let original_chunks = vec![
             "Hello".to_string(),
             ", ".to_string(),
             "world!".to_string(),
         ];
         let (tx, mut rx) = mpsc::channel(10);
+        let chunks = original_chunks.clone();
         let mut agent = MockStreamingAgent::new(chunks).with_event_sender(tx);
 
         // Test initialization
         agent.initialize().await.unwrap();
-        assert_eq!(agent.status(), AgentStatus::Running);
+        assert_eq!(agent.status(), AgentState::Running);
 
         // Verify initialization event
         if let Some(AgentEvent::Start { agent_id, .. }) = rx.recv().await {
@@ -153,7 +154,7 @@ mod tests {
         // Test streaming
         let result = agent.process("test input".to_string()).await.unwrap();
         assert_eq!(result, "Hello, world!");
-        assert_eq!(agent.status(), AgentStatus::Completed);
+        assert_eq!(agent.status(), AgentState::Ready);
 
         // Verify streaming events
         let mut received_chunks = Vec::new();
@@ -170,9 +171,9 @@ mod tests {
         assert_eq!(received_chunks, vec!["Hello", ", ", "world!"]);
 
         // Test error handling
-        let mut agent = MockStreamingAgent::new(chunks);
+        let mut agent = MockStreamingAgent::new(original_chunks);
         let error = agent.process("".to_string()).await.unwrap_err();
         assert_eq!(error.to_string(), "Empty input");
-        assert_eq!(agent.status(), AgentStatus::Failed);
+        assert_eq!(agent.status(), AgentState::Error);
     }
 }

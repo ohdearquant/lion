@@ -1,10 +1,8 @@
 use super::{error::PluginError, Result};
 use crate::{
     storage::{ElementId, FileStorage},
-    types::{
-        plugin::{PluginManifest, PluginState},
-        traits::Validatable,
-    },
+    types::traits::Validatable,
+    plugin_manager::manifest::PluginManifest,
 };
 use serde_json::json;
 use std::collections::HashMap;
@@ -23,7 +21,7 @@ pub struct PluginMetadata {
     pub id: Uuid,
     pub manifest: PluginManifest,
     pub manifest_path: Option<String>,
-    pub state: PluginState,
+    pub state: crate::types::plugin::PluginState,
 }
 
 impl PluginRegistry {
@@ -42,7 +40,7 @@ impl PluginRegistry {
         manifest_path: Option<String>,
     ) -> Result<Uuid> {
         // Validate manifest
-        manifest.validate().map_err(PluginError::InvalidManifest)?;
+        manifest.validate().map_err(|e| PluginError::InvalidManifest(e.to_string()))?;
 
         let plugin_id = manifest.id;
 
@@ -50,6 +48,7 @@ impl PluginRegistry {
         let plugin_data = json!({
             "id": plugin_id.to_string(),
             "name": manifest.name,
+            "state": "Uninitialized",
             "version": manifest.version,
             "description": manifest.description,
             "wasm_path": manifest.wasm_path,
@@ -60,7 +59,7 @@ impl PluginRegistry {
             id: plugin_id,
             manifest: manifest.clone(),
             manifest_path,
-            state: PluginState::Uninitialized,
+            state: crate::types::plugin::PluginState::Uninitialized,
         };
 
         // Store in memory
@@ -116,6 +115,14 @@ impl PluginRegistry {
             manifest.wasm_path = Some(wasm_path.to_string());
         }
 
+        // Parse state from storage, defaulting to Uninitialized
+        let plugin_state = data.get("state")
+            .and_then(|v| v.as_str())
+            .map(|s| match s {
+                "Ready" => crate::types::plugin::PluginState::Ready,
+                _ => crate::types::plugin::PluginState::Uninitialized
+            }).unwrap_or(crate::types::plugin::PluginState::Uninitialized);
+            
         let metadata = PluginMetadata {
             id: plugin_id,
             manifest,
@@ -123,7 +130,7 @@ impl PluginRegistry {
                 .get("manifest_path")
                 .and_then(|v| v.as_str())
                 .map(String::from),
-            state: PluginState::Uninitialized,
+            state: plugin_state,
         };
 
         Ok(metadata)
@@ -175,7 +182,7 @@ impl PluginRegistry {
                             .get("manifest_path")
                             .and_then(|v| v.as_str())
                             .map(String::from),
-                        state: PluginState::Uninitialized,
+                        state: crate::types::plugin::PluginState::Uninitialized,
                     };
 
                     plugins.push(metadata);
@@ -187,10 +194,30 @@ impl PluginRegistry {
     }
 
     /// Update plugin state
-    pub fn update_state(&self, plugin_id: Uuid, state: PluginState) -> Result<()> {
+    pub fn update_state(&self, plugin_id: Uuid, state: crate::types::plugin::PluginState) -> Result<()> {
         if let Ok(mut plugins) = self.plugins.write() {
             if let Some(metadata) = plugins.get_mut(&plugin_id) {
+                // Convert state to string first
+                let state_str = match &state {
+                    crate::types::plugin::PluginState::Ready => "Ready",
+                    _ => "Uninitialized"
+                };
+
+                // Update state in memory
                 metadata.state = state;
+                
+                // Update state in storage
+                let plugin_data = json!({
+                    "id": plugin_id.to_string(),
+                    "name": metadata.manifest.name,
+                    "state": state_str,
+                    "version": metadata.manifest.version,
+                    "description": metadata.manifest.description,
+                    "wasm_path": metadata.manifest.wasm_path,
+                    "manifest_path": metadata.manifest_path,
+                });
+                self.storage.set(ElementId(plugin_id), plugin_data)
+                    .map_err(|e| PluginError::LoadError(format!("Failed to update plugin state: {}", e)))?;
                 return Ok(());
             }
         }
@@ -247,10 +274,10 @@ mod tests {
 
         // Update state
         registry
-            .update_state(plugin_id, PluginState::Ready)
+            .update_state(plugin_id, crate::types::plugin::PluginState::Ready)
             .unwrap();
         let metadata = registry.get(plugin_id).unwrap();
-        assert_eq!(metadata.state, PluginState::Ready);
+        assert_eq!(metadata.state, crate::types::plugin::PluginState::Ready);
 
         // Remove plugin
         registry.remove(plugin_id).unwrap();

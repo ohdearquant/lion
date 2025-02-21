@@ -1,4 +1,4 @@
-use agentic_core::orchestrator::events::SystemEvent;
+use lion_core::orchestrator::events::SystemEvent;
 use std::collections::HashMap;
 use tokio::sync::{broadcast, mpsc, RwLock};
 use uuid::Uuid;

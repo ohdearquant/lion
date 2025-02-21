@@ -1,4 +1,4 @@
-use crate::types::agent::AgentStatus;
+use crate::types::agent::AgentState;
 use async_trait::async_trait;
 use serde::{de::DeserializeOwned, Serialize};
 use std::error::Error;
@@ -18,7 +18,7 @@ pub trait AgentProtocol: Send + Sync {
     fn id(&self) -> Uuid;
 
     /// Get the agent's current status
-    fn status(&self) -> AgentStatus;
+    fn status(&self) -> AgentState;
 
     /// Initialize the agent with any required configuration
     async fn initialize(&mut self) -> Result<(), Self::Error>;
@@ -61,7 +61,7 @@ mod tests {
 
     struct TestAgent {
         id: Uuid,
-        status: AgentStatus,
+        status: AgentState,
     }
 
     #[async_trait]
@@ -74,12 +74,12 @@ mod tests {
             self.id
         }
 
-        fn status(&self) -> AgentStatus {
-            self.status
+        fn status(&self) -> AgentState {
+            self.status.clone()
         }
 
         async fn initialize(&mut self) -> Result<(), Self::Error> {
-            self.status = AgentStatus::Running;
+            self.status = AgentState::Running;
             Ok(())
         }
 
@@ -95,7 +95,7 @@ mod tests {
         }
 
         async fn cleanup(&mut self) -> Result<(), Self::Error> {
-            self.status = AgentStatus::Completed;
+            self.status = AgentState::Ready;
             Ok(())
         }
     }
@@ -104,12 +104,12 @@ mod tests {
     async fn test_agent_protocol() {
         let mut agent = TestAgent {
             id: Uuid::new_v4(),
-            status: AgentStatus::Initializing,
+            status: AgentState::Initializing,
         };
 
         // Test initialization
         agent.initialize().await.unwrap();
-        assert_eq!(agent.status(), AgentStatus::Running);
+        assert_eq!(agent.status(), AgentState::Running);
 
         // Test processing
         let result = agent.process("test input".to_string()).await.unwrap();
@@ -125,6 +125,6 @@ mod tests {
 
         // Test cleanup
         agent.cleanup().await.unwrap();
-        assert_eq!(agent.status(), AgentStatus::Completed);
+        assert_eq!(agent.status(), AgentState::Ready);
     }
 }

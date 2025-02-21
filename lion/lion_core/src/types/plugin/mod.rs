@@ -1,238 +1,205 @@
-use async_trait::async_trait;
-use serde::{Deserialize, Serialize};
-use serde_json::Value;
-use std::path::PathBuf;
-use uuid::Uuid;
-use std::collections::HashSet;
-
-use super::traits::{Describable, Identifiable, Validatable, Versionable};
-
 mod response;
+
 pub use response::PluginResponse;
 
-/// Core plugin interface that all plugins must implement
-#[async_trait]
-pub trait Plugin: Identifiable + Describable + Versionable + Validatable {
-    /// Initialize the plugin with its configuration
-    async fn initialize(&mut self, config: Value) -> Result<(), Self::Error>;
+use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
+use uuid::Uuid;
+use super::traits::{Identifiable, Stateful, Validatable};
+use super::{Error, ParticipantState, Result};
 
-    /// Execute the plugin with the given input
-    async fn execute(&self, input: Value) -> Result<Value, Self::Error>;
+/// Represents the state of a plugin in the system
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum PluginState {
+    /// Plugin is registered but not initialized
+    Uninitialized,
+    /// Plugin is being initialized
+    Initializing,
+    /// Plugin is ready for use
+    Ready,
+    /// Plugin is currently running
+    Running,
+    /// Plugin has encountered an error
+    Error,
+    /// Plugin is disabled
+    Disabled,
+    /// Plugin is processing a language task
+    ProcessingLanguage,
+}
 
-    /// Handle a language message from an agent
-    async fn handle_language_message(&self, message: Value) -> Result<Value, Self::Error> {
-        // Default implementation treats it as a regular execute
-        self.execute(message).await
+impl From<PluginState> for ParticipantState {
+    fn from(state: PluginState) -> Self {
+        match state {
+            PluginState::Uninitialized => ParticipantState::Uninitialized,
+            PluginState::Initializing => ParticipantState::Initializing,
+            PluginState::Ready => ParticipantState::Ready,
+            PluginState::Running => ParticipantState::Running,
+            PluginState::Error => ParticipantState::Error,
+            PluginState::Disabled => ParticipantState::Disabled,
+            PluginState::ProcessingLanguage => ParticipantState::ProcessingLanguage,
+        }
     }
-
-    /// Clean up any resources used by the plugin
-    async fn cleanup(&mut self) -> Result<(), Self::Error>;
-
-    /// Get the plugin's manifest
-    fn manifest(&self) -> &PluginManifest;
-
-    /// Get the plugin's current state
-    fn state(&self) -> PluginState;
 }
 
-/// Metadata about a plugin
+/// Language processing capabilities of a plugin
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PluginManifest {
-    /// Unique identifier for the plugin
-    pub id: Uuid,
-
-    /// The name of the plugin
-    pub name: String,
-
-    /// The version of the plugin
-    pub version: String,
-
-    /// A description of what the plugin does
-    pub description: String,
-
-    /// Path to the WASM file, relative to the manifest
-    pub wasm_path: Option<String>,
-
-    /// Optional configuration schema for the plugin
-    #[serde(default)]
-    pub config_schema: Option<Value>,
-
-    /// Optional input schema for the plugin
-    #[serde(default)]
-    pub input_schema: Option<Value>,
-
-    /// Optional output schema for the plugin
-    #[serde(default)]
-    pub output_schema: Option<Value>,
-
-    /// Optional dependencies required by the plugin
-    #[serde(default)]
-    pub dependencies: Vec<PluginDependency>,
-
-    /// Optional capabilities required by the plugin
-    #[serde(default)]
-    pub capabilities: Vec<String>,
-
-    /// Language network protocol capabilities
-    #[serde(default)]
-    pub language_capabilities: LanguageCapabilities,
-
-    /// Security settings
-    #[serde(default)]
-    pub security: SecuritySettings,
+pub struct LanguageCapabilities {
+    /// Whether this plugin can process language
+    pub language_processor: bool,
+    /// Whether this plugin can generate new content
+    pub can_generate: bool,
+    /// Whether this plugin can modify existing content
+    pub can_modify: bool,
+    /// Maximum input length this plugin can handle
+    pub max_input_length: Option<usize>,
+    /// Maximum output length this plugin can produce
+    pub max_output_length: Option<usize>,
+    /// Supported language models
+    pub supported_models: HashSet<String>,
+    /// Supported languages (ISO codes)
+    pub supported_languages: HashSet<String>,
 }
 
-/// Language network protocol capabilities for a plugin
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct LanguageCapabilities {
-    /// Whether this plugin can process language messages
-    pub language_processor: bool,
-    
-    /// Supported language models or formats
-    pub supported_models: HashSet<String>,
-    
-    /// Maximum concurrent language processing tasks
-    pub max_concurrent_tasks: usize,
-    
-    /// Whether this plugin can generate responses
-    pub can_generate: bool,
-    
-    /// Whether this plugin can modify messages
-    pub can_modify: bool,
+impl Default for LanguageCapabilities {
+    fn default() -> Self {
+        Self {
+            language_processor: false,
+            can_generate: false,
+            can_modify: false,
+            max_input_length: None,
+            max_output_length: None,
+            supported_models: HashSet::new(),
+            supported_languages: HashSet::new(),
+        }
+    }
 }
 
 /// Security settings for a plugin
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct SecuritySettings {
-    /// Whether the plugin runs in a sandbox
-    pub sandboxed: bool,
-    
-    /// Maximum memory usage in MB
-    pub memory_limit_mb: usize,
-    
-    /// Maximum execution time in seconds
-    pub time_limit_secs: usize,
-    
-    /// Allowed network domains
-    pub allowed_domains: HashSet<String>,
-    
-    /// Whether file system access is allowed
-    pub allow_fs_access: bool,
-}
-
-/// Dependency requirement for a plugin
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PluginDependency {
-    /// Name of the required plugin
-    pub name: String,
-
-    /// Version requirement (semver)
-    pub version_req: String,
+pub struct SecuritySettings {
+    /// Whether this plugin runs in a sandbox
+    pub sandboxed: bool,
+    /// Memory limit in megabytes
+    pub memory_limit_mb: usize,
+    /// Time limit in seconds
+    pub time_limit_secs: u64,
+    /// Network access allowed
+    pub network_enabled: bool,
+    /// File system access allowed
+    pub filesystem_enabled: bool,
+    /// Allowed capabilities (e.g., "network", "storage")
+    pub allowed_capabilities: HashSet<String>,
 }
 
-/// Current state of a plugin
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum PluginState {
-    /// Plugin is not initialized
-    Uninitialized,
-    /// Plugin is initialized and ready
-    Ready,
-    /// Plugin is currently executing
-    Running,
-    /// Plugin is processing a language message
-    ProcessingLanguage,
-    /// Plugin has encountered an error
-    Error,
-    /// Plugin has been disabled
-    Disabled,
-}
-
-impl PluginManifest {
-    /// Create a new plugin manifest
-    pub fn new(name: String, version: String, description: String) -> Self {
+impl Default for SecuritySettings {
+    fn default() -> Self {
         Self {
-            id: Uuid::new_v4(),
-            name,
-            version,
-            description,
-            wasm_path: None,
-            config_schema: None,
-            input_schema: None,
-            output_schema: None,
-            dependencies: Vec::new(),
-            capabilities: Vec::new(),
-            language_capabilities: LanguageCapabilities::default(),
-            security: SecuritySettings::default(),
+            sandboxed: true,
+            memory_limit_mb: 512,
+            time_limit_secs: 30,
+            network_enabled: false,
+            filesystem_enabled: false,
+            allowed_capabilities: HashSet::new(),
         }
-    }
-
-    /// Get the absolute path to the WASM file
-    pub fn resolve_wasm_path(&self, manifest_dir: &PathBuf) -> Option<PathBuf> {
-        self.wasm_path.as_ref().map(|path| manifest_dir.join(path))
-    }
-
-    /// Create a response from this manifest
-    pub fn into_response(&self) -> PluginResponse {
-        PluginResponse::new(
-            self.id,
-            self.name.clone(),
-            self.version.clone(),
-            self.description.clone(),
-        )
-    }
-
-    /// Check if the plugin supports a specific language model
-    pub fn supports_model(&self, model: &str) -> bool {
-        self.language_capabilities.supported_models.contains(model)
-    }
-
-    /// Check if the plugin has access to a specific domain
-    pub fn can_access_domain(&self, domain: &str) -> bool {
-        self.security.allowed_domains.contains(domain)
     }
 }
 
-impl Validatable for PluginManifest {
-    type Error = String;
+/// A plugin instance in the system
+#[derive(Debug)]
+pub struct Plugin {
+    /// Unique identifier
+    id: Uuid,
+    /// Current state
+    state: PluginState,
+    /// Language capabilities
+    capabilities: LanguageCapabilities,
+    /// Security settings
+    security: SecuritySettings,
+}
 
-    fn validate(&self) -> Result<(), Self::Error> {
-        if self.name.is_empty() {
-            return Err("Plugin name cannot be empty".to_string());
+impl Plugin {
+    /// Create a new plugin instance
+    pub fn new(
+        id: Uuid,
+        capabilities: LanguageCapabilities,
+        security: SecuritySettings,
+    ) -> Self {
+        Self {
+            id,
+            state: PluginState::Uninitialized,
+            capabilities,
+            security,
         }
-        if self.version.is_empty() {
-            return Err("Plugin version cannot be empty".to_string());
-        }
-        if self.description.is_empty() {
-            return Err("Plugin description cannot be empty".to_string());
-        }
-        Ok(())
+    }
+
+    /// Get the plugin's language capabilities
+    pub fn capabilities(&self) -> &LanguageCapabilities {
+        &self.capabilities
+    }
+
+    /// Get the plugin's security settings
+    pub fn security(&self) -> &SecuritySettings {
+        &self.security
     }
 }
 
-impl Identifiable for PluginManifest {
+impl Identifiable for Plugin {
     fn id(&self) -> Uuid {
         self.id
     }
 }
 
-impl Describable for PluginManifest {
-    fn name(&self) -> &str {
-        &self.name
+impl Stateful for Plugin {
+    fn state(&self) -> ParticipantState {
+        self.state.clone().into()
     }
 
-    fn description(&self) -> &str {
-        &self.description
+    fn set_state(&mut self, state: ParticipantState) {
+        self.state = match state {
+            ParticipantState::Uninitialized => PluginState::Uninitialized,
+            ParticipantState::Initializing => PluginState::Initializing,
+            ParticipantState::Ready => PluginState::Ready,
+            ParticipantState::Running => PluginState::Running,
+            ParticipantState::Error => PluginState::Error,
+            ParticipantState::Disabled => PluginState::Disabled,
+            ParticipantState::ProcessingLanguage => PluginState::ProcessingLanguage,
+            _ => PluginState::Error,
+        };
     }
 }
 
-impl Versionable for PluginManifest {
-    fn version(&self) -> String {
-        self.version.clone()
-    }
+impl Validatable for Plugin {
+    fn validate(&self) -> Result<()> {
+        // Validate ID
+        if self.id == Uuid::nil() {
+            return Err(Error::InvalidState("Plugin ID cannot be nil".into()));
+        }
 
-    fn is_compatible_with(&self, other_version: &str) -> bool {
-        // Simple version check for now
-        self.version == other_version
+        // Basic capability checks
+        if self.capabilities.language_processor {
+            if self.capabilities.supported_models.is_empty() {
+                return Err(Error::InvalidState(
+                    "Language processor must support at least one model".into(),
+                ));
+            }
+            if self.capabilities.supported_languages.is_empty() {
+                return Err(Error::InvalidState(
+                    "Language processor must support at least one language".into(),
+                ));
+            }
+        }
+
+        // Security checks
+        if self.security.sandboxed {
+            if self.security.memory_limit_mb == 0 {
+                return Err(Error::InvalidState("Memory limit cannot be zero".into()));
+            }
+            if self.security.time_limit_secs == 0 {
+                return Err(Error::InvalidState("Time limit cannot be zero".into()));
+            }
+        }
+
+        Ok(())
     }
 }
 
@@ -241,63 +208,57 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_manifest_validation() {
-        let manifest = PluginManifest::new(
+    fn test_plugin_state_conversion() {
+        assert_eq!(
+            ParticipantState::from(PluginState::Ready),
+            ParticipantState::Ready
+        );
+        assert_eq!(
+            ParticipantState::from(PluginState::Error),
+            ParticipantState::Error
+        );
+    }
+
+    #[test]
+    fn test_plugin_response() {
+        let id = Uuid::new_v4();
+        let response = PluginResponse::new(
+            id,
             "test-plugin".to_string(),
             "1.0.0".to_string(),
             "A test plugin".to_string(),
         );
-        assert!(manifest.validate().is_ok());
 
-        let invalid = PluginManifest::new(
-            "".to_string(),
-            "1.0.0".to_string(),
-            "A test plugin".to_string(),
-        );
-        assert!(invalid.validate().is_err());
+        assert_eq!(response.id, id);
+        assert_eq!(response.name, "test-plugin");
+        assert_eq!(response.version, "1.0.0");
+        assert_eq!(response.description, "A test plugin");
+        assert!(response.status.is_none());
+        assert!(response.error.is_none());
     }
 
     #[test]
-    fn test_manifest_into_response() {
-        let manifest = PluginManifest::new(
-            "test-plugin".to_string(),
-            "1.0.0".to_string(),
-            "A test plugin".to_string(),
+    fn test_plugin_validation() {
+        let mut capabilities = LanguageCapabilities::default();
+        capabilities.language_processor = true;
+        capabilities.supported_models.insert("gpt-4".to_string());
+        capabilities.supported_languages.insert("en".to_string());
+
+        let plugin = Plugin::new(
+            Uuid::new_v4(),
+            capabilities,
+            SecuritySettings::default(),
         );
 
-        let response = manifest.into_response();
-        assert_eq!(response.id, manifest.id);
-        assert_eq!(response.name, manifest.name);
-        assert_eq!(response.version, manifest.version);
-        assert_eq!(response.description, manifest.description);
-    }
+        assert!(plugin.validate().is_ok());
 
-    #[test]
-    fn test_language_capabilities() {
-        let mut manifest = PluginManifest::new(
-            "language-plugin".to_string(),
-            "1.0.0".to_string(),
-            "A language plugin".to_string(),
+        // Test invalid plugin (nil UUID)
+        let invalid_plugin = Plugin::new(
+            Uuid::nil(),
+            LanguageCapabilities::default(),
+            SecuritySettings::default(),
         );
 
-        manifest.language_capabilities.language_processor = true;
-        manifest.language_capabilities.supported_models.insert("gpt-4".to_string());
-        
-        assert!(manifest.supports_model("gpt-4"));
-        assert!(!manifest.supports_model("gpt-3"));
-    }
-
-    #[test]
-    fn test_security_settings() {
-        let mut manifest = PluginManifest::new(
-            "secure-plugin".to_string(),
-            "1.0.0".to_string(),
-            "A secure plugin".to_string(),
-        );
-
-        manifest.security.allowed_domains.insert("api.example.com".to_string());
-        
-        assert!(manifest.can_access_domain("api.example.com"));
-        assert!(!manifest.can_access_domain("other.com"));
+        assert!(invalid_plugin.validate().is_err());
     }
 }

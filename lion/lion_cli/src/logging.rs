@@ -1,8 +1,7 @@
-use agentic_core::orchestrator::{
+use lion_core::orchestrator::{
     events::{AgentEvent, PluginEvent, SystemEvent, TaskEvent},
     metadata::EventMetadata,
 };
-use std::time::Duration;
 use tracing::{debug, error, info};
 use uuid::Uuid;
 
@@ -108,13 +107,13 @@ pub fn log_event(event: &SystemEvent) {
             }
             AgentEvent::PartialOutput {
                 agent_id,
-                chunk,
+                output,
                 metadata,
             } => {
                 debug!(
                     agent_id = %agent_id,
                     correlation_id = ?metadata.correlation_id,
-                    "Agent partial output: {}", chunk
+                    "Agent partial output: {}", output
                 );
             }
             AgentEvent::Completed {
@@ -233,7 +232,7 @@ mod tests {
         // Test AgentPartialOutput
         log_event(&SystemEvent::Agent(AgentEvent::PartialOutput {
             agent_id,
-            chunk: "partial output".into(),
+            output: "partial output".into(),
             metadata: metadata.clone(),
         }));
 

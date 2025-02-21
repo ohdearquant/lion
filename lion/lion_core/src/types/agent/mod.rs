@@ -1,213 +1,246 @@
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 use std::collections::HashSet;
+use uuid::Uuid;
+use super::traits::{Describable, Validatable, Versionable};
+use super::{Error, ParticipantState, Result};
 
-/// Information about an agent in the language network
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AgentInfo {
-    /// Unique identifier for the agent
-    pub id: Uuid,
-    /// Current status of the agent
-    pub status: AgentStatus,
-    /// Optional error message if the agent failed
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub error: Option<String>,
-    /// Agent capabilities and permissions
-    #[serde(default)]
-    pub capabilities: AgentCapabilities,
-    /// Current conversation context
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub context: Option<ConversationContext>,
-}
-
-/// Status of an agent in the language network
+/// Represents the state of an agent in the system
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum AgentStatus {
-    /// Agent is initializing
+pub enum AgentState {
+    /// Agent is registered but not initialized
+    Uninitialized,
+    /// Agent is being initialized
     Initializing,
-    /// Agent is running
+    /// Agent is ready for tasks
+    Ready,
+    /// Agent is currently processing
     Running,
-    /// Agent is waiting for input from another agent
-    Waiting,
-    /// Agent is processing a language message
-    Processing,
-    /// Agent has completed successfully
-    Completed,
-    /// Agent has failed
-    Failed,
+    /// Agent has encountered an error
+    Error,
+    /// Agent is disabled
+    Disabled,
+    /// Agent is processing a language task
+    ProcessingLanguage,
     /// Agent is paused
     Paused,
 }
 
-/// Agent capabilities and permissions in the language network
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct AgentCapabilities {
-    /// Whether the agent can initiate conversations
-    pub can_initiate: bool,
-    /// Whether the agent can call plugins
-    pub can_use_plugins: bool,
-    /// Allowed plugin domains (if empty, all domains are allowed)
-    pub allowed_plugins: HashSet<String>,
-    /// Maximum concurrent conversations
-    pub max_concurrent_conversations: usize,
-    /// Network access permissions
-    pub network_permissions: NetworkPermissions,
-}
-
-/// Network access permissions for an agent
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct NetworkPermissions {
-    /// Whether network access is allowed
-    pub enabled: bool,
-    /// Allowed domains (if empty and enabled=true, all domains are allowed)
-    pub allowed_domains: HashSet<String>,
-    /// Maximum requests per minute
-    pub rate_limit: usize,
-}
-
-impl Default for NetworkPermissions {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            allowed_domains: HashSet::new(),
-            rate_limit: 60,
+impl From<AgentState> for ParticipantState {
+    fn from(state: AgentState) -> Self {
+        match state {
+            AgentState::Uninitialized => ParticipantState::Uninitialized,
+            AgentState::Initializing => ParticipantState::Initializing,
+            AgentState::Ready => ParticipantState::Ready,
+            AgentState::Running => ParticipantState::Running,
+            AgentState::Error => ParticipantState::Error,
+            AgentState::Disabled => ParticipantState::Disabled,
+            AgentState::ProcessingLanguage => ParticipantState::ProcessingLanguage,
+            AgentState::Paused => ParticipantState::Paused,
         }
     }
 }
 
-/// Context for an agent's conversation in the language network
+/// Agent capabilities in the system
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ConversationContext {
-    /// ID of the current conversation
-    pub conversation_id: Uuid,
-    /// IDs of other agents in the conversation
-    pub participant_ids: HashSet<Uuid>,
-    /// Current conversation state
-    pub state: ConversationState,
-    /// Timestamp of last activity
-    pub last_activity: chrono::DateTime<chrono::Utc>,
+pub struct AgentCapabilities {
+    /// Whether this agent can process language
+    pub language_processor: bool,
+    /// Whether this agent can generate content
+    pub can_generate: bool,
+    /// Whether this agent can modify content
+    pub can_modify: bool,
+    /// Maximum concurrent tasks
+    pub max_concurrent_tasks: usize,
+    /// Supported task types
+    pub supported_tasks: HashSet<String>,
+    /// Required plugins
+    pub required_plugins: HashSet<Uuid>,
 }
 
-/// State of a conversation in the language network
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub enum ConversationState {
-    /// Conversation is active
-    Active,
-    /// Waiting for response from specific agent
-    WaitingFor(Uuid),
-    /// Conversation is completed
-    Completed,
-    /// Conversation failed
-    Failed(String),
+impl Default for AgentCapabilities {
+    fn default() -> Self {
+        Self {
+            language_processor: true,
+            can_generate: true,
+            can_modify: true,
+            max_concurrent_tasks: 1,
+            supported_tasks: HashSet::new(),
+            required_plugins: HashSet::new(),
+        }
+    }
+}
+
+/// Resource usage metrics for an agent
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct AgentMetrics {
+    /// Number of tasks completed
+    pub tasks_completed: usize,
+    /// Number of tasks failed
+    pub tasks_failed: usize,
+    /// Average task completion time in milliseconds
+    pub avg_completion_time_ms: f64,
+    /// Total processing time in milliseconds
+    pub total_processing_time_ms: u64,
+    /// Memory usage in bytes
+    pub memory_usage: usize,
+    /// Number of messages processed
+    pub messages_processed: usize,
+}
+
+/// Status information for an agent
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentStatus {
+    /// Agent ID
+    pub agent_id: Uuid,
+    /// Current state
+    pub state: AgentState,
+    /// Number of active tasks
+    pub active_tasks: usize,
+    /// Last activity timestamp
+    pub last_activity: chrono::DateTime<chrono::Utc>,
+    /// Memory usage in bytes
+    pub memory_usage: usize,
+    /// Additional status information
+    pub metadata: serde_json::Value,
+}
+
+/// Public information about an agent
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentInfo {
+    /// Agent ID
+    pub id: Uuid,
+    /// Agent name
+    pub name: String,
+    /// Agent description
+    pub description: String,
+    /// Agent version
+    pub version: String,
+    /// Agent capabilities
+    pub capabilities: AgentCapabilities,
+    /// Current status
+    pub status: AgentStatus,
+    /// Additional metadata
+    pub metadata: serde_json::Value,
 }
 
 impl AgentInfo {
-    /// Create a new agent info
-    pub fn new(id: Uuid) -> Self {
+    /// Create new agent info
+    pub fn new(
+        id: Uuid,
+        name: impl Into<String>,
+        description: impl Into<String>,
+        version: impl Into<String>,
+        capabilities: AgentCapabilities,
+    ) -> Self {
         Self {
             id,
-            status: AgentStatus::Initializing,
-            error: None,
-            capabilities: AgentCapabilities::default(),
-            context: None,
+            name: name.into(),
+            description: description.into(),
+            version: version.into(),
+            capabilities,
+            status: AgentStatus {
+                agent_id: id,
+                state: AgentState::Uninitialized,
+                active_tasks: 0,
+                last_activity: chrono::Utc::now(),
+                memory_usage: 0,
+                metadata: serde_json::json!({}),
+            },
+            metadata: serde_json::json!({}),
         }
     }
 
-    /// Set the agent status
-    pub fn with_status(mut self, status: AgentStatus) -> Self {
-        self.status = status;
+    /// Set the agent's status
+    pub fn with_status(mut self, state: AgentState) -> Self {
+        self.status.state = state;
+        self.status.last_activity = chrono::Utc::now();
         self
     }
 
-    /// Set the error message
+    /// Set an error state with message
     pub fn with_error(mut self, error: impl Into<String>) -> Self {
-        self.error = Some(error.into());
-        self.status = AgentStatus::Failed;
+        self.status.state = AgentState::Error;
+        self.status.last_activity = chrono::Utc::now();
+        self.status.metadata = serde_json::json!({
+            "error": error.into()
+        });
         self
     }
+}
 
-    /// Set agent capabilities
-    pub fn with_capabilities(mut self, capabilities: AgentCapabilities) -> Self {
-        self.capabilities = capabilities;
-        self
+impl Describable for AgentInfo {
+    fn name(&self) -> &str {
+        &self.name
     }
 
-    /// Set conversation context
-    pub fn with_context(mut self, context: ConversationContext) -> Self {
-        self.context = Some(context);
-        self
+    fn description(&self) -> &str {
+        &self.description
     }
 
-    /// Check if the agent can use a specific plugin
-    pub fn can_use_plugin(&self, plugin_id: &str) -> bool {
-        self.capabilities.can_use_plugins && (
-            self.capabilities.allowed_plugins.is_empty() ||
-            self.capabilities.allowed_plugins.contains(plugin_id)
-        )
+    fn metadata(&self) -> &serde_json::Value {
+        &self.metadata
+    }
+}
+
+impl Versionable for AgentInfo {
+    fn version(&self) -> &str {
+        &self.version
     }
 
-    /// Check if the agent can access a specific domain
-    pub fn can_access_domain(&self, domain: &str) -> bool {
-        self.capabilities.network_permissions.enabled && (
-            self.capabilities.network_permissions.allowed_domains.is_empty() ||
-            self.capabilities.network_permissions.allowed_domains.contains(domain)
-        )
+    fn is_compatible_with(&self, requirement: &str) -> bool {
+        // TODO: Implement proper version compatibility check
+        self.version == requirement
+    }
+}
+
+impl Validatable for AgentInfo {
+    fn validate(&self) -> Result<()> {
+        if self.name.is_empty() {
+            return Err(Error::InvalidState("Agent name cannot be empty".into()));
+        }
+        if self.version.is_empty() {
+            return Err(Error::InvalidState("Agent version cannot be empty".into()));
+        }
+        Ok(())
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::Utc;
 
     #[test]
-    fn test_agent_info() {
-        let id = Uuid::new_v4();
-        let info = AgentInfo::new(id);
-        assert_eq!(info.id, id);
-        assert_eq!(info.status, AgentStatus::Initializing);
-        assert!(info.error.is_none());
-
-        let info = info.with_status(AgentStatus::Running);
-        assert_eq!(info.status, AgentStatus::Running);
-        assert!(info.error.is_none());
-
-        let info = info.with_error("test error");
-        assert_eq!(info.status, AgentStatus::Failed);
-        assert_eq!(info.error, Some("test error".to_string()));
+    fn test_agent_state_conversion() {
+        assert_eq!(
+            ParticipantState::from(AgentState::Ready),
+            ParticipantState::Ready
+        );
+        assert_eq!(
+            ParticipantState::from(AgentState::Error),
+            ParticipantState::Error
+        );
     }
 
     #[test]
-    fn test_agent_capabilities() {
-        let id = Uuid::new_v4();
-        let mut capabilities = AgentCapabilities::default();
-        capabilities.can_use_plugins = true;
-        capabilities.allowed_plugins.insert("test_plugin".to_string());
+    fn test_agent_info_validation() {
+        let capabilities = AgentCapabilities::default();
         
-        let info = AgentInfo::new(id).with_capabilities(capabilities);
-        assert!(info.can_use_plugin("test_plugin"));
-        assert!(!info.can_use_plugin("other_plugin"));
-    }
+        let valid_info = AgentInfo::new(
+            Uuid::new_v4(),
+            "test-agent",
+            "A test agent",
+            "1.0.0",
+            capabilities.clone(),
+        );
+        assert!(valid_info.validate().is_ok());
 
-    #[test]
-    fn test_conversation_context() {
-        let id = Uuid::new_v4();
-        let conversation_id = Uuid::new_v4();
-        let other_agent_id = Uuid::new_v4();
-        
-        let mut participants = HashSet::new();
-        participants.insert(other_agent_id);
-        
-        let context = ConversationContext {
-            conversation_id,
-            participant_ids: participants,
-            state: ConversationState::Active,
-            last_activity: Utc::now(),
-        };
-        
-        let info = AgentInfo::new(id).with_context(context);
-        assert!(info.context.is_some());
-        assert_eq!(info.context.unwrap().conversation_id, conversation_id);
+        let invalid_info = AgentInfo::new(
+            Uuid::new_v4(),
+            "",
+            "A test agent",
+            "1.0.0",
+            capabilities,
+        );
+        assert!(invalid_info.validate().is_err());
     }
 }

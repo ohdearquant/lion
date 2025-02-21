@@ -27,27 +27,40 @@ pub enum NetworkEvent {
     Message(LanguageMessage),
     /// A partial output from an agent
     PartialOutput {
+        /// Agent ID
         agent_id: Uuid,
+        /// Content of the output
         content: String,
+        /// Message ID for this chunk
         message_id: Uuid,
+        /// Sequence number
         sequence: u32,
     },
     /// An agent status update
     AgentStatus {
+        /// Agent ID
         agent_id: Uuid,
+        /// Status message
         status: String,
+        /// Timestamp
         timestamp: chrono::DateTime<chrono::Utc>,
     },
     /// A plugin execution event
     PluginEvent {
+        /// Plugin ID
         plugin_id: Uuid,
+        /// Event type
         event_type: String,
+        /// Event data
         data: serde_json::Value,
     },
     /// A system event
     System {
+        /// Event type
         event_type: String,
+        /// Event message
         message: String,
+        /// Timestamp
         timestamp: chrono::DateTime<chrono::Utc>,
     },
     /// Keep-alive event
@@ -74,7 +87,6 @@ impl Default for SseKeepAlive {
 
 /// A Server-Sent Events stream with configurable keep-alive
 /// and support for multi-agent language network events
-#[derive(Debug)]
 pub struct EventStream<T> {
     /// The underlying stream of events
     pub stream: Box<dyn Stream<Item = Result<T, Infallible>> + Send>,
@@ -86,15 +98,14 @@ pub struct EventStream<T> {
     pub event_filter: Option<Vec<String>>,
 }
 
-impl<T> EventStream<T> {
+impl<T: Clone + Send + 'static> EventStream<T> {
     /// Create a new event stream from a broadcast receiver
-    pub fn new(rx: broadcast::Receiver<T>) -> Self
-    where
-        T: Clone + Send + 'static,
-    {
-        let stream = BroadcastStream::new(rx).map(|msg| {
-            Ok::<_, Infallible>(msg.unwrap_or_else(|e| panic!("Error receiving message: {}", e)))
-        });
+    pub fn new(rx: broadcast::Receiver<T>) -> Self {
+        let stream = BroadcastStream::new(rx)
+            .map(|msg| match msg {
+                Ok(value) => Ok(value),
+                Err(e) => panic!("Error receiving message: {}", e),
+            });
 
         Self {
             stream: Box::new(stream),
@@ -166,7 +177,7 @@ impl NetworkEventSender {
     pub fn send_message(&self, message: LanguageMessage) -> Result<(), SseError> {
         self.tx
             .send(NetworkEvent::Message(message))
-            .map_err(|e| SseError::SendError(e.to_string()))
+            .map(|_| ()).map_err(|e| SseError::SendError(e.to_string()))
     }
 
     /// Send a partial output
@@ -184,7 +195,7 @@ impl NetworkEventSender {
                 message_id,
                 sequence,
             })
-            .map_err(|e| SseError::SendError(e.to_string()))
+            .map(|_| ()).map_err(|e| SseError::SendError(e.to_string()))
     }
 
     /// Send an agent status update
@@ -199,7 +210,7 @@ impl NetworkEventSender {
                 status,
                 timestamp: chrono::Utc::now(),
             })
-            .map_err(|e| SseError::SendError(e.to_string()))
+            .map(|_| ()).map_err(|e| SseError::SendError(e.to_string()))
     }
 
     /// Send a plugin event
@@ -215,7 +226,7 @@ impl NetworkEventSender {
                 event_type,
                 data,
             })
-            .map_err(|e| SseError::SendError(e.to_string()))
+            .map(|_| ()).map_err(|e| SseError::SendError(e.to_string()))
     }
 
     /// Send a system event
@@ -230,7 +241,7 @@ impl NetworkEventSender {
                 message,
                 timestamp: chrono::Utc::now(),
             })
-            .map_err(|e| SseError::SendError(e.to_string()))
+            .map(|_| ()).map_err(|e| SseError::SendError(e.to_string()))
     }
 
     /// Subscribe to events
@@ -248,15 +259,14 @@ impl Default for NetworkEventSender {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tokio::sync::broadcast;
 
     #[tokio::test]
     async fn test_event_stream() {
-        let (tx, rx) = broadcast::channel(100);
-        let stream = EventStream::new(rx);
+        let (tx, rx) = broadcast::channel::<NetworkEvent>(100);
+        let stream: EventStream<NetworkEvent> = EventStream::new(rx);
 
         assert!(stream.keep_alive.is_some());
-        let keep_alive = stream.keep_alive.unwrap();
+        let keep_alive = stream.keep_alive.as_ref().unwrap();
         assert_eq!(keep_alive.interval, Duration::from_secs(15));
         assert_eq!(keep_alive.text, "keep-alive");
 
@@ -265,7 +275,7 @@ mod tests {
             .keep_alive_interval(Duration::from_secs(30))
             .keep_alive_text("ping");
 
-        let keep_alive = stream.keep_alive.unwrap();
+        let keep_alive = stream.keep_alive.as_ref().unwrap();
         assert_eq!(keep_alive.interval, Duration::from_secs(30));
         assert_eq!(keep_alive.text, "ping");
 
@@ -287,7 +297,7 @@ mod tests {
             id: Uuid::new_v4(),
             content: "test".to_string(),
             sender_id: Uuid::new_v4(),
-            recipient_ids: vec![Uuid::new_v4()].into_iter().collect(),
+            recipient_ids: vec![Uuid::new_v4()].into_iter().collect::<std::collections::HashSet<_>>(),
             message_type: LanguageMessageType::Text,
             metadata: serde_json::json!({}),
             timestamp: chrono::Utc::now(),

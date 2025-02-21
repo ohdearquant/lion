@@ -3,8 +3,11 @@ name = "lion_ui"
 version = "0.0.1-stage2-phase3"
 edition = "2021"
 
+[lints.rust]
+unused_imports = "allow"
+
 [dependencies]
-agentic_core = { path = "../agentic_core" }
+lion_core = { path = "../lion_core" }
 axum = { version = "0.8.1", features = ["ws"] }
 tokio = { version = "1.0", features = ["full"] }
 tokio-stream = { version = "0.1", features = ["sync"] }

@@ -12,6 +12,9 @@ wasm_sandbox = ["wasmer", "wasmer-compiler-cranelift"]
 multi_agent = []
 language_protocol = []
 
+[lints.rust]
+unused_imports = "allow"
+
 [dependencies]
 tokio = { version = "1.0", features = ["full"] }
 serde = { version = "1.0", features = ["derive"] }
@@ -22,7 +25,7 @@ thiserror = "2.0"
 tracing = "0.1"
 futures = "0.3"
 async-trait = "0.1"
-tokio-stream = "0.1"
+tokio-stream = { version = "0.1", features = ["sync"] }
 toml = "0.8"
 lazy_static = "1.4"
 

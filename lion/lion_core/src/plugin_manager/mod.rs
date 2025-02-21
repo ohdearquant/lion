@@ -1,17 +1,14 @@
-mod error;
-mod loader;
-mod manager;
-mod manifest;
-mod registry;
+pub mod error;
+pub mod loader;
+pub mod manager;
+pub mod manifest;
+pub mod registry;
 
-pub use error::PluginError;
+pub use error::{PluginError, Result};
+pub use loader::PluginLoader;
 pub use manager::PluginManager;
-// Use the new PluginManifest from types
-pub use crate::types::plugin::{Plugin, PluginManifest, PluginState};
-pub use registry::PluginMetadata;
-
-// Re-export common types that consumers will need
-pub type Result<T> = std::result::Result<T, PluginError>;
+pub use manifest::{PluginManifest, LanguageCapabilities, SecuritySettings, PluginDependency};
+pub use registry::{PluginRegistry, PluginMetadata};
 
 // Constants
 pub const DEFAULT_STORAGE_PATH: &str = "plugins/data";

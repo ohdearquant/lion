@@ -49,8 +49,28 @@ pub struct ProgressionStep {
     pub next_steps: Vec<Uuid>,
 }
 
-/// A thread-safe ordered progression of steps that supports
-/// branching and merging for multi-agent scenarios
+/// A thread-safe ordered progression of steps that supports branching and merging
+/// for tracking multi-agent task execution and collaboration.
+///
+/// The Progression structure is a key component in the microkernel's task tracking system:
+/// - Maintains a chronological record of task execution steps
+/// - Supports branching for parallel agent work streams
+/// - Enables merging of parallel work back into the main progression
+/// - Provides thread-safe access for concurrent agent operations
+///
+/// Key use cases:
+/// - Task decomposition: Track subtasks assigned to different agents
+/// - Parallel exploration: Allow agents to work on different solution approaches
+/// - Collaborative work: Merge results from multiple agents into a final solution
+/// - Progress monitoring: Track the evolution of complex multi-agent tasks
+///
+/// Example:
+/// ```rust
+/// # use lion_core::collections::Progression;
+/// let progression = Progression::new();
+/// // Track main task steps and create branches for subtasks
+/// ```
+///
 #[derive(Debug, Clone)]
 pub struct Progression {
     /// All steps in the progression
@@ -96,7 +116,7 @@ impl Progression {
 
     /// Create a new branch from a specific step
     pub fn create_branch(&self, branch_name: String, parent_id: Uuid) -> ProgressionResult<()> {
-        let mut steps = self.steps.lock().map_err(|e| ProgressionError::LockError(e.to_string()))?;
+        let steps = self.steps.lock().map_err(|e| ProgressionError::LockError(e.to_string()))?;
         let mut branches = self.branches.lock().map_err(|e| ProgressionError::LockError(e.to_string()))?;
 
         if !steps.contains_key(&parent_id) {

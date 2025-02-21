@@ -3,7 +3,9 @@ use serde::{Deserialize, Serialize};
 use std::fmt;
 use uuid::Uuid;
 use std::collections::HashMap;
-use crate::types::traits::{LanguageMessage, LanguageMessageType, ParticipantState};
+use crate::types::traits::LanguageMessage;
+use crate::types::ParticipantState;
+
 
 /// Unique identifier for storage elements
 #[derive(Debug, Clone, Copy, Hash, Eq, PartialEq, Serialize, Deserialize)]

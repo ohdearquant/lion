@@ -1,10 +1,12 @@
-use agentic_core::{
+use lion_core::{
     orchestrator::{
         events::{AgentEvent, PluginEvent, SystemEvent, TaskEvent},
         metadata::EventMetadata,
-        Orchestrator,
+        Orchestrator, OrchestratorConfig,
     },
     plugin_manager::PluginManifest,
+    types::traits::{LanguageMessage, LanguageMessageType},
+    events::sse::NetworkEvent,
 };
 use serde_json::json;
 use std::time::Duration;
@@ -14,7 +16,7 @@ use uuid::Uuid;
 #[tokio::test]
 async fn test_orchestrator_task_flow() {
     // Create orchestrator
-    let orchestrator = Orchestrator::new(100);
+    let orchestrator = Orchestrator::new(OrchestratorConfig::default());
     let sender = orchestrator.sender();
     let mut completion_rx = orchestrator.completion_receiver();
 
@@ -46,7 +48,7 @@ async fn test_orchestrator_task_flow() {
 #[tokio::test]
 async fn test_orchestrator_plugin_flow() {
     // Create orchestrator
-    let orchestrator = Orchestrator::new(100);
+    let orchestrator = Orchestrator::new(OrchestratorConfig::default());
     let sender = orchestrator.sender();
     let mut completion_rx = orchestrator.completion_receiver();
 
@@ -106,7 +108,7 @@ async fn test_orchestrator_plugin_flow() {
 #[tokio::test]
 async fn test_orchestrator_agent_flow() {
     // Create orchestrator
-    let orchestrator = Orchestrator::new(100);
+    let orchestrator = Orchestrator::new(OrchestratorConfig::default());
     let sender = orchestrator.sender();
     let mut completion_rx = orchestrator.completion_receiver();
 
@@ -138,7 +140,7 @@ async fn test_orchestrator_agent_flow() {
 #[tokio::test]
 async fn test_orchestrator_concurrent_events() {
     // Create orchestrator
-    let orchestrator = Orchestrator::new(100);
+    let orchestrator = Orchestrator::new(OrchestratorConfig::default());
     let sender = orchestrator.sender();
     let mut completion_rx = orchestrator.completion_receiver();
 
@@ -196,7 +198,7 @@ async fn test_orchestrator_concurrent_events() {
 #[tokio::test]
 async fn test_orchestrator_error_handling() {
     // Create orchestrator
-    let orchestrator = Orchestrator::new(100);
+    let orchestrator = Orchestrator::new(OrchestratorConfig::default());
     let sender = orchestrator.sender();
     let mut completion_rx = orchestrator.completion_receiver();
 
@@ -222,4 +224,63 @@ async fn test_orchestrator_error_handling() {
     } else {
         panic!("Expected task error");
     }
+}
+
+#[tokio::test]
+async fn test_multi_agent_interaction() {
+    // Create orchestrator
+    let orchestrator = Orchestrator::new(OrchestratorConfig::default());
+    let sender = orchestrator.sender();
+    let mut completion_rx = orchestrator.completion_receiver();
+    let mut network_rx = orchestrator.network_sender().subscribe();
+
+    // Spawn orchestrator
+    tokio::spawn(orchestrator.run());
+
+    // Spawn two agents
+    let agent1_id = Uuid::new_v4();
+    let agent2_id = Uuid::new_v4();
+
+    // Spawn first agent
+    let spawn1_event = SystemEvent::Agent(AgentEvent::Spawned {
+        agent_id: agent1_id,
+        prompt: "agent 1 prompt".to_string(),
+        metadata: EventMetadata::new(None),
+    });
+    sender.send(spawn1_event).await.unwrap();
+
+    // Wait for first agent spawn completion
+    if let Ok(SystemEvent::Agent(AgentEvent::Completed { agent_id, .. })) =
+        completion_rx.recv().await
+    {
+        assert_eq!(agent_id, agent1_id);
+    } else {
+        panic!("Expected agent 1 completion");
+    }
+
+    // Spawn second agent
+    let spawn2_event = SystemEvent::Agent(AgentEvent::Spawned {
+        agent_id: agent2_id,
+        prompt: "agent 2 prompt".to_string(),
+        metadata: EventMetadata::new(None),
+    });
+    sender.send(spawn2_event).await.unwrap();
+
+    // Wait for second agent spawn completion
+    if let Ok(SystemEvent::Agent(AgentEvent::Completed { agent_id, .. })) =
+        completion_rx.recv().await
+    {
+        assert_eq!(agent_id, agent2_id);
+    } else {
+        panic!("Expected agent 2 completion");
+    }
+
+    // Simulate interaction between agents
+    // Send partial output instead of MessageSent
+    let output_event = SystemEvent::Agent(AgentEvent::PartialOutput {
+        agent_id: agent1_id,
+        output: "Hello from agent 1".to_string(),
+        metadata: EventMetadata::new(None),
+    });
+    sender.send(output_event).await.unwrap();
 }

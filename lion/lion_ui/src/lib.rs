@@ -4,7 +4,8 @@ pub mod plugins;
 pub mod state;
 
 pub use agents::{AgentInfo, ApiResponse, SpawnAgentRequest};
-pub use plugins::{LoadPluginRequest, PluginResponse};
+pub use plugins::LoadPluginRequest;
+pub use lion_core::types::plugin::PluginResponse;
 pub use state::{AppState, PluginInfo};
 
 // Re-export handlers for use in main.rs

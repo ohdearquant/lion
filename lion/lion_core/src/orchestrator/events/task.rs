@@ -1,8 +1,25 @@
-use crate::orchestrator::metadata::{create_metadata, EventMetadata};
+use crate::orchestrator::metadata::EventMetadata;
 use serde::{Deserialize, Serialize};
+use std::fmt;
 use uuid::Uuid;
 
 use super::SystemEvent;
+
+impl fmt::Display for TaskEvent {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            TaskEvent::Submitted { task_id, payload, .. } => {
+                write!(f, "Task {} submitted with payload: {}", task_id, payload)
+            }
+            TaskEvent::Completed { task_id, result, .. } => {
+                write!(f, "Task {} completed with result: {}", task_id, result)
+            }
+            TaskEvent::Error { task_id, error, .. } => {
+                write!(f, "Task {} error: {}", task_id, error)
+            }
+        }
+    }
+}
 
 /// Events related to task operations
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -42,7 +59,7 @@ impl TaskEvent {
         SystemEvent::Task(TaskEvent::Submitted {
             task_id,
             payload: payload.into(),
-            metadata: create_metadata(correlation_id),
+            metadata: EventMetadata::new(correlation_id),
         })
     }
 
@@ -51,7 +68,7 @@ impl TaskEvent {
         SystemEvent::Task(TaskEvent::Completed {
             task_id,
             result: result.into(),
-            metadata: create_metadata(correlation_id),
+            metadata: EventMetadata::new(correlation_id),
         })
     }
 
@@ -60,7 +77,7 @@ impl TaskEvent {
         SystemEvent::Task(TaskEvent::Error {
             task_id,
             error: error.into(),
-            metadata: create_metadata(correlation_id),
+            metadata: EventMetadata::new(correlation_id),
         })
     }
 }
@@ -124,7 +141,7 @@ mod tests {
         let event = TaskEvent::Submitted {
             task_id,
             payload: "test payload".to_string(),
-            metadata: create_metadata(correlation_id),
+            metadata: EventMetadata::new(correlation_id),
         };
 
         let serialized = serde_json::to_string(&event).unwrap();

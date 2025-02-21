@@ -1,19 +1,25 @@
-use crate::orchestrator::{
+use crate::{
+    event_log::EventLog,
+    events::sse::{NetworkEventSender, NetworkEvent},
+    plugin_manager::{PluginManager, PluginManifest},
+    types::traits::{LanguageMessage, LanguageMessageType},
+    types::ParticipantState,
+    collections::{Pile, Progression},
+    orchestrator::agent_manager::AgentManager,
+};
+use super::{
     events::{AgentEvent, PluginEvent, SystemEvent, TaskEvent},
-    handlers::EventHandler,
+    metadata::EventMetadata,
     types::*,
 };
-use crate::plugin_manager::PluginManifest;
-use crate::types::traits::{LanguageMessage, LanguageMessageType, ParticipantState};
-use crate::collections::{Pile, Progression};
-use crate::events::sse::{NetworkEventSender, NetworkEvent};
 use tokio::sync::{broadcast, mpsc, RwLock, Mutex};
 use tokio::time::{Duration, interval};
 use tracing::{debug, info, warn, error};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::sync::Arc;
 use uuid::Uuid;
 use thiserror::Error;
+use serde_json::json;
 
 /// Errors that can occur in the orchestrator
 #[derive(Error, Debug)]
@@ -57,7 +63,6 @@ impl Default for OrchestratorConfig {
 /// Metrics for monitoring orchestrator performance
 #[derive(Debug, Default)]
 struct OrchestratorMetrics {
-    active_agents: usize,
     completed_tasks: usize,
     failed_tasks: usize,
     messages_processed: usize,
@@ -71,12 +76,14 @@ pub struct Orchestrator {
     event_rx: Arc<Mutex<EventReceiver>>,
     completion_tx: CompletionSender,
     network_tx: NetworkEventSender,
-    handler: EventHandler,
     config: OrchestratorConfig,
     
-    // Concurrent state management
-    active_agents: Arc<RwLock<HashMap<Uuid, ParticipantState>>>,
-    agent_timeouts: Arc<RwLock<HashMap<Uuid, tokio::time::Instant>>>,
+    // Core components
+    event_log: Arc<EventLog>,
+    plugin_manager: Arc<PluginManager>,
+    agent_manager: Arc<AgentManager>,
+    
+    // Message handling
     message_pile: Arc<Pile<LanguageMessage>>,
     task_progression: Arc<Progression>,
     
@@ -93,15 +100,21 @@ impl Orchestrator {
         
         debug!("Creating new orchestrator with config: {:?}", config);
 
+        let agent_manager = AgentManager::new(
+            config.max_concurrent_agents,
+            config.agent_timeout,
+            network_tx.clone(),
+        );
+
         Self {
             event_tx: tx,
             event_rx: Arc::new(Mutex::new(rx)),
             completion_tx,
             network_tx,
-            handler: EventHandler::new(),
             config,
-            active_agents: Arc::new(RwLock::new(HashMap::new())),
-            agent_timeouts: Arc::new(RwLock::new(HashMap::new())),
+            event_log: Arc::new(EventLog::new()),
+            plugin_manager: Arc::new(PluginManager::new()),
+            agent_manager: Arc::new(agent_manager),
             message_pile: Arc::new(Pile::new()),
             task_progression: Arc::new(Progression::new()),
             metrics: Arc::new(RwLock::new(OrchestratorMetrics::default())),
@@ -123,8 +136,31 @@ impl Orchestrator {
         self.network_tx.clone()
     }
 
+    /// Store a language message in the message pile
+    pub async fn store_message(&self, message: LanguageMessage) -> Result<(), OrchestratorError> {
+        self.message_pile.insert(message.id, message)
+            .map_err(|e| OrchestratorError::ChannelError(e.to_string()))
+    }
+
+    /// Retrieve a language message from the message pile
+    pub async fn get_message(&self, message_id: Uuid) -> Result<Option<LanguageMessage>, OrchestratorError> {
+        match self.message_pile.get(&message_id) {
+            Ok(msg) => Ok(Some(msg)),
+            Err(e) => Err(OrchestratorError::ChannelError(e.to_string()))
+        }
+    }
+
+    /// Get all messages in order
+    pub async fn get_messages(&self) -> Result<Vec<LanguageMessage>, OrchestratorError> {
+        self.message_pile.get_ordered()
+            .map_err(|e| OrchestratorError::ChannelError(e.to_string()))
+    }
+
     /// Process a single event, returning a completion event if successful
     async fn process_event(&mut self, event: SystemEvent) -> Result<Option<SystemEvent>, OrchestratorError> {
+        // Log the event
+        self.event_log.append(event.clone());
+        
         let start_time = tokio::time::Instant::now();
         
         let result = match event {
@@ -146,22 +182,23 @@ impl Orchestrator {
     async fn process_task(&mut self, event: TaskEvent) -> Result<Option<SystemEvent>, OrchestratorError> {
         match event {
             TaskEvent::Submitted { task_id, payload, metadata } => {
-                // Record in progression
-                self.task_progression.push(task_id).map_err(|e| 
+                // Record in progression with metadata
+                self.task_progression.push(task_id, json!({
+                    "payload": payload,
+                    "timestamp": metadata.timestamp,
+                })).map_err(|e| 
                     OrchestratorError::SchedulingError(e.to_string()))?;
 
-                // Delegate to handler
-                if let Some(result) = self.handler.handle_task(TaskEvent::Submitted {
+                info!(task_id = %task_id, "Processing task: {}", payload);
+                
+                let mut metrics = self.metrics.write().await;
+                metrics.completed_tasks += 1;
+                
+                Ok(Some(SystemEvent::Task(TaskEvent::Completed {
                     task_id,
-                    payload,
-                    metadata,
-                }) {
-                    let mut metrics = self.metrics.write().await;
-                    metrics.completed_tasks += 1;
-                    Ok(Some(result))
-                } else {
-                    Ok(None)
-                }
+                    result: format!("Processed: {}", payload),
+                    metadata: EventMetadata::new(metadata.correlation_id),
+                })))
             },
             TaskEvent::Error { task_id, error, metadata } => {
                 let mut metrics = self.metrics.write().await;
@@ -172,7 +209,7 @@ impl Orchestrator {
                     metadata,
                 })))
             },
-            _ => Ok(self.handler.handle_task(event)),
+            TaskEvent::Completed { .. } => Ok(None),
         }
     }
 
@@ -180,24 +217,64 @@ impl Orchestrator {
     async fn process_plugin(&mut self, event: PluginEvent) -> Result<Option<SystemEvent>, OrchestratorError> {
         match event {
             PluginEvent::Load { plugin_id, manifest, manifest_path, metadata } => {
+                info!(plugin_id = %plugin_id, "Loading plugin: {}", manifest.name);
+
                 // Notify network about plugin load
                 self.network_tx.send_plugin_event(
                     plugin_id,
                     "load".to_string(),
                     serde_json::json!({
                         "manifest": manifest.clone(),
-                        "path": manifest_path
+                        "path": manifest_path.clone()
                     }),
                 ).map_err(|e| OrchestratorError::ChannelError(e.to_string()))?;
 
-                Ok(self.handler.handle_plugin(PluginEvent::Load {
-                    plugin_id,
-                    manifest,
-                    manifest_path,
-                    metadata,
-                }).await)
+                match self.plugin_manager
+                    .load_plugin_from_string(toml::to_string(&manifest).unwrap(), manifest_path)
+                    .await
+                {
+                    Ok(_) => Ok(Some(SystemEvent::Plugin(PluginEvent::Result {
+                        plugin_id,
+                        result: format!("Plugin {} loaded successfully", manifest.name),
+                        metadata: EventMetadata::new(metadata.correlation_id),
+                    }))),
+                    Err(e) => Ok(Some(SystemEvent::Plugin(PluginEvent::Error {
+                        plugin_id,
+                        error: e.to_string(),
+                        metadata: EventMetadata::new(metadata.correlation_id),
+                    }))),
+                }
             },
-            _ => Ok(self.handler.handle_plugin(event).await),
+            PluginEvent::Invoked { plugin_id, input, metadata } => {
+                info!(plugin_id = %plugin_id, "Invoking plugin with input: {}", input);
+
+                match self.plugin_manager.invoke_plugin(plugin_id, &input).await {
+                    Ok(result) => Ok(Some(SystemEvent::Plugin(PluginEvent::Result {
+                        plugin_id,
+                        result,
+                        metadata: EventMetadata::new(metadata.correlation_id),
+                    }))),
+                    Err(e) => Ok(Some(SystemEvent::Plugin(PluginEvent::Error {
+                        plugin_id,
+                        error: e.to_string(),
+                        metadata: EventMetadata::new(metadata.correlation_id),
+                    }))),
+                }
+            },
+            PluginEvent::List => {
+                let plugins = self.plugin_manager.list_plugins();
+                let result = plugins
+                    .iter()
+                    .map(|p| format!("{} ({})", p.manifest.name, p.id))
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                Ok(Some(SystemEvent::Plugin(PluginEvent::Result {
+                    plugin_id: Uuid::new_v4(),
+                    result,
+                    metadata: EventMetadata::new(None),
+                })))
+            },
+            PluginEvent::Result { .. } | PluginEvent::Error { .. } => Ok(None),
         }
     }
 
@@ -205,37 +282,20 @@ impl Orchestrator {
     async fn process_agent(&mut self, event: AgentEvent) -> Result<Option<SystemEvent>, OrchestratorError> {
         match event {
             AgentEvent::Spawned { agent_id, prompt, metadata } => {
-                // Check concurrent agent limit
-                let active_count = self.active_agents.read().await.len();
-                if active_count >= self.config.max_concurrent_agents {
-                    return Err(OrchestratorError::SchedulingError(
-                        "Maximum concurrent agent limit reached".to_string()
-                    ));
-                }
+                // Try to register the agent
+                self.agent_manager.register_agent(agent_id).await?;
 
-                // Register agent
-                self.active_agents.write().await.insert(agent_id, ParticipantState::Initializing);
-                self.agent_timeouts.write().await.insert(agent_id, tokio::time::Instant::now());
-
-                // Update metrics
-                let mut metrics = self.metrics.write().await;
-                metrics.active_agents += 1;
-
-                // Notify network
-                self.network_tx.send_agent_status(agent_id, "spawned".to_string())
-                    .map_err(|e| OrchestratorError::ChannelError(e.to_string()))?;
-
-                Ok(self.handler.handle_agent(AgentEvent::Spawned {
+                info!(agent_id = %agent_id, "Processing agent prompt: {}", prompt);
+                
+                Ok(Some(SystemEvent::Agent(AgentEvent::Completed {
                     agent_id,
-                    prompt,
-                    metadata,
-                }))
+                    result: format!("Processed: {}", prompt),
+                    metadata: EventMetadata::new(metadata.correlation_id),
+                })))
             },
-            AgentEvent::PartialOutput { agent_id, output, metadata } => {
+            AgentEvent::PartialOutput { agent_id, output, .. } => {
                 // Update agent timeout
-                if let Some(timeout) = self.agent_timeouts.write().await.get_mut(&agent_id) {
-                    *timeout = tokio::time::Instant::now();
-                }
+                self.agent_manager.update_agent_timeout(&agent_id).await;
 
                 // Send partial output to network
                 self.network_tx.send_partial_output(
@@ -245,109 +305,72 @@ impl Orchestrator {
                     0, // sequence number
                 ).map_err(|e| OrchestratorError::ChannelError(e.to_string()))?;
 
-                Ok(self.handler.handle_agent(AgentEvent::PartialOutput {
-                    agent_id,
-                    output,
-                    metadata,
-                }))
+                Ok(None)
             },
             AgentEvent::Completed { agent_id, result, metadata } => {
-                // Update state
-                self.active_agents.write().await.remove(&agent_id);
-                self.agent_timeouts.write().await.remove(&agent_id);
-
-                // Update metrics
+                // Remove agent and update metrics
+                self.agent_manager.remove_agent(agent_id, "completed").await?;
+                
                 let mut metrics = self.metrics.write().await;
-                metrics.active_agents -= 1;
                 metrics.completed_tasks += 1;
 
-                // Notify network
-                self.network_tx.send_agent_status(agent_id, "completed".to_string())
-                    .map_err(|e| OrchestratorError::ChannelError(e.to_string()))?;
-
-                Ok(self.handler.handle_agent(AgentEvent::Completed {
+                Ok(Some(SystemEvent::Agent(AgentEvent::Completed {
                     agent_id,
                     result,
                     metadata,
-                }))
+                })))
             },
             AgentEvent::Error { agent_id, error, metadata } => {
-                // Update state
-                self.active_agents.write().await.remove(&agent_id);
-                self.agent_timeouts.write().await.remove(&agent_id);
-
-                // Update metrics
+                // Remove agent and update metrics
+                self.agent_manager.remove_agent(agent_id, "error").await?;
+                
                 let mut metrics = self.metrics.write().await;
-                metrics.active_agents -= 1;
                 metrics.failed_tasks += 1;
 
-                // Notify network
-                self.network_tx.send_agent_status(agent_id, "error".to_string())
-                    .map_err(|e| OrchestratorError::ChannelError(e.to_string()))?;
-
-                Ok(self.handler.handle_agent(AgentEvent::Error {
+                Ok(Some(SystemEvent::Agent(AgentEvent::Error {
                     agent_id,
                     error,
                     metadata,
-                }))
+                })))
             },
-        }
-    }
-
-    /// Monitor agent timeouts
-    async fn monitor_timeouts(&self) {
-        let mut interval = interval(Duration::from_secs(1));
-        
-        loop {
-            interval.tick().await;
-            
-            let mut timeouts = self.agent_timeouts.write().await;
-            let mut active_agents = self.active_agents.write().await;
-            
-            let now = tokio::time::Instant::now();
-            let mut timed_out = Vec::new();
-            
-            for (&agent_id, &last_active) in timeouts.iter() {
-                if now.duration_since(last_active) > self.config.agent_timeout {
-                    timed_out.push(agent_id);
-                }
-            }
-            
-            for agent_id in timed_out {
-                warn!("Agent {} timed out", agent_id);
-                timeouts.remove(&agent_id);
-                active_agents.remove(&agent_id);
-                
-                // Notify about timeout
-                if let Err(e) = self.network_tx.send_agent_status(agent_id, "timeout".to_string()) {
-                    error!("Failed to send timeout notification: {}", e);
-                }
-            }
         }
     }
 
     /// Run the orchestrator's event loop
-    pub async fn run(mut self) {
+    pub async fn run(self) {
         info!("Starting orchestrator event loop");
 
         // Spawn timeout monitor
-        let timeout_monitor = self.clone();
+        let agent_manager = self.agent_manager.clone();
         tokio::spawn(async move {
-            timeout_monitor.monitor_timeouts().await;
+            agent_manager.monitor_timeouts().await;
         });
 
-        let mut rx = self.event_rx.lock().await;
-        while let Some(event) = rx.recv().await {
-            match self.process_event(event).await {
-                Ok(Some(completion_event)) => {
-                    // Broadcast the completion event
-                    let _ = self.completion_tx.send(completion_event);
-                }
+        // Process events
+        while let Some(event) = self.event_rx.lock().await.recv().await {
+            // Release the lock before processing
+            let result = {
+                let mut this = self.clone();
+                this.process_event(event.clone()).await
+            };
+            
+            match result {
+                Ok(Some(completion_event)) => { let _ = self.completion_tx.send(completion_event); }
                 Ok(None) => {}
                 Err(e) => {
                     error!("Error processing event: {}", e);
+                    
                     let mut metrics = self.metrics.write().await;
                     metrics.failed_tasks += 1;
+                    
+                    // Send error event back for agent events
+                    if let SystemEvent::Agent(AgentEvent::Spawned { agent_id, metadata, .. }) = event {
+                        let _ = self.completion_tx.send(SystemEvent::Agent(AgentEvent::Error {
+                            agent_id,
+                            error: e.to_string(),
+                            metadata: EventMetadata::new(metadata.correlation_id),
+                        }));
+                    }
                 }
             }
         }
@@ -359,7 +382,6 @@ impl Orchestrator {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::orchestrator::metadata::EventMetadata;
 
     #[tokio::test]
     async fn test_orchestrator_processes_task() {
@@ -481,6 +503,7 @@ mod tests {
         };
         let orchestrator = Orchestrator::new(config);
         let sender = orchestrator.sender();
+        let mut completion_rx = orchestrator.completion_receiver();
 
         // Spawn the orchestrator
         tokio::spawn(orchestrator.run());
@@ -494,12 +517,64 @@ mod tests {
                 metadata: EventMetadata::new(None),
             });
 
-            let result = sender.send(event).await;
+            sender.send(event).await.expect("Failed to send event");
+
             if i < 2 {
-                assert!(result.is_ok());
+                // First two agents should complete successfully
+                match completion_rx.recv().await {
+                    Ok(SystemEvent::Agent(AgentEvent::Completed { .. })) => (),
+                    _ => panic!("Expected agent completion"),
+                }
             } else {
-                assert!(result.is_err());
+                // Third agent should fail with scheduling error
+                match completion_rx.recv().await {
+                    Ok(SystemEvent::Agent(AgentEvent::Error { error, .. })) => assert!(error.contains("Maximum concurrent agent limit")),
+                    _ => panic!("Expected scheduling error"),
+                }
             }
         }
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_message_pile() {
+        let config = OrchestratorConfig::default();
+        let orchestrator = Orchestrator::new(config);
+
+        // Create test messages
+        let message1 = LanguageMessage {
+            id: Uuid::new_v4(),
+            content: "test message 1".to_string(),
+            sender_id: Uuid::new_v4(),
+            recipient_ids: vec![Uuid::new_v4()].into_iter().collect(),
+            message_type: LanguageMessageType::Text,
+            metadata: serde_json::json!({}),
+            timestamp: chrono::Utc::now(),
+        };
+
+        let message2 = LanguageMessage {
+            id: Uuid::new_v4(),
+            content: "test message 2".to_string(),
+            sender_id: Uuid::new_v4(),
+            recipient_ids: vec![Uuid::new_v4()].into_iter().collect(),
+            message_type: LanguageMessageType::Text,
+            metadata: serde_json::json!({}),
+            timestamp: chrono::Utc::now(),
+        };
+
+        // Store messages
+        orchestrator.store_message(message1.clone()).await.unwrap();
+        orchestrator.store_message(message2.clone()).await.unwrap();
+
+        // Retrieve individual messages
+        let retrieved1 = orchestrator.get_message(message1.id).await.unwrap().unwrap();
+        let retrieved2 = orchestrator.get_message(message2.id).await.unwrap().unwrap();
+        assert_eq!(retrieved1.content, "test message 1");
+        assert_eq!(retrieved2.content, "test message 2");
+
+        // Get all messages in order
+        let all_messages = orchestrator.get_messages().await.unwrap();
+        assert_eq!(all_messages.len(), 2);
+        assert_eq!(all_messages[0].content, "test message 1");
+        assert_eq!(all_messages[1].content, "test message 2");
     }
 }
