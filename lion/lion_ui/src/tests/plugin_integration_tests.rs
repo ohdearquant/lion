@@ -13,7 +13,7 @@ use tracing::debug;
 
 async fn setup_test_app() -> (Router, broadcast::Receiver<String>) {
     // Initialize plugin manager with plugins directory
-    let plugin_manager = PluginManager::with_manifest_dir("plugins");
+    let mut plugin_manager = PluginManager::with_manifest_dir("plugins");
 
     // Discover and load available plugins
     match plugin_manager.discover_plugins() {

@@ -128,7 +128,7 @@ pub async fn handle_demo(data: String, correlation_id: Option<String>) {
 }
 
 pub fn handle_load_plugin(manifest: String) {
-    let plugin_manager = PluginManager::with_manifest_dir("plugins");
+    let mut plugin_manager = PluginManager::with_manifest_dir("plugins");
 
     // Read and parse the manifest file
     let manifest_content = std::fs::read_to_string(manifest).expect("Failed to read manifest file");
@@ -165,7 +165,7 @@ pub async fn handle_invoke_plugin(
         .expect("Invalid correlation ID format");
 
     // Initialize plugin manager with plugins directory
-    let plugin_manager = PluginManager::with_manifest_dir("plugins");
+    let mut plugin_manager = PluginManager::with_manifest_dir("plugins");
 
     // Discover and load available plugins
     match plugin_manager.discover_plugins() {

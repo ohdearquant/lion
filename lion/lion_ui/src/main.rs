@@ -120,10 +120,9 @@ async fn main() {
                                 *plugin_id,
                                 PluginInfo {
                                     id: *plugin_id,
-                                    loaded: true,
                                     name: manifest.name,
                                     version: manifest.version,
-                                    permissions: manifest.permissions,
+                                    description: manifest.description,
                                 },
                             );
                         } else {
