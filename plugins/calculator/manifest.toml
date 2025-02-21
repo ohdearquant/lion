@@ -1,7 +1,7 @@
 name = "calculator"
 version = "0.1.0"
 description = "A simple calculator plugin that can perform basic arithmetic operations"
-entry_point = "/Users/lion/github/lion/target/debug/calculator_plugin"
+entry_point = "../../target/debug/calculator_plugin"
 permissions = []
 driver = "native"
 

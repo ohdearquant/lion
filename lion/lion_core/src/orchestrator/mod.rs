@@ -6,6 +6,7 @@ use processor::EventProcessor;
 
 use crate::event_log::EventLog;
 use crate::plugin_manager::PluginManager;
+use std::path::PathBuf;
 use tokio::sync::{broadcast, mpsc};
 use tracing::info;
 
@@ -24,7 +25,16 @@ impl Orchestrator {
         let (completion_tx, _) = broadcast::channel(channel_capacity);
 
         let event_log = EventLog::new();
-        let plugin_manager = PluginManager::with_manifest_dir("plugins");
+
+        // Get the current directory and find the plugins directory
+        let current_dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+        let plugins_dir = if current_dir.ends_with("lion_core") {
+            current_dir.join("..").join("..").join("plugins")
+        } else {
+            current_dir.join("plugins")
+        };
+
+        let plugin_manager = PluginManager::with_manifest_dir(plugins_dir);
         let processor = EventProcessor::new(event_log, plugin_manager);
 
         Self {
@@ -89,14 +99,27 @@ impl Orchestrator {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::plugin_manager::PluginManifest;
-    use std::collections::HashMap;
     use std::time::Duration;
     use tokio::time::timeout;
+    use tracing::debug;
+    use tracing_subscriber::fmt::format::FmtSpan;
     use uuid::Uuid;
+
+    fn init_test_logging() {
+        let _ = tracing_subscriber::fmt()
+            .with_max_level(tracing::Level::TRACE)
+            .with_test_writer()
+            .with_thread_ids(true)
+            .with_file(true)
+            .with_line_number(true)
+            .with_target(true)
+            .with_span_events(FmtSpan::CLOSE)
+            .try_init();
+    }
 
     #[tokio::test]
     async fn test_orchestrator_processes_task() {
+        init_test_logging();
         let orchestrator = Orchestrator::new(100);
         let sender = orchestrator.sender();
         let mut completion_rx = orchestrator.completion_receiver();
@@ -142,84 +165,76 @@ mod tests {
 
     #[tokio::test]
     async fn test_plugin_invocation() {
+        init_test_logging();
+        debug!("Starting plugin invocation test");
+
         let mut orchestrator = Orchestrator::new(100);
         let sender = orchestrator.sender();
         let mut completion_rx = orchestrator.completion_receiver();
 
-        // Create a test plugin
-        let mut functions = HashMap::new();
-        functions.insert(
-            "add".to_string(),
-            crate::plugin_manager::PluginFunction {
-                name: "add".to_string(),
-                description: "Add two numbers".to_string(),
-                input_schema: serde_json::json!({
-                    "type": "object",
-                    "properties": {
-                        "a": { "type": "number" },
-                        "b": { "type": "number" }
+        // Discover and load plugins
+        debug!("Attempting to discover plugins");
+        match orchestrator.plugin_manager().discover_plugins() {
+            Ok(manifests) => {
+                debug!("Discovered {} plugins", manifests.len());
+                for manifest in manifests {
+                    debug!("Found plugin manifest: {:?}", manifest);
+                    if manifest.name == "calculator" {
+                        debug!(
+                            "Loading calculator plugin with entry point: {}",
+                            manifest.entry_point
+                        );
+                        let plugin_id = orchestrator
+                            .plugin_manager()
+                            .load_plugin(manifest)
+                            .expect("Failed to load calculator plugin");
+
+                        // Spawn the orchestrator
+                        tokio::spawn(orchestrator.run());
+
+                        // Create and send a plugin invocation
+                        let input = serde_json::json!({
+                            "function": "add",
+                            "args": {
+                                "a": 5.0,
+                                "b": 3.0
+                            }
+                        });
+
+                        let event =
+                            SystemEvent::new_plugin_invocation(plugin_id, input.to_string(), None);
+                        sender.send(event).await.expect("Failed to send event");
+
+                        // Wait for completion with timeout
+                        let completion = timeout(Duration::from_secs(1), completion_rx.recv())
+                            .await
+                            .expect("Timeout waiting for completion")
+                            .expect("Channel closed");
+
+                        match completion {
+                            SystemEvent::PluginResult {
+                                plugin_id: completed_id,
+                                output,
+                                ..
+                            } => {
+                                assert_eq!(completed_id, plugin_id);
+                                assert!(output.contains(r#""result":8.0"#));
+                                return;
+                            }
+                            _ => panic!("Expected PluginResult event"),
+                        }
                     }
-                }),
-                output_schema: serde_json::json!({
-                    "type": "object",
-                    "properties": {
-                        "result": { "type": "number" }
-                    }
-                }),
-            },
-        );
-
-        let manifest = PluginManifest {
-            name: "calculator".to_string(),
-            version: "0.1.0".to_string(),
-            description: "Test calculator plugin".to_string(),
-            entry_point: "/Users/lion/github/lion/target/debug/calculator_plugin".to_string(),
-            permissions: vec![],
-            driver: Some("native".to_string()),
-            functions,
-        };
-
-        let plugin_id = orchestrator
-            .plugin_manager()
-            .load_plugin(manifest)
-            .expect("Failed to load plugin");
-
-        // Spawn the orchestrator
-        tokio::spawn(orchestrator.run());
-
-        // Create and send a plugin invocation
-        let input = serde_json::json!({
-            "function": "add",
-            "args": {
-                "a": 5.0,
-                "b": 3.0
+                }
+                debug!("Calculator plugin not found in discovered plugins");
+                panic!("Calculator plugin not found");
             }
-        });
-
-        let event = SystemEvent::new_plugin_invocation(plugin_id, input.to_string(), None);
-        sender.send(event).await.expect("Failed to send event");
-
-        // Wait for completion with timeout
-        let completion = timeout(Duration::from_secs(1), completion_rx.recv())
-            .await
-            .expect("Timeout waiting for completion")
-            .expect("Channel closed");
-
-        match completion {
-            SystemEvent::PluginResult {
-                plugin_id: completed_id,
-                output,
-                ..
-            } => {
-                assert_eq!(completed_id, plugin_id);
-                assert!(output.contains(r#""result":8.0"#));
-            }
-            _ => panic!("Expected PluginResult event"),
+            Err(e) => panic!("Failed to discover plugins: {}", e),
         }
     }
 
     #[tokio::test]
     async fn test_correlation_id_propagation() {
+        init_test_logging();
         let orchestrator = Orchestrator::new(100);
         let sender = orchestrator.sender();
         let mut completion_rx = orchestrator.completion_receiver();
@@ -246,6 +261,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_agent_spawn_and_completion() {
+        init_test_logging();
         let orchestrator = Orchestrator::new(100);
         let sender = orchestrator.sender();
         let mut completion_rx = orchestrator.completion_receiver();

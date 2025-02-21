@@ -14,6 +14,6 @@ pub use element::ElementData;
 pub use event_log::{EventLog, EventRecord};
 pub use orchestrator::{Orchestrator, SystemEvent};
 pub use pile::Pile;
-pub use plugin_manager::{PluginError, PluginManager, PluginManifest};
+pub use plugin_manager::{PluginError, PluginFunction, PluginManager, PluginManifest};
 pub use progression::Progression;
 pub use store::InMemoryStore;
