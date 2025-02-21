@@ -26,13 +26,16 @@ impl Orchestrator {
 
         let event_log = EventLog::new();
 
-        // Get the current directory and find the plugins directory
-        let current_dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-        let plugins_dir = if current_dir.ends_with("lion_core") {
-            current_dir.join("..").join("..").join("plugins")
-        } else {
-            current_dir.join("plugins")
-        };
+        // Find the plugins directory relative to CARGO_MANIFEST_DIR
+        let manifest_dir = std::env::var("CARGO_MANIFEST_DIR")
+            .map(PathBuf::from)
+            .unwrap_or_else(|_| {
+                std::env::current_dir()
+                    .unwrap_or_else(|_| PathBuf::from("."))
+                    .join("lion")
+                    .join("lion_core")
+            });
+        let plugins_dir = manifest_dir.join("..").join("..").join("plugins");
 
         let plugin_manager = PluginManager::with_manifest_dir(plugins_dir);
         let processor = EventProcessor::new(event_log, plugin_manager);
@@ -196,8 +199,8 @@ mod tests {
                         let input = serde_json::json!({
                             "function": "add",
                             "args": {
-                                "a": 5.0,
-                                "b": 3.0
+                                "a": 5,
+                                "b": 3
                             }
                         });
 

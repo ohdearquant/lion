@@ -2,3 +2,9 @@ name = "hello_plugin"
 version = "0.1.0"
 entry_point = "examples/hello_plugin/hello_plugin.wasm"
 permissions = ["net"]
+
+[functions.hello]
+name = "hello"
+description = "Say hello to someone"
+input_schema = { type = "object", properties = { name = { type = "string" } } }
+output_schema = { type = "object", properties = { message = { type = "string" } } }
