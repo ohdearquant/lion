@@ -2,10 +2,15 @@ use axum::{
     extract::{Path, State},
     Json,
 };
-use lion_core::{orchestrator::EventMetadata, PluginManifest, SystemEvent};
+use lion_core::{
+    orchestrator::EventMetadata,
+    plugin_manager::{PluginManager, PluginManifest},
+    SystemEvent,
+};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use uuid::Uuid;
+use tracing::debug;
 
 use crate::AppState;
 
@@ -14,7 +19,7 @@ pub struct LoadPluginRequest {
     pub manifest: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct PluginInfo {
     pub id: Uuid,
     pub loaded: bool,
@@ -60,58 +65,88 @@ pub async fn load_plugin_handler(
         }
     };
 
-    // Load plugin via orchestrator
-    let plugin_id = Uuid::new_v4();
-    state
-        .orchestrator_sender
-        .send(SystemEvent::PluginInvoked {
-            plugin_id,
-            input: format!("load:{}", toml::to_string(&manifest).unwrap()),
-            metadata: EventMetadata {
-                event_id: Uuid::new_v4(),
-                timestamp: chrono::Utc::now(),
-                correlation_id: None,
-                context: serde_json::json!({"action": "load"}),
-            },
-        })
-        .await
-        .map_err(|e| format!("Failed to send load request: {}", e))?;
+    // Initialize plugin manager
+    let plugin_manager = PluginManager::with_manifest_dir("plugins");
+    
+    // Load the plugin
+    let plugin_id = match plugin_manager.load_plugin(manifest.clone()) {
+        Ok(id) => id,
+        Err(e) => {
+            let error_msg = format!("Failed to load plugin: {}", e);
+            state
+                .orchestrator_sender
+                .send(SystemEvent::PluginError {
+                    plugin_id: Uuid::new_v4(),
+                    error: error_msg.clone(),
+                    metadata: EventMetadata {
+                        event_id: Uuid::new_v4(),
+                        timestamp: chrono::Utc::now(),
+                        correlation_id: None,
+                        context: serde_json::json!({"action": "load"}),
+                    },
+                })
+                .await
+                .map_err(|e| format!("Failed to send error: {}", e))?;
+            return Err(error_msg);
+        }
+    };
 
     // Track the plugin
     let mut plugins = state.plugins.write().await;
-    plugins.insert(
-        plugin_id,
-        PluginInfo {
-            id: plugin_id,
-            loaded: true,
-            name: manifest.name.clone(),
-            version: manifest.version.clone(),
-            permissions: manifest.permissions.clone(),
-        },
-    );
+    let plugin_info = PluginInfo {
+        id: plugin_id,
+        loaded: true,
+        name: manifest.name.clone(),
+        version: manifest.version.clone(),
+        permissions: manifest.permissions.clone(),
+    };
+    plugins.insert(plugin_id, plugin_info.clone());
 
     // Send event to UI logs
     state
         .logs_tx
         .send(format!(
-            "Plugin {} invoked: load:{}",
-            manifest.name, manifest.version
+            "Plugin {} loaded successfully with ID {}",
+            manifest.name, plugin_id
         ))
         .map_err(|e| format!("Failed to log plugin load: {}", e))?;
 
-    Ok(Json(PluginInfo {
-        id: plugin_id,
-        loaded: true,
-        name: manifest.name,
-        version: manifest.version,
-        permissions: manifest.permissions,
-    }))
+    Ok(Json(plugin_info))
 }
 
 pub async fn list_plugins_handler(
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<Vec<PluginInfo>>, String> {
-    let plugins = state.plugins.read().await;
+    // Initialize plugin manager and discover plugins
+    let plugin_manager = PluginManager::with_manifest_dir("plugins");
+    
+    // Clear existing plugins
+    let mut plugins = state.plugins.write().await;
+    plugins.clear();
+
+    // Discover and load available plugins
+    match plugin_manager.discover_plugins() {
+        Ok(manifests) => {
+            debug!("Discovered {} plugins", manifests.len());
+            for manifest in manifests {
+                if let Ok(plugin_id) = plugin_manager.load_plugin(manifest.clone()) {
+                    plugins.insert(
+                        plugin_id,
+                        PluginInfo {
+                            id: plugin_id,
+                            loaded: true,
+                            name: manifest.name,
+                            version: manifest.version,
+                            permissions: manifest.permissions,
+                        },
+                    );
+                }
+            }
+        }
+        Err(e) => {
+            return Err(format!("Failed to discover plugins: {}", e));
+        }
+    }
 
     let plugin_list: Vec<PluginInfo> = plugins
         .iter()
@@ -177,7 +212,8 @@ mod tests {
     use tower::ServiceExt;
 
     async fn setup_test_app() -> (Router, broadcast::Receiver<String>) {
-        let orchestrator = Orchestrator::new(100);
+        let plugin_manager = PluginManager::with_manifest_dir("plugins");
+        let orchestrator = Orchestrator::with_plugin_manager(100, plugin_manager);
         let orchestrator_tx = orchestrator.sender();
         let mut completion_rx = orchestrator.completion_receiver();
         let (logs_tx, _) = broadcast::channel::<String>(100);

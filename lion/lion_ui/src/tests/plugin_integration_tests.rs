@@ -5,13 +5,34 @@ use axum::{
     Router,
 };
 use http_body_util::BodyExt;
-use lion_core::{Orchestrator, SystemEvent};
+use lion_core::{Orchestrator, SystemEvent, plugin_manager::PluginManager};
 use std::sync::Arc;
 use tokio::sync::broadcast;
 use tower::ServiceExt;
+use tracing::debug;
 
 async fn setup_test_app() -> (Router, broadcast::Receiver<String>) {
-    let orchestrator = Orchestrator::new(100);
+    // Initialize plugin manager with plugins directory
+    let plugin_manager = PluginManager::with_manifest_dir("plugins");
+    
+    // Discover and load available plugins
+    match plugin_manager.discover_plugins() {
+        Ok(manifests) => {
+            debug!("Discovered {} plugins", manifests.len());
+            for manifest in manifests {
+                debug!("Found plugin manifest: {:?}", manifest);
+                if let Err(e) = plugin_manager.load_plugin(manifest) {
+                    eprintln!("Warning: Failed to load plugin: {}", e);
+                }
+            }
+        }
+        Err(e) => {
+            eprintln!("Failed to discover plugins: {}", e);
+        }
+    }
+
+    // Create orchestrator with the plugin manager
+    let orchestrator = Orchestrator::with_plugin_manager(100, plugin_manager);
     let orchestrator_sender = orchestrator.sender();
     let mut completion_rx = orchestrator.completion_receiver();
 
@@ -152,6 +173,7 @@ permissions = ["test"]
 
     // 3. Invoke plugin
     let invoke_response = app
+        .clone()
         .oneshot(
             Request::builder()
                 .method("POST")
@@ -190,6 +212,7 @@ async fn test_plugin_error_handling() {
 
     // Try to load invalid manifest
     let response = app
+        .clone()
         .oneshot(
             Request::builder()
                 .method("POST")
@@ -234,4 +257,122 @@ async fn test_plugin_error_handling() {
     }
 
     assert!(saw_error, "Should see error in logs for invalid manifest");
+}
+
+#[tokio::test]
+async fn test_calculator_plugin() {
+    let (app, mut logs_rx) = setup_test_app().await;
+
+    // Wait for plugin discovery and loading
+    tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
+
+    // List plugins to get calculator plugin ID
+    let list_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/api/plugins")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(list_response.status(), StatusCode::OK);
+
+    let body = String::from_utf8(
+        list_response
+            .into_body()
+            .collect()
+            .await
+            .unwrap()
+            .to_bytes()
+            .to_vec(),
+    )
+    .unwrap();
+    let plugins: Vec<PluginInfo> = serde_json::from_str(&body).unwrap();
+    debug!("Found plugins: {:?}", plugins);
+    
+    // Find calculator plugin
+    let calculator = plugins
+        .iter()
+        .find(|p| p.name == "calculator")
+        .expect("Calculator plugin should be discovered");
+
+    // Test addition
+    let invoke_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(&format!("/api/plugins/{}/invoke", calculator.id))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    serde_json::json!({
+                        "function": "add",
+                        "args": {
+                            "a": 5.0,
+                            "b": 3.0
+                        }
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(invoke_response.status(), StatusCode::OK);
+
+    // Verify result in logs
+    let mut saw_result = false;
+    tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
+
+    while let Ok(log) = logs_rx.try_recv() {
+        if log.contains(r#""result":8.0"#) {
+            saw_result = true;
+            break;
+        }
+    }
+
+    assert!(saw_result, "Should see correct addition result in logs");
+
+    // Test division by zero error
+    let invoke_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(&format!("/api/plugins/{}/invoke", calculator.id))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    serde_json::json!({
+                        "function": "divide",
+                        "args": {
+                            "a": 1.0,
+                            "b": 0.0
+                        }
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(invoke_response.status(), StatusCode::OK);
+
+    // Verify error in logs
+    let mut saw_error = false;
+    tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
+
+    while let Ok(log) = logs_rx.try_recv() {
+        if log.contains("Division by zero") {
+            saw_error = true;
+            break;
+        }
+    }
+
+    assert!(saw_error, "Should see division by zero error in logs");
 }

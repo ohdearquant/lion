@@ -1,0 +1,17 @@
+// Mock WASM content for calculator plugin
+// In a real implementation, this would be compiled WebAssembly code
+
+(module
+  (func $calculate (param $expression i32) (result i32)
+    local.get $expression
+  )
+  (func $convert (param $value i32) (param $from i32) (param $to i32) (result i32)
+    local.get $value
+  )
+  (func $solve (param $equation i32) (result i32)
+    local.get $equation
+  )
+  (export "calculate" (func $calculate))
+  (export "convert" (func $convert))
+  (export "solve" (func $solve))
+)

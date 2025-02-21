@@ -6,6 +6,7 @@ pub mod pile;
 pub mod plugin_manager;
 pub mod progression;
 pub mod store;
+pub mod storage;
 
 // Re-export commonly used types
 pub use agent::{AgentEvent, AgentProtocol, MockStreamingAgent};

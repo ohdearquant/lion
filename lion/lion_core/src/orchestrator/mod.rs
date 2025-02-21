@@ -24,7 +24,23 @@ impl Orchestrator {
         let (completion_tx, _) = broadcast::channel(channel_capacity);
 
         let event_log = EventLog::new();
-        let plugin_manager = PluginManager::new();
+        let plugin_manager = PluginManager::with_manifest_dir("plugins");
+        let processor = EventProcessor::new(event_log, plugin_manager);
+
+        Self {
+            event_tx: tx,
+            event_rx: rx,
+            completion_tx,
+            processor,
+        }
+    }
+
+    /// Create a new orchestrator instance with a custom plugin manager
+    pub fn with_plugin_manager(channel_capacity: usize, plugin_manager: PluginManager) -> Self {
+        let (tx, rx) = mpsc::channel(channel_capacity);
+        let (completion_tx, _) = broadcast::channel(channel_capacity);
+
+        let event_log = EventLog::new();
         let processor = EventProcessor::new(event_log, plugin_manager);
 
         Self {
@@ -133,8 +149,11 @@ mod tests {
         let manifest = PluginManifest {
             name: "test_plugin".to_string(),
             version: "0.1.0".to_string(),
+            description: "Test plugin".to_string(),
             entry_point: "/dev/null".to_string(), // dummy path for testing
             permissions: vec![],
+            driver: None,
+            functions: std::collections::HashMap::new(),
         };
 
         let plugin_id = orchestrator
