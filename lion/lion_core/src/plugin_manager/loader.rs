@@ -30,27 +30,35 @@ impl PluginLoader {
             ))
         })?;
 
-        // Security check for path traversal
-        fn is_path_traversal(path: &Path) -> bool {
-            path.components().any(|c| {
-                matches!(
-                    c,
-                    std::path::Component::ParentDir | std::path::Component::RootDir
-                )
-            })
+        // Security check - ensure path resolves within manifest directory
+        fn is_path_within_dir(path: &Path, dir: &Path) -> bool {
+            match path.canonicalize() {
+                Ok(canonical_path) => match dir.canonicalize() {
+                    Ok(canonical_dir) => canonical_path.starts_with(canonical_dir),
+                    Err(_) => false,
+                },
+                Err(_) => false,
+            }
         }
 
-        if is_path_traversal(Path::new(entry_point)) {
-            return Err(PluginError::LoadError(format!(
-                "Invalid path traversal attempt in entry point: {}",
-                entry_point
-            )));
+        // If entry_point is absolute, verify it's within manifest directory
+        let entry_path = PathBuf::from(entry_point);
+        if entry_path.is_absolute() {
+            if !is_path_within_dir(&entry_path, manifest_dir) {
+                return Err(PluginError::LoadError(format!(
+                    "Entry point must be within manifest directory: {}",
+                    entry_point
+                )));
+            }
+            debug!("Using absolute entry point: {:?}", entry_path);
+            return Ok(entry_path);
         }
 
         // Resolve relative to manifest directory
         let mut resolved = manifest_dir.to_path_buf();
         for component in Path::new(entry_point).components() {
             match component {
+                std::path::Component::Normal(name) => resolved.push(name),
                 std::path::Component::ParentDir => {
                     resolved = resolved
                         .parent()
@@ -62,14 +70,19 @@ impl PluginLoader {
                         })?
                         .to_path_buf();
                 }
-                _ => resolved.push(component),
+                _ => continue, // Skip other component types
             }
         }
 
+        if !is_path_within_dir(&resolved, manifest_dir) {
+            return Err(PluginError::LoadError(format!(
+                "Entry point must be within manifest directory: {}",
+                entry_point
+            )));
+        }
+
         debug!("Using resolved entry point: {:?}", resolved);
-        let final_path = resolved;
-        debug!("Final entry point path: {:?}", final_path);
-        Ok(final_path)
+        Ok(resolved)
     }
 
     pub fn load_plugin(
@@ -205,20 +218,33 @@ mod tests {
     #[test]
     fn test_resolve_entry_point() {
         let temp_dir = tempdir().unwrap();
-        let manifest_path = temp_dir.path().join("manifest.toml");
+        let plugin_dir = temp_dir.path().join("plugins");
+        std::fs::create_dir(&plugin_dir).unwrap();
+
+        let manifest_path = plugin_dir.join("manifest.toml");
         let loader = PluginLoader::new(temp_dir.path());
 
-        // Test relative path resolution
-        let result = loader.resolve_entry_point(&manifest_path, "plugin.exe");
+        // Test relative path within manifest dir
+        let result = loader.resolve_entry_point(&manifest_path, "./plugin.exe");
         assert!(result.is_ok());
 
-        // Test absolute path rejection
+        // Test absolute path outside manifest dir
         let result = loader.resolve_entry_point(&manifest_path, "/etc/passwd");
         assert!(result.is_err());
 
-        // Test parent traversal rejection
+        // Test parent traversal outside manifest dir
         let result = loader.resolve_entry_point(&manifest_path, "../../../etc/passwd");
         assert!(result.is_err());
+
+        // Test absolute path within manifest dir
+        let plugin_path = plugin_dir.join("test_plugin");
+        std::fs::write(&plugin_path, "test").unwrap();
+        let result = loader.resolve_entry_point(&manifest_path, plugin_path.to_str().unwrap());
+        assert!(result.is_ok());
+
+        // Test relative path that resolves within manifest dir
+        let result = loader.resolve_entry_point(&manifest_path, &format!("../plugins/test_plugin"));
+        assert!(result.is_ok());
     }
 
     #[test]
