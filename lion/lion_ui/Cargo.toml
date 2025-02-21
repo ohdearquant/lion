@@ -23,3 +23,5 @@ hyper = { version = "1.0", features = ["full"] }
 hyper-util = { version = "0.1", features = ["full"] }
 http-body-util = "0.1"
 uuid = { version = "1.0", features = ["v4", "serde"] }
+toml = "0.8"
+chrono = { version = "0.4", features = ["serde"] }

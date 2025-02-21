@@ -116,7 +116,7 @@ impl EventProcessor {
             Err(e) => {
                 let error_event = SystemEvent::PluginError {
                     plugin_id,
-                    error: e.to_string(),
+                    error: e.to_string(), // PluginError already formats errors consistently
                     metadata: EventMetadata {
                         event_id: Uuid::new_v4(),
                         timestamp: Utc::now(),

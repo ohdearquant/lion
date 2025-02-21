@@ -1,9 +1,12 @@
 mod agents;
 mod events;
+mod plugins;
 
 use crate::{
     agents::{list_agents, spawn_agent},
     events::sse_handler,
+    plugins::PluginInfo,
+    plugins::{invoke_plugin_handler, list_plugins_handler, load_plugin_handler},
 };
 use axum::{
     response::{Html, IntoResponse},
@@ -11,7 +14,7 @@ use axum::{
     Router,
 };
 use events::AppState;
-use lion_core::{Orchestrator, SystemEvent};
+use lion_core::{Orchestrator, PluginManifest, SystemEvent};
 use std::{net::SocketAddr, sync::Arc};
 use tracing::{info, Level};
 use tracing_subscriber::FmtSubscriber;
@@ -69,14 +72,18 @@ async fn main() {
         while let Ok(event) = completion_rx.recv().await {
             match &event {
                 SystemEvent::AgentPartialOutput {
-                    agent_id, chunk, ..
+                    agent_id,
+                    chunk,
+                    metadata: _,
                 } => {
                     let _ = state_clone
                         .logs_tx
                         .send(format!("Agent {}: {}", agent_id, chunk));
                 }
                 SystemEvent::AgentCompleted {
-                    agent_id, result, ..
+                    agent_id,
+                    result,
+                    metadata: _,
                 } => {
                     let _ = state_clone
                         .logs_tx
@@ -85,13 +92,65 @@ async fn main() {
                     agents.insert(*agent_id, "completed".to_string());
                 }
                 SystemEvent::AgentError {
-                    agent_id, error, ..
+                    agent_id,
+                    error,
+                    metadata: _,
                 } => {
                     let _ = state_clone
                         .logs_tx
                         .send(format!("Agent {} error: {}", agent_id, error));
                     let mut agents = state_clone.agents.write().await;
                     agents.insert(*agent_id, "error".to_string());
+                }
+                SystemEvent::PluginInvoked {
+                    plugin_id,
+                    input,
+                    metadata: _,
+                } => {
+                    let _ = state_clone.logs_tx.send(format!(
+                        "Plugin {} invoked with input: {}",
+                        plugin_id, input
+                    ));
+
+                    // If this is a load operation, track the plugin
+                    if input.starts_with("load:") {
+                        let mut plugins = state_clone.plugins.write().await;
+                        let manifest_str = &input[5..]; // Skip "load:"
+                        if let Ok(manifest) = toml::from_str::<PluginManifest>(manifest_str) {
+                            plugins.insert(
+                                *plugin_id,
+                                PluginInfo {
+                                    id: *plugin_id,
+                                    loaded: true,
+                                    name: manifest.name,
+                                    version: manifest.version,
+                                    permissions: manifest.permissions,
+                                },
+                            );
+                        } else {
+                            let _ = state_clone
+                                .logs_tx
+                                .send(format!("Failed to parse manifest for plugin {}", plugin_id));
+                        }
+                    }
+                }
+                SystemEvent::PluginResult {
+                    plugin_id,
+                    output,
+                    metadata: _,
+                } => {
+                    let _ = state_clone
+                        .logs_tx
+                        .send(format!("Plugin {} result: {}", plugin_id, output));
+                }
+                SystemEvent::PluginError {
+                    plugin_id,
+                    error,
+                    metadata: _,
+                } => {
+                    let _ = state_clone
+                        .logs_tx
+                        .send(format!("Plugin {} error: {}", plugin_id, error));
                 }
                 _ => {}
             }
@@ -103,6 +162,14 @@ async fn main() {
         .route("/", get(index_handler))
         .route("/events", get(sse_handler))
         .route("/api/agents", post(spawn_agent).get(list_agents))
+        .route(
+            "/api/plugins",
+            post(load_plugin_handler).get(list_plugins_handler),
+        )
+        .route(
+            "/api/plugins/{plugin_id}/invoke",
+            post(invoke_plugin_handler),
+        )
         .with_state(state);
 
     // Run it on localhost:8080
