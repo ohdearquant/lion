@@ -1,11 +1,13 @@
 use axum::{
-    extract::{Multipart, State},
+    extract::{Multipart, Path as AxumPath, State},
     response::Json,
+    routing::post,
+    Router,
 };
 use lion_core::plugin_manager::{PluginManager, PluginManifest};
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::path::Path;
+use std::path::Path as StdPath;
 use std::sync::Arc;
 use tracing::{debug, error};
 use uuid::Uuid;
@@ -72,6 +74,7 @@ pub async fn list_plugins_handler(State(state): State<Arc<AppState>>) -> Json<Ve
 /// Handler for invoking a plugin function
 pub async fn invoke_plugin_handler(
     State(_state): State<Arc<AppState>>,
+    AxumPath(plugin_id): AxumPath<Uuid>,
     Json(request): Json<InvokePluginRequest>,
 ) -> Json<serde_json::Value> {
     let input = serde_json::json!({
@@ -81,15 +84,25 @@ pub async fn invoke_plugin_handler(
 
     let plugin_manager = PluginManager::with_manifest_dir("plugins");
     let result = plugin_manager
-        .invoke_plugin(Uuid::nil(), &input.to_string())
+        .invoke_plugin(plugin_id, &input.to_string())
         .unwrap();
 
     Json(serde_json::from_str(&result).unwrap())
 }
 
+/// Create router for plugin endpoints
+pub fn create_plugin_router() -> Router<Arc<AppState>> {
+    Router::new()
+        .route(
+            "/plugins",
+            post(load_plugin_handler).get(list_plugins_handler),
+        )
+        .route("/plugins/{plugin_id}/invoke", post(invoke_plugin_handler))
+}
+
 /// Load a plugin manifest from a file
 #[allow(dead_code)]
-pub fn load_manifest<P: AsRef<Path>>(path: P) -> Option<PluginManifest> {
+pub fn load_manifest<P: AsRef<StdPath>>(path: P) -> Option<PluginManifest> {
     let path = path.as_ref();
     debug!("Loading manifest from {}", path.display());
 
@@ -116,7 +129,7 @@ pub fn load_manifest<P: AsRef<Path>>(path: P) -> Option<PluginManifest> {
 
 /// Save a plugin manifest to a file
 #[allow(dead_code)]
-pub fn save_manifest<P: AsRef<Path>>(manifest: &PluginManifest, path: P) -> std::io::Result<()> {
+pub fn save_manifest<P: AsRef<StdPath>>(manifest: &PluginManifest, path: P) -> std::io::Result<()> {
     let path = path.as_ref();
     debug!("Saving manifest to {}", path.display());
 
@@ -138,7 +151,7 @@ pub fn save_manifest<P: AsRef<Path>>(manifest: &PluginManifest, path: P) -> std:
 
 /// Load a plugin from a manifest file
 #[allow(dead_code)]
-pub fn load_plugin_from_file<P: AsRef<Path>>(path: P) -> Option<Uuid> {
+pub fn load_plugin_from_file<P: AsRef<StdPath>>(path: P) -> Option<Uuid> {
     let path = path.as_ref();
     debug!("Loading plugin from manifest {}", path.display());
 
@@ -160,7 +173,7 @@ pub fn load_plugin_from_file<P: AsRef<Path>>(path: P) -> Option<Uuid> {
 
 /// Load all plugins from a directory
 #[allow(dead_code)]
-pub fn load_plugins_from_dir<P: AsRef<Path>>(dir: P) -> Vec<Uuid> {
+pub fn load_plugins_from_dir<P: AsRef<StdPath>>(dir: P) -> Vec<Uuid> {
     let dir = dir.as_ref();
     debug!("Loading plugins from directory {}", dir.display());
 

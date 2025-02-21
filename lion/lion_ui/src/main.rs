@@ -6,7 +6,6 @@ use crate::{
     agents::{list_agents, spawn_agent},
     events::sse_handler,
     plugins::PluginInfo,
-    plugins::{invoke_plugin_handler, list_plugins_handler, load_plugin_handler},
 };
 use axum::{
     response::{Html, IntoResponse},
@@ -160,14 +159,7 @@ async fn main() {
         .route("/", get(index_handler))
         .route("/events", get(sse_handler))
         .route("/api/agents", post(spawn_agent).get(list_agents))
-        .route(
-            "/api/plugins",
-            post(load_plugin_handler).get(list_plugins_handler),
-        )
-        .route(
-            "/api/plugins/{plugin_id}/invoke",
-            post(invoke_plugin_handler),
-        )
+        .nest("/api", plugins::create_plugin_router())
         .with_state(state);
 
     // Run it on localhost:8080

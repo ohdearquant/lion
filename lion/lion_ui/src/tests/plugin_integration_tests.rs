@@ -6,14 +6,47 @@ use axum::{
 };
 use http_body_util::BodyExt;
 use lion_core::{plugin_manager::PluginManager, Orchestrator, SystemEvent};
-use std::sync::Arc;
+use std::{path::PathBuf, sync::Arc};
 use tokio::sync::broadcast;
 use tower::ServiceExt;
-use tracing::debug;
+use tracing::{debug, info};
+use tracing_subscriber::fmt::format::FmtSpan;
+
+fn init_test_logging() {
+    let _ = tracing_subscriber::fmt()
+        .with_max_level(tracing::Level::TRACE)
+        .with_test_writer()
+        .with_thread_ids(true)
+        .with_file(true)
+        .with_line_number(true)
+        .with_target(true)
+        .with_span_events(FmtSpan::CLOSE)
+        .try_init();
+}
+
+fn get_project_root() -> PathBuf {
+    let current_dir = std::env::current_dir().unwrap();
+    if current_dir.ends_with("lion_ui") {
+        current_dir.join("..").join("..").canonicalize().unwrap()
+    } else if current_dir.ends_with("lion") {
+        current_dir.canonicalize().unwrap()
+    } else {
+        current_dir
+    }
+}
 
 async fn setup_test_app() -> (Router, broadcast::Receiver<String>) {
+    init_test_logging();
+    info!("Setting up test app");
+
+    // Get the project root and construct the plugins path
+    let project_root = get_project_root();
+    let plugins_dir = project_root.join("plugins");
+    info!("Using plugins directory: {:?}", plugins_dir);
+
     // Initialize plugin manager with plugins directory
-    let mut plugin_manager = PluginManager::with_manifest_dir("plugins");
+    let mut plugin_manager = PluginManager::with_manifest_dir(&plugins_dir);
+    info!("Created plugin manager");
 
     // Discover and load available plugins
     match plugin_manager.discover_plugins() {
@@ -80,15 +113,7 @@ async fn setup_test_app() -> (Router, broadcast::Receiver<String>) {
     ));
 
     let app = Router::new()
-        .route(
-            "/api/plugins",
-            axum::routing::post(crate::plugins::load_plugin_handler)
-                .get(crate::plugins::list_plugins_handler),
-        )
-        .route(
-            "/api/plugins/{plugin_id}/invoke",
-            axum::routing::post(crate::plugins::invoke_plugin_handler),
-        )
+        .nest("/api", crate::plugins::create_plugin_router())
         .with_state(state);
 
     // Give orchestrator time to start
@@ -148,13 +173,11 @@ async fn test_calculator_plugin() {
                 .header("content-type", "application/json")
                 .body(Body::from(
                     serde_json::json!({
-                        "input": serde_json::json!({
-                            "function": "add",
-                            "args": {
-                                "a": 5.0,
-                                "b": 3.0
-                            }
-                        }).to_string()
+                        "function": "add",
+                        "args": {
+                            "a": 5.0,
+                            "b": 3.0
+                        }
                     })
                     .to_string(),
                 ))
@@ -188,13 +211,11 @@ async fn test_calculator_plugin() {
                 .header("content-type", "application/json")
                 .body(Body::from(
                     serde_json::json!({
-                        "input": serde_json::json!({
-                            "function": "divide",
-                            "args": {
-                                "a": 1.0,
-                                "b": 0.0
-                            }
-                        }).to_string()
+                        "function": "divide",
+                        "args": {
+                            "a": 1.0,
+                            "b": 0.0
+                        }
                     })
                     .to_string(),
                 ))

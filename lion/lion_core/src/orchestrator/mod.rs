@@ -324,4 +324,6 @@ mod tests {
             "Fourth event should be AgentCompleted"
         );
     }
+
+    mod state_consistency;
 }
