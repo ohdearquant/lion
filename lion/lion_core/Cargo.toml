@@ -1,6 +1,6 @@
 [package]
 name = "lion_core"
-version = "0.0.1-stage2-phase3"
+version = "0.0.1-dev"
 edition = "2021"
 
 [dependencies]
