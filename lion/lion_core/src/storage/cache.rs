@@ -3,12 +3,14 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use uuid::Uuid;
 
+/// Thread-safe cache specifically designed for FileStorage implementation.
+/// Provides in-memory caching of ElementData to reduce disk reads.
 #[derive(Debug)]
-pub(crate) struct Cache {
+pub(crate) struct FileStorageCache {
     elements: Arc<Mutex<HashMap<Uuid, ElementData>>>,
 }
 
-impl Cache {
+impl FileStorageCache {
     pub fn new() -> Self {
         Self {
             elements: Arc::new(Mutex::new(HashMap::new())),
@@ -36,7 +38,7 @@ impl Cache {
     }
 }
 
-impl Default for Cache {
+impl Default for FileStorageCache {
     fn default() -> Self {
         Self::new()
     }

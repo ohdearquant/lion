@@ -3,13 +3,17 @@ use std::path::{Path, PathBuf};
 use tracing::{debug, error};
 use uuid::Uuid;
 
-use super::{cache::Cache, ElementStore};
+use super::{cache::FileStorageCache, ElementStore};
 use crate::element::ElementData;
 
+/// A persistent storage implementation that saves elements to disk with in-memory caching.
+///
+/// FileStorage provides a file-based implementation of the ElementStore trait, storing
+/// each element as a JSON file and maintaining a cache to improve read performance.
 #[derive(Debug)]
 pub struct FileStorage {
     base_path: PathBuf,
-    cache: Cache,
+    cache: FileStorageCache,
 }
 
 impl FileStorage {
@@ -27,7 +31,7 @@ impl FileStorage {
 
         Self {
             base_path,
-            cache: Cache::new(),
+            cache: FileStorageCache::new(),
         }
     }
 
