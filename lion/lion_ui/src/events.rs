@@ -26,6 +26,7 @@ pub struct AppState {
     pub plugins: RwLock<HashMap<Uuid, PluginInfo>>,
 }
 
+#[allow(dead_code)]
 impl AppState {
     pub fn new(
         orchestrator_sender: tokio::sync::mpsc::Sender<SystemEvent>,

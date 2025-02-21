@@ -36,26 +36,33 @@ pub async fn load_plugin_handler(
     let manifest: PluginManifest = match toml::from_str(&req.manifest) {
         Ok(manifest) => manifest,
         Err(e) => {
-            let error_msg = format!("Invalid manifest format: {}", e.to_string());
+            let error_msg = format!("Invalid manifest format: {}", e);
             println!("Handler sending error: {}", error_msg);
-            let _ = state.orchestrator_sender.send(SystemEvent::PluginError {
-                plugin_id: Uuid::new_v4(),
-                error: error_msg.clone(),
-                metadata: EventMetadata {
-                    event_id: Uuid::new_v4(),
-                    timestamp: chrono::Utc::now(),
-                    correlation_id: None,
-                    context: serde_json::json!({"action": "load"}),
-                },
-            });
-            let _ = state.logs_tx.send(error_msg.clone());
-            return Err(error_msg.clone());
+            state
+                .orchestrator_sender
+                .send(SystemEvent::PluginError {
+                    plugin_id: Uuid::new_v4(),
+                    error: error_msg.clone(),
+                    metadata: EventMetadata {
+                        event_id: Uuid::new_v4(),
+                        timestamp: chrono::Utc::now(),
+                        correlation_id: None,
+                        context: serde_json::json!({"action": "load"}),
+                    },
+                })
+                .await
+                .map_err(|e| format!("Failed to send error: {}", e))?;
+            state
+                .logs_tx
+                .send(error_msg.clone())
+                .map_err(|e| format!("Failed to log error: {}", e))?;
+            return Err(error_msg);
         }
     };
 
     // Load plugin via orchestrator
     let plugin_id = Uuid::new_v4();
-    let _ = state
+    state
         .orchestrator_sender
         .send(SystemEvent::PluginInvoked {
             plugin_id,
@@ -84,10 +91,13 @@ pub async fn load_plugin_handler(
     );
 
     // Send event to UI logs
-    let _ = state.logs_tx.send(format!(
-        "Plugin {} invoked: load:{}",
-        manifest.name, manifest.version
-    ));
+    state
+        .logs_tx
+        .send(format!(
+            "Plugin {} invoked: load:{}",
+            manifest.name, manifest.version
+        ))
+        .map_err(|e| format!("Failed to log plugin load: {}", e))?;
 
     Ok(Json(PluginInfo {
         id: plugin_id,
@@ -144,9 +154,10 @@ pub async fn invoke_plugin_handler(
         .map_err(|e| format!("Failed to invoke plugin: {}", e))?;
 
     // Log the invocation
-    let _ = state
+    state
         .logs_tx
-        .send(format!("Plugin {} invoked: {}", plugin_id, req.input));
+        .send(format!("Plugin {} invoked: {}", plugin_id, req.input))
+        .map_err(|e| format!("Failed to log invocation: {}", e))?;
 
     Ok("Plugin invocation sent".to_string())
 }
@@ -165,11 +176,12 @@ mod tests {
     use tokio::sync::broadcast;
     use tower::ServiceExt;
 
-    async fn setup_test_app() -> Router {
+    async fn setup_test_app() -> (Router, broadcast::Receiver<String>) {
         let orchestrator = Orchestrator::new(100);
         let orchestrator_tx = orchestrator.sender();
         let mut completion_rx = orchestrator.completion_receiver();
         let (logs_tx, _) = broadcast::channel::<String>(100);
+        let logs_tx_clone = logs_tx.clone();
 
         let state = Arc::new(AppState::new_with_logs(orchestrator_tx, logs_tx.clone()));
 
@@ -183,24 +195,33 @@ mod tests {
                     SystemEvent::PluginInvoked {
                         plugin_id, input, ..
                     } => {
-                        let _ = logs_tx.send(format!("Plugin {} invoked: {}", plugin_id, input));
+                        logs_tx_clone
+                            .send(format!("Plugin {} invoked: {}", plugin_id, input))
+                            .map_err(|e| format!("Failed to log invocation: {}", e))
+                            .ok();
                     }
                     SystemEvent::PluginResult {
                         plugin_id, output, ..
                     } => {
-                        let _ = logs_tx.send(format!("Plugin {} result: {}", plugin_id, output));
+                        logs_tx_clone
+                            .send(format!("Plugin {} result: {}", plugin_id, output))
+                            .map_err(|e| format!("Failed to log result: {}", e))
+                            .ok();
                     }
                     SystemEvent::PluginError {
                         plugin_id, error, ..
                     } => {
-                        let _ = logs_tx.send(format!("Plugin {} error: {}", plugin_id, error));
+                        logs_tx_clone
+                            .send(format!("Plugin {} error: {}", plugin_id, error))
+                            .map_err(|e| format!("Failed to log error: {}", e))
+                            .ok();
                     }
                     _ => {}
                 }
             }
         });
 
-        Router::new()
+        let app = Router::new()
             .route(
                 "/api/plugins",
                 axum::routing::post(load_plugin_handler).get(list_plugins_handler),
@@ -209,12 +230,14 @@ mod tests {
                 "/api/plugins/{plugin_id}/invoke",
                 axum::routing::post(invoke_plugin_handler),
             )
-            .with_state(state)
+            .with_state(state);
+
+        (app, logs_tx.subscribe())
     }
 
     #[tokio::test]
     async fn test_load_plugin() {
-        let app = setup_test_app().await;
+        let (app, _logs_rx) = setup_test_app().await;
         let manifest = r#"
 name = "test_plugin"
 version = "0.1.0"
@@ -251,7 +274,7 @@ permissions = ["net"]
                 .to_vec(),
         )
         .unwrap();
-
+        println!("Load response body: {}", body);
         let plugin_info: PluginInfo = serde_json::from_str(&body).unwrap();
         assert_eq!(plugin_info.name, "test_plugin");
         assert_eq!(plugin_info.version, "0.1.0");
@@ -260,7 +283,7 @@ permissions = ["net"]
 
     #[tokio::test]
     async fn test_list_plugins() {
-        let app = setup_test_app().await;
+        let (app, _logs_rx) = setup_test_app().await;
 
         // First load a plugin
         let manifest = r#"
@@ -320,7 +343,7 @@ permissions = ["net"]
 
     #[tokio::test]
     async fn test_invoke_plugin() {
-        let app = setup_test_app().await;
+        let (app, _logs_rx) = setup_test_app().await;
 
         // First load a plugin
         let manifest = r#"
@@ -358,7 +381,7 @@ permissions = ["net"]
                 .to_vec(),
         )
         .unwrap();
-
+        println!("Load response body: {}", body);
         let plugin_info: PluginInfo = serde_json::from_str(&body).unwrap();
 
         // Then invoke the plugin

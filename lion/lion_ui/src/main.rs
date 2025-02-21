@@ -113,9 +113,8 @@ async fn main() {
                     ));
 
                     // If this is a load operation, track the plugin
-                    if input.starts_with("load:") {
+                    if let Some(manifest_str) = input.strip_prefix("load:") {
                         let mut plugins = state_clone.plugins.write().await;
-                        let manifest_str = &input[5..]; // Skip "load:"
                         if let Ok(manifest) = toml::from_str::<PluginManifest>(manifest_str) {
                             plugins.insert(
                                 *plugin_id,
