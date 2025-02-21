@@ -114,6 +114,7 @@ pub async fn load_plugin_handler(
     Ok(Json(plugin_info))
 }
 
+#[allow(clippy::map_entry)]
 pub async fn list_plugins_handler(
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<Vec<PluginInfo>>, String> {

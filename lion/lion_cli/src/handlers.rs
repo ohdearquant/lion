@@ -131,8 +131,7 @@ pub fn handle_load_plugin(manifest: String) {
     let plugin_manager = PluginManager::with_manifest_dir("plugins");
 
     // Read and parse the manifest file
-    let manifest_content =
-        std::fs::read_to_string(&manifest).expect("Failed to read manifest file");
+    let manifest_content = std::fs::read_to_string(manifest).expect("Failed to read manifest file");
     let manifest: PluginManifest =
         toml::from_str(&manifest_content).expect("Failed to parse manifest");
 

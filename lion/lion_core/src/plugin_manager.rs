@@ -50,6 +50,12 @@ pub struct PluginManager {
     storage: Arc<FileStorage>,
 }
 
+impl Default for PluginManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl PluginManager {
     pub fn new() -> Self {
         debug!("Creating new PluginManager with no manifest directory");
@@ -240,7 +246,7 @@ impl PluginManager {
         let plugin = self
             .storage
             .get(&plugin_id)
-            .ok_or_else(|| PluginError::NotFound(plugin_id))?;
+            .ok_or(PluginError::NotFound(plugin_id))?;
 
         let manifest: PluginManifest = serde_json::from_value(
             plugin
@@ -314,6 +320,10 @@ impl PluginManager {
             })
             .collect()
     }
+
+    pub fn clear(&self) {
+        self.storage.clear();
+    }
 }
 
 #[cfg(test)]
@@ -352,7 +362,8 @@ mod tests {
 
     #[test]
     fn test_load_plugin_nonexistent() {
-        let manager = PluginManager::new();
+        let temp_dir = tempdir().unwrap();
+        let manager = PluginManager::with_manifest_dir(temp_dir.path());
         let manifest = create_test_manifest();
         let result = manager.load_plugin(manifest);
         assert!(result.is_err());
@@ -360,7 +371,8 @@ mod tests {
 
     #[test]
     fn test_plugin_not_found() {
-        let manager = PluginManager::new();
+        let temp_dir = tempdir().unwrap();
+        let manager = PluginManager::with_manifest_dir(temp_dir.path());
         let id = Uuid::new_v4();
         let result = manager.invoke_plugin(id, "test");
         assert!(matches!(result, Err(PluginError::NotFound(_))));
@@ -368,7 +380,9 @@ mod tests {
 
     #[test]
     fn test_list_plugins() {
-        let manager = PluginManager::new();
+        let temp_dir = tempdir().unwrap();
+        let manager = PluginManager::with_manifest_dir(temp_dir.path());
+        manager.clear(); // Clear any existing plugins
         assert!(manager.list_plugins().is_empty());
     }
 }

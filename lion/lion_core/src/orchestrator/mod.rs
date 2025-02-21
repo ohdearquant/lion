@@ -90,6 +90,7 @@ impl Orchestrator {
 mod tests {
     use super::*;
     use crate::plugin_manager::PluginManifest;
+    use std::collections::HashMap;
     use std::time::Duration;
     use tokio::time::timeout;
     use uuid::Uuid;
@@ -146,14 +147,36 @@ mod tests {
         let mut completion_rx = orchestrator.completion_receiver();
 
         // Create a test plugin
+        let mut functions = HashMap::new();
+        functions.insert(
+            "add".to_string(),
+            crate::plugin_manager::PluginFunction {
+                name: "add".to_string(),
+                description: "Add two numbers".to_string(),
+                input_schema: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "a": { "type": "number" },
+                        "b": { "type": "number" }
+                    }
+                }),
+                output_schema: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "result": { "type": "number" }
+                    }
+                }),
+            },
+        );
+
         let manifest = PluginManifest {
-            name: "test_plugin".to_string(),
+            name: "calculator".to_string(),
             version: "0.1.0".to_string(),
-            description: "Test plugin".to_string(),
-            entry_point: "/dev/null".to_string(), // dummy path for testing
+            description: "Test calculator plugin".to_string(),
+            entry_point: "/Users/lion/github/lion/target/debug/calculator_plugin".to_string(),
             permissions: vec![],
-            driver: None,
-            functions: std::collections::HashMap::new(),
+            driver: Some("native".to_string()),
+            functions,
         };
 
         let plugin_id = orchestrator
@@ -165,7 +188,15 @@ mod tests {
         tokio::spawn(orchestrator.run());
 
         // Create and send a plugin invocation
-        let event = SystemEvent::new_plugin_invocation(plugin_id, "test input".to_string(), None);
+        let input = serde_json::json!({
+            "function": "add",
+            "args": {
+                "a": 5.0,
+                "b": 3.0
+            }
+        });
+
+        let event = SystemEvent::new_plugin_invocation(plugin_id, input.to_string(), None);
         sender.send(event).await.expect("Failed to send event");
 
         // Wait for completion with timeout
@@ -181,7 +212,7 @@ mod tests {
                 ..
             } => {
                 assert_eq!(completed_id, plugin_id);
-                assert!(output.contains("test input"));
+                assert!(output.contains(r#""result":8.0"#));
             }
             _ => panic!("Expected PluginResult event"),
         }
