@@ -29,11 +29,20 @@ impl PluginLoader {
         }
 
         // Resolve relative to manifest directory
-        let resolved = manifest_dir
-            .join(entry_point)
-            .canonicalize()
-            .unwrap_or_else(|_| manifest_dir.join(entry_point));
-        debug!("Resolved entry point {:?} to {:?}", entry_point, resolved);
+        let mut resolved = manifest_dir.to_path_buf();
+        for component in Path::new(entry_point).components() {
+            match component {
+                std::path::Component::ParentDir => {
+                    resolved = resolved.parent().unwrap_or(Path::new(".")).to_path_buf();
+                }
+                _ => resolved.push(component),
+            }
+        }
+        debug!(
+            "Resolving entry point {} relative to {:?}",
+            entry_point, manifest_dir
+        );
+        debug!("Resolved to: {:?}", resolved);
         resolved
     }
 
@@ -108,13 +117,19 @@ impl PluginLoader {
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .spawn()
-            .map_err(|e| PluginError::ProcessError(format!("Failed to spawn process: {}", e)))?;
+            .map_err(|e| {
+                PluginError::ProcessError(format!(
+                    "Failed to spawn process at {:?}: {}",
+                    entry_point, e
+                ))
+            })?;
 
         // Write input to stdin and explicitly close it
         if let Some(mut stdin) = child.stdin.take() {
             stdin.write_all(input.as_bytes()).map_err(|e| {
                 PluginError::ProcessError(format!("Failed to write to stdin: {}", e))
             })?;
+            debug!("Wrote input to plugin stdin: {}", input);
             drop(stdin); // Explicitly close stdin to signal EOF to the plugin
         }
 
@@ -128,8 +143,9 @@ impl PluginLoader {
                     e
                 ))),
                 None => Err(PluginError::ProcessError(
-                    "No output from plugin".to_string(),
-                )),
+                    format!("No output from plugin at {:?}. Check if the plugin is executable and the input format is correct: {}", 
+                        entry_point, input)
+                ))
             }
         } else {
             Err(PluginError::ProcessError(
