@@ -76,6 +76,23 @@ impl PluginManager {
         }
     }
 
+    fn get_manifest_path(&self, plugin_name: &str) -> Result<std::path::PathBuf, PluginError> {
+        let discovery = self.discovery.as_ref().ok_or_else(|| {
+            PluginError::LoadError("No manifest directory configured".to_string())
+        })?;
+        let manifests = discovery.discover_plugins()?;
+        manifests
+            .iter()
+            .find(|(m, _)| m.name == plugin_name)
+            .map(|(_, p)| p.clone())
+            .ok_or_else(|| {
+                PluginError::LoadError(format!(
+                    "Could not find manifest path for plugin {}",
+                    plugin_name
+                ))
+            })
+    }
+
     pub fn discover_plugins(&self) -> Result<Vec<PluginManifest>, PluginError> {
         debug!("Attempting to discover plugins");
         let discovery = self.discovery.as_ref().ok_or_else(|| {
@@ -98,21 +115,8 @@ impl PluginManager {
             PluginError::LoadError("No manifest directory configured".to_string())
         })?;
 
-        // Get the manifest path from discovery
-        let discovery = self.discovery.as_ref().ok_or_else(|| {
-            PluginError::LoadError("No manifest directory configured".to_string())
-        })?;
-        let manifests = discovery.discover_plugins()?;
-        let manifest_path = manifests
-            .iter()
-            .find(|(m, _)| m.name == manifest.name)
-            .map(|(_, p)| p.clone())
-            .ok_or_else(|| {
-                PluginError::LoadError(format!(
-                    "Could not find manifest path for plugin {}",
-                    manifest.name
-                ))
-            })?;
+        // Get manifest path
+        let manifest_path = self.get_manifest_path(&manifest.name)?;
 
         // Store manifest path before loading plugin
         let manifest_path = manifest_path.to_path_buf();
@@ -143,16 +147,8 @@ impl PluginManager {
             PluginError::LoadError("No manifest directory configured".to_string())
         })?;
 
-        // Get the manifest path from discovery
-        let discovery = self.discovery.as_ref().ok_or_else(|| {
-            PluginError::LoadError("No manifest directory configured".to_string())
-        })?;
-        let manifests = discovery.discover_plugins()?;
-        let manifest_path_buf = manifests
-            .iter()
-            .find(|(m, _)| m.name == manifest.name)
-            .map(|(_, p)| p.clone())
-            .unwrap();
+        // Get manifest path
+        let manifest_path_buf = self.get_manifest_path(&manifest.name)?;
 
         loader.invoke_plugin(&manifest, manifest_path_buf.as_path(), input)
     }
