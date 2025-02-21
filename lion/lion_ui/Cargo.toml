@@ -1,6 +1,6 @@
 [package]
 name = "lion_ui"
-version = "0.0.1-stage2-phase2"
+version = "0.0.1-stage2-phase3"
 edition = "2021"
 
 [[bin]]
