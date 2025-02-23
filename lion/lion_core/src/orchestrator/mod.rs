@@ -108,8 +108,6 @@ mod tests {
     use crate::plugin_manager::init_test_logging;
     use std::time::Duration;
     use tokio::time::timeout;
-    use tracing::debug;
-    use tracing_subscriber::fmt::format::FmtSpan;
     use uuid::Uuid;
 
     #[tokio::test]
