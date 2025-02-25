@@ -1,13 +1,14 @@
 [package]
-name = "lion_core"
+name = "lion_capability_manager"
 version = "0.1.0"
 edition = "2021"
-description = "Core traits and interfaces for the Lion WebAssembly Plugin System"
+description = "Capability management for the Lion WebAssembly Plugin System"
 
 [dependencies]
+lion_core = { path = "../lion_core" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
 log = { workspace = true }
 uuid = { workspace = true }
-async-trait = { workspace = true }
+dashmap = "6.1"

@@ -1,29 +1,21 @@
 [package]
-name = "lion_cli"
+name = "lion_plugin_manager"
 version = "0.1.0"
 edition = "2021"
-description = "Command-line interface for the Lion WebAssembly Plugin System"
+description = "Plugin manager for the Lion WebAssembly Plugin System"
 
 [dependencies]
 lion_core = { path = "../lion_core" }
 lion_wasm_runtime = { path = "../lion_wasm_runtime" }
 lion_capability_manager = { path = "../lion_capability_manager" }
 lion_message_bus = { path = "../lion_message_bus" }
-lion_plugin_manager = { path = "../lion_plugin_manager" }
-
-clap = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+toml = "0.8"
 thiserror = { workspace = true }
 log = { workspace = true }
-env_logger = { workspace = true }
 uuid = { workspace = true }
-comfy-table = { workspace = true }
-indicatif = { workspace = true }
-toml = "0.7"
-anyhow = { workspace = true }
-colored = "2.0"
-
-[[bin]]
-name = "lion"
-path = "src/main.rs"
+dashmap = "6.0"
+reqwest = { version = "0.12", features = ["blocking"] }
+ureq = "3.0"
+chrono = { version = "0.4", features = ["serde"] }
