@@ -292,6 +292,16 @@ impl<T> TrackedMutex<T> {
     }
 }
 
+impl<T: Default> Clone for TrackedMutex<T> {
+    fn clone(&self) -> Self {
+        Self {
+            mutex: Mutex::new(Default::default()),
+            stats: Arc::clone(&self.stats),
+            name: self.name.clone(),
+        }
+    }
+}
+
 impl<T> Default for TrackedMutex<T>
 where
     T: Default,
@@ -908,23 +918,29 @@ mod tests {
     #[test]
     fn test_tracked_mutex_timeout() {
         let mutex = TrackedMutex::new(0);
-        let mutex_clone = Arc::new(TrackedMutex::new(0));
+        let mutex_arc = Arc::new(mutex.clone());
+        let mutex_clone = Arc::clone(&mutex_arc);
 
         // First lock
-        let guard = mutex.lock();
+        let guard = mutex_arc.lock();
 
         // Try to lock with timeout (should fail)
         let thread = thread::spawn(move || {
-            let result = mutex_clone.try_lock_for(Duration::from_millis(100));
-            assert!(matches!(result, Err(LockError::Timeout(_))));
+            // Use a very short timeout to ensure it fails quickly
+            let result = mutex_clone.try_lock_for(Duration::from_millis(10));
+            // Verify the result is a timeout error (should fail since the lock is held)
+            if !matches!(result, Err(LockError::Timeout(_))) {
+                panic!("Expected timeout error");
+            }
         });
 
         // Release the first lock
         drop(guard);
+
+        // Wait for the thread to complete
         thread.join().unwrap();
 
-        // Get the stats
-        let stats = mutex.stats();
+        let stats = mutex_arc.stats();
         assert_eq!(stats.acquisition_count, 1);
         assert_eq!(stats.failed_count, 1);
     }

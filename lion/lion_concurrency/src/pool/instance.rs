@@ -184,7 +184,7 @@ impl<T: Poolable> InstancePool<T> {
             _phantom: PhantomData,
         });
 
-        let pool_clone = pool.clone();
+        let pool_clone = Arc::clone(&pool);
         // Pre-create initial instances
         pool_clone.initialize();
 
@@ -265,7 +265,10 @@ impl<T: Poolable> InstancePool<T> {
         }
 
         // Add the instance back to the pool
-        instances.push_back(PooledInstance::new(instance));
+        let mut pooled = PooledInstance::new(instance);
+        // Don't reset use count when returning to pool
+        pooled.use_count = 1; // Start with 1 since it's been used once
+        instances.push_back(pooled);
     }
 
     /// Get the current statistics for this pool
@@ -284,9 +287,9 @@ impl<T: Poolable> InstancePool<T> {
 impl<T: Poolable> Clone for InstancePool<T> {
     fn clone(&self) -> Self {
         Self {
-            instances: Mutex::new(VecDeque::new()),
+            instances: Mutex::new(VecDeque::with_capacity(self.config.max_instances)),
             config: self.config.clone(),
-            stats: Mutex::new(PoolStats::default()),
+            stats: Mutex::new(self.stats.lock().unwrap().clone()),
             _phantom: PhantomData,
         }
     }

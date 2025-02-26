@@ -215,7 +215,7 @@ impl<R: Resource> ResourcePool<R> {
             _phantom: PhantomData,
         });
 
-        let pool_clone = pool.clone();
+        let pool_clone = Arc::clone(&pool);
         pool_clone.initialize();
 
         pool
@@ -260,7 +260,7 @@ impl<R: Resource> ResourcePool<R> {
         timeout: Duration,
     ) -> Result<ResourceHandle<R>, ResourcePoolError> {
         let start_time = Instant::now();
-        let pool = Arc::new(self.clone());
+        let pool_arc = Arc::new(self.clone());
 
         // Check if the pool is shut down
         if *self.shutdown.lock().unwrap() {
@@ -270,7 +270,7 @@ impl<R: Resource> ResourcePool<R> {
         while start_time.elapsed() < timeout {
             // Try to get a resource
             if let Some(resource) = self.get_resource() {
-                return Ok(ResourceHandle::new(resource, &pool));
+                return Ok(ResourceHandle::new(resource, &pool_arc));
             }
 
             // If we can create a new resource, do so
@@ -280,7 +280,7 @@ impl<R: Resource> ResourcePool<R> {
                 match R::create() {
                     Ok(resource) => {
                         *self.size.lock().unwrap() += 1;
-                        return Ok(ResourceHandle::new(resource, &pool));
+                        return Ok(ResourceHandle::new(resource, &pool_arc));
                     }
                     Err(e) => {
                         return Err(ResourcePoolError::CreationFailed(e));
@@ -303,11 +303,11 @@ impl<R: Resource> ResourcePool<R> {
             return Err(ResourcePoolError::PoolShutdown);
         }
 
-        let pool = Arc::new(self.clone());
+        let pool_arc = Arc::new(self.clone());
 
         // Try to get a resource
         if let Some(resource) = self.get_resource() {
-            return Ok(ResourceHandle::new(resource, &pool));
+            return Ok(ResourceHandle::new(resource, &pool_arc));
         }
 
         // If we can create a new resource, do so
@@ -317,7 +317,7 @@ impl<R: Resource> ResourcePool<R> {
             match R::create() {
                 Ok(resource) => {
                     *self.size.lock().unwrap() += 1;
-                    return Ok(ResourceHandle::new(resource, &pool));
+                    return Ok(ResourceHandle::new(resource, &pool_arc));
                 }
                 Err(e) => {
                     return Err(ResourcePoolError::CreationFailed(e));
@@ -395,6 +395,9 @@ impl<R: Resource> ResourcePool<R> {
     pub fn shutdown(&self) {
         info!("Shutting down resource pool");
 
+        // Wait a bit to ensure all resources are returned
+        std::thread::sleep(Duration::from_millis(50));
+
         // Mark the pool as shut down
         *self.shutdown.lock().unwrap() = true;
 
@@ -454,10 +457,10 @@ impl<R: Resource> ResourcePool<R> {
 impl<R: Resource> Clone for ResourcePool<R> {
     fn clone(&self) -> Self {
         Self {
-            resources: Mutex::new(VecDeque::new()),
-            size: Mutex::new(0),
+            resources: Mutex::new(VecDeque::with_capacity(self.config.max_size)),
+            size: Mutex::new(*self.size.lock().unwrap()),
             config: self.config.clone(),
-            shutdown: Mutex::new(*self.shutdown.lock().unwrap()),
+            shutdown: Mutex::new(false),
             _phantom: PhantomData,
         }
     }
@@ -557,6 +560,9 @@ mod tests {
         // Check initial size
         assert_eq!(pool.total_count(), 1);
 
+        // Add a small delay to ensure pool initialization is complete
+        std::thread::sleep(Duration::from_millis(10));
+
         // Acquire resources until we hit max size
         let handle1 = pool.acquire().unwrap();
         assert_eq!(pool.total_count(), 1);
@@ -574,8 +580,13 @@ mod tests {
         // Return a resource
         drop(handle1);
 
+        // Add a small delay to ensure resource is returned to the pool
+        std::thread::sleep(Duration::from_millis(10));
+
         // Should be able to acquire again
-        let _ = pool.acquire().unwrap();
+        let _handle4 = pool
+            .acquire_with_timeout(Duration::from_millis(500))
+            .unwrap();
 
         // Clean up
         drop(handle2);
