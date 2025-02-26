@@ -9,7 +9,7 @@ use std::path::PathBuf;
 use std::str::FromStr;
 
 use lion_core::error::{CapabilityError, Error, Result};
-use lion_core::id::{CapabilityId, NodeId, PluginId};
+use lion_core::id::{CapabilityId, PluginId};
 use lion_core::traits::{capability::Constraint, Capability};
 use lion_core::types::{
     AccessRequest, ErrorPolicy, ExecutionOptions, MemoryRegion, MemoryRegionType, PluginConfig,
