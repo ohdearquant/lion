@@ -1,6 +1,8 @@
 # Lion Observability
 
-A comprehensive observability framework for the Lion microkernel, providing structured logging, distributed tracing, and metrics collection with capability-based security integration.
+A comprehensive observability framework for the Lion microkernel, providing
+structured logging, distributed tracing, and metrics collection with
+capability-based security integration.
 
 ## Features
 
@@ -19,7 +21,8 @@ The Lion Observability system follows these design principles:
 1. **Security First**: All observability features require explicit capabilities
 2. **Performance**: Minimal overhead with efficient implementations
 3. **Modularity**: Clean separation of logging, metrics, and tracing
-4. **Integration**: Seamless integration with Lion's capability and plugin systems
+4. **Integration**: Seamless integration with Lion's capability and plugin
+   systems
 
 ## Example Usage
 
@@ -74,7 +77,8 @@ obs.shutdown()?;
 
 ## Capability-Based Security
 
-The observability system integrates with Lion's capability-based security model. Each observability operation requires a specific capability:
+The observability system integrates with Lion's capability-based security model.
+Each observability operation requires a specific capability:
 
 - `Log(level)`: Capability to write logs at the specified level
 - `Tracing`: Capability to create and record spans
@@ -156,7 +160,8 @@ See the `examples` directory for complete examples:
 
 Licensed under either of
 
- * Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
- * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
+- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE) or
+  http://www.apache.org/licenses/LICENSE-2.0)
+- MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
 
 at your option.

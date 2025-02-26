@@ -6,12 +6,12 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use crate::capability::ObservabilityCapabilityChecker;
+use crate::capability::{LogLevel, ObservabilityCapabilityChecker};
 use crate::context::{Context, SpanContext};
 use crate::error::ObservabilityError;
-use crate::logging::{LogEvent, LogLevel, Logger};
+use crate::logging::{LogEvent, LoggerBase};
 use crate::metrics::{Counter, Gauge, Histogram, MetricsRegistry};
-use crate::tracing_system::{Span, SpanStatus, Tracer, TracingEvent};
+use crate::tracing_system::{Span, SpanStatus, Tracer, TracerBase, TracingEvent};
 use crate::Result;
 
 /// Observability for a specific plugin
@@ -21,10 +21,10 @@ pub struct PluginObservability {
     plugin_id: String,
 
     /// Logger
-    logger: Arc<dyn Logger>,
+    logger: Arc<dyn LoggerBase>,
 
     /// Tracer
-    tracer: Arc<dyn Tracer>,
+    tracer: Arc<dyn TracerBase>,
 
     /// Metrics registry
     metrics_registry: Arc<dyn MetricsRegistry>,
@@ -37,8 +37,8 @@ impl PluginObservability {
     /// Create a new plugin observability instance
     pub fn new(
         plugin_id: String,
-        logger: Arc<dyn Logger>,
-        tracer: Arc<dyn Tracer>,
+        logger: Arc<dyn LoggerBase>,
+        tracer: Arc<dyn TracerBase>,
         metrics_registry: Arc<dyn MetricsRegistry>,
         capability_checker: Option<Arc<dyn ObservabilityCapabilityChecker>>,
     ) -> Self {
@@ -197,10 +197,10 @@ impl PluginObservability {
 /// Manager for plugin observability
 pub struct PluginObservabilityManager {
     /// Logger
-    logger: Arc<dyn Logger>,
+    logger: Arc<dyn LoggerBase>,
 
     /// Tracer
-    tracer: Arc<dyn Tracer>,
+    tracer: Arc<dyn TracerBase>,
 
     /// Metrics registry
     metrics_registry: Arc<dyn MetricsRegistry>,
@@ -215,8 +215,8 @@ pub struct PluginObservabilityManager {
 impl PluginObservabilityManager {
     /// Create a new plugin observability manager
     pub fn new(
-        logger: Arc<dyn Logger>,
-        tracer: Arc<dyn Tracer>,
+        logger: Arc<dyn LoggerBase>,
+        tracer: Arc<dyn TracerBase>,
         metrics_registry: Arc<dyn MetricsRegistry>,
         capability_checker: Option<Arc<dyn ObservabilityCapabilityChecker>>,
     ) -> Self {

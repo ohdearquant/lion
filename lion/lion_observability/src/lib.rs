@@ -42,10 +42,10 @@ pub use capability::{ObservabilityCapability, ObservabilityCapabilityChecker};
 pub use config::{LoggingConfig, MetricsConfig, ObservabilityConfig, TracingConfig};
 pub use context::{Context, SpanContext};
 pub use error::ObservabilityError;
-pub use logging::{LogEvent, LogLevel, Logger};
+pub use logging::{LogEvent, Logger, LoggerBase};
 pub use metrics::{Counter, Gauge, Histogram, Metric, MetricsRegistry};
 pub use plugin::{PluginObservability, PluginObservabilityManager};
-pub use tracing_system::{Span, Tracer, TracingEvent};
+pub use tracing_system::{Span, Tracer, TracerBase, TracingEvent};
 
 /// Result type for observability operations
 pub type Result<T> = std::result::Result<T, ObservabilityError>;
@@ -57,8 +57,8 @@ pub type Result<T> = std::result::Result<T, ObservabilityError>;
 #[derive(Clone)]
 pub struct Observability {
     config: Arc<ObservabilityConfig>,
-    logger: Arc<dyn Logger>,
-    tracer: Arc<dyn Tracer>,
+    logger: Arc<dyn LoggerBase>,
+    tracer: Arc<dyn TracerBase>,
     metrics_registry: Arc<dyn MetricsRegistry>,
     capability_checker: Option<Arc<dyn ObservabilityCapabilityChecker>>,
 }
@@ -89,12 +89,12 @@ impl Observability {
     }
 
     /// Get the logger instance
-    pub fn logger(&self) -> Arc<dyn Logger> {
+    pub fn logger(&self) -> Arc<dyn LoggerBase> {
         self.logger.clone()
     }
 
     /// Get the tracer instance
-    pub fn tracer(&self) -> Arc<dyn Tracer> {
+    pub fn tracer(&self) -> Arc<dyn TracerBase> {
         self.tracer.clone()
     }
 

@@ -5,6 +5,7 @@
 
 use crate::error::ObservabilityError;
 use crate::Result;
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::fmt;
 use std::sync::Arc;
 
@@ -34,7 +35,7 @@ pub enum ObservabilityCapability {
 }
 
 /// Log level for capability checking
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum LogLevel {
     /// Trace level logs (most verbose)
     Trace,
@@ -70,6 +71,27 @@ impl From<&str> for LogLevel {
             "error" | "err" => LogLevel::Error,
             _ => LogLevel::Info, // Default to Info
         }
+    }
+}
+
+#[cfg(feature = "serde")]
+impl Serialize for LogLevel {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&self.to_string())
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'de> Deserialize<'de> for LogLevel {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        Ok(LogLevel::from(s.as_str()))
     }
 }
 
