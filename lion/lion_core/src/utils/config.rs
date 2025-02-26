@@ -695,11 +695,11 @@ impl Config {
 
                         if let Some(array) = current.as_array_mut() {
                             // Ensure the array is large enough
-                            while array.len() <= index {
+                            while array.len() <= *index {
                                 array.push(ConfigValue::Null);
                             }
 
-                            array[index] = value.into();
+                            array[*index] = value.into();
                             return Ok(());
                         }
                     }
@@ -719,16 +719,16 @@ impl Config {
                         };
 
                         // Create the key if it doesn't exist
-                        if !map.contains_key(key) {
+                        if !map.contains_key(&key.to_string()) {
                             let next_part = &parts[i + 1];
                             let new_value = match next_part {
                                 PathPart::Key(_) => ConfigValue::Map(HashMap::new()),
                                 PathPart::Index(_) => ConfigValue::Array(Vec::new()),
                             };
-                            map.insert(key.into(), new_value);
+                            map.insert(key.to_string(), new_value);
                         }
 
-                        current = map.get_mut(key).unwrap();
+                        current = map.get_mut(&key.to_string()).unwrap();
                     }
                     PathPart::Index(index) => {
                         if !current.is_array() {
@@ -744,7 +744,7 @@ impl Config {
                         };
 
                         // Ensure the array is large enough
-                        while array.len() <= index {
+                        while array.len() <= *index {
                             let next_part = if i + 1 < parts.len() {
                                 &parts[i + 1]
                             } else {
@@ -759,7 +759,7 @@ impl Config {
                             array.push(new_value);
                         }
 
-                        current = array.get_mut(index).unwrap();
+                        current = array.get_mut(*index).unwrap();
                     }
                 }
             }
@@ -794,7 +794,7 @@ impl Config {
                 // Last part, remove the value
                 return match part {
                     PathPart::Key(key) => current.remove(key),
-                    PathPart::Index(index) => current.remove_index(index),
+                    PathPart::Index(index) => current.remove_index(*index),
                 };
             }
 
@@ -807,7 +807,7 @@ impl Config {
                     }
                 }
                 PathPart::Index(index) => {
-                    if let Some(next) = current.get_index_mut(index) {
+                    if let Some(next) = current.get_index_mut(*index) {
                         current = next;
                     } else {
                         return None;

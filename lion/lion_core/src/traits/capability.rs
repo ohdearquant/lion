@@ -23,7 +23,7 @@
 //! - **Composability**: Capabilities can be combined, split, or constrained
 //!   to create new capabilities.
 
-use crate::error::{CapabilityError, Error, Result};
+use crate::error::{CapabilityError, Result};
 use crate::types::AccessRequest;
 use std::sync::Arc;
 
@@ -227,13 +227,9 @@ pub trait Capability: Send + Sync {
     /// }
     /// # }
     /// ```
-    fn split(&self) -> Vec<Box<dyn Capability + '_>>
-    where
-        Self: Sized,
-    {
-        vec![Box::new(ClonedCapability(Arc::new(CapabilityWrapper(
-            self,
-        ))))]
+    fn split(&self) -> Vec<Box<dyn Capability>> {
+        // Default implementation just returns an empty vector
+        Vec::new()
     }
 
     /// Checks if this capability can be joined with another.
@@ -562,40 +558,44 @@ mod tests {
 
             // Only create capabilities for permissions that are enabled
             if self.read {
-                caps.push(Box::new(FileCapability {
+                let cap: Box<dyn Capability> = Box::new(FileCapability {
                     path: self.path.clone(),
                     read: true,
                     write: false,
                     execute: false,
-                }));
+                });
+                caps.push(cap);
             }
 
             if self.write {
-                caps.push(Box::new(FileCapability {
+                let cap: Box<dyn Capability> = Box::new(FileCapability {
                     path: self.path.clone(),
                     read: false,
                     write: true,
                     execute: false,
-                }));
+                });
+                caps.push(cap);
             }
 
             if self.execute {
-                caps.push(Box::new(FileCapability {
+                let cap: Box<dyn Capability> = Box::new(FileCapability {
                     path: self.path.clone(),
                     read: false,
                     write: false,
                     execute: true,
-                }));
+                });
+                caps.push(cap);
             }
 
             // If no permissions are enabled, return an empty capability
             if caps.is_empty() {
-                caps.push(Box::new(FileCapability {
+                let cap: Box<dyn Capability> = Box::new(FileCapability {
                     path: self.path.clone(),
                     read: false,
                     write: false,
                     execute: false,
-                }));
+                });
+                caps.push(cap);
             }
 
             caps

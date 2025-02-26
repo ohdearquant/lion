@@ -428,7 +428,7 @@ pub trait AsyncWorkflowEngine: Send + Sync {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::{ErrorPolicy, NodeType};
+    use crate::types::{ErrorPolicy, NodeType, WorkflowNode};
     use std::collections::HashMap;
     use std::sync::{Arc, Mutex};
 
