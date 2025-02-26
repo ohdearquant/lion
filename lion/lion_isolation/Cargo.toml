@@ -1,13 +1,20 @@
 [package]
-name = "lion_core"
+name = "lion_isolation"
 version = "0.1.0"
 edition = "2021"
-description = "Core types and interfaces for the Lion microkernel system"
+description = "Isolation system for the Lion microkernel"
 license = "MIT OR Apache-2.0"
 authors = ["Lion Microkernel Team"]
 
 [dependencies]
-thiserror = "2.0"
+lion_core = { path = "../lion_core" }
+thiserror = "1.0"
+wasmtime = "17.0"
+anyhow = "1.0"
 serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
 uuid = { version = "1.0", features = ["v4", "serde"] }
+parking_lot = "0.12"
+tracing = "0.1"
+dashmap = "5.4.0"
 chrono = { version = "0.4", features = ["serde"] }
