@@ -1,8 +1,6 @@
 mod in_memory;
 mod partial_revocation;
 
-use std::sync::Arc;
-
 use lion_core::id::{CapabilityId, PluginId};
 
 use crate::model::{AccessRequest, Capability, CapabilityError};

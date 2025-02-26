@@ -1,5 +1,4 @@
 use std::any::Any;
-use std::collections::HashMap;
 use std::fmt;
 
 use crate::model::{AccessRequest, Capability, CapabilityError, Constraint};

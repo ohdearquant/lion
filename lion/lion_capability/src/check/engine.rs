@@ -76,15 +76,27 @@ impl CapabilityChecker {
 mod tests {
     use super::*;
     use std::collections::HashSet;
+    use uuid::Uuid;
 
     use crate::model::file::{FileCapability, FileOperations};
     use crate::store::InMemoryCapabilityStore;
+
+    fn test_plugin_id(value: u64) -> PluginId {
+        // Create a deterministic UUID from the value
+        let bytes = value.to_le_bytes();
+        let mut uuid_bytes = [0u8; 16];
+        for i in 0..std::cmp::min(8, uuid_bytes.len()) {
+            uuid_bytes[i] = bytes[i];
+        }
+        let uuid = Uuid::from_bytes(uuid_bytes);
+        PluginId::from_uuid(uuid)
+    }
 
     #[test]
     fn test_capability_checker() {
         // Create a store
         let store = Arc::new(InMemoryCapabilityStore::new());
-        let plugin_id = PluginId::from_u64(1);
+        let plugin_id = test_plugin_id(1);
 
         // Add a capability to the store
         let paths = ["/tmp/file.txt".to_string()].into_iter().collect();
@@ -126,7 +138,7 @@ mod tests {
     fn test_capability_checker_with_audit() {
         // Create a store
         let store = Arc::new(InMemoryCapabilityStore::new());
-        let plugin_id = PluginId::from_u64(1);
+        let plugin_id = test_plugin_id(1);
 
         // Add a capability to the store
         let paths = ["/tmp/file.txt".to_string()].into_iter().collect();

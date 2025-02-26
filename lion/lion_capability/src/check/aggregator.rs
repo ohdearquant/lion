@@ -56,7 +56,7 @@ impl CapabilitySet {
     pub fn merge_by_type(&self) -> Result<CapabilitySet, CapabilityError> {
         let mut result = CapabilitySet::new();
 
-        for (capability_type, capabilities) in &self.capabilities {
+        for (_capability_type, capabilities) in &self.capabilities {
             if capabilities.is_empty() {
                 continue;
             }

@@ -5,6 +5,7 @@ use std::collections::HashSet;
 use super::capability::{path_matches, AccessRequest, Capability, CapabilityError, Constraint};
 
 bitflags! {
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
     /// Represents file operation permissions as a bit field for efficient checking
     pub struct FileOperations: u8 {
         const READ = 0b00000001;

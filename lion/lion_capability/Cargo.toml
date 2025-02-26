@@ -16,6 +16,7 @@ indexmap = "2.0"
 tracing = "0.1"
 atomic = "0.6"
 ahash = "0.8"
+uuid = { version = "1.0", features = ["v4"] }
 
 [dev-dependencies]
 proptest = "1.2"

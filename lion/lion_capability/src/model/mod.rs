@@ -1,10 +1,10 @@
 mod capability;
-mod composite;
-mod file;
+pub mod composite;
+pub mod file;
 mod memory;
 mod message;
-mod network;
-mod plugin_call;
+pub mod network;
+pub mod plugin_call;
 
 pub use capability::{
     path_matches, AccessRequest, Capability, CapabilityBuilder, CapabilityError, CapabilityOwner,

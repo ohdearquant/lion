@@ -144,7 +144,7 @@ impl Capability for CompositeCapability {
         let mut result = Vec::new();
 
         // For each capability type, create a new composite with just that capability
-        for (capability_type, capability) in &self.capabilities {
+        for (_capability_type, capability) in &self.capabilities {
             // Get all sub-capabilities from the split
             let sub_capabilities = capability.split();
 

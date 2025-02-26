@@ -391,14 +391,26 @@ impl Capability for PluginCallCapability {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use uuid::Uuid;
+
+    fn test_plugin_id(value: u64) -> PluginId {
+        // Create a deterministic UUID from the value
+        let bytes = value.to_le_bytes();
+        let mut uuid_bytes = [0u8; 16];
+        for i in 0..std::cmp::min(8, uuid_bytes.len()) {
+            uuid_bytes[i] = bytes[i];
+        }
+        let uuid = Uuid::from_bytes(uuid_bytes);
+        PluginId::from_uuid(uuid)
+    }
 
     #[test]
     fn test_plugin_call_capability_is_call_allowed() {
         let mut cap = PluginCallCapability::new();
 
-        let plugin1 = PluginId::from_u64(1);
-        let plugin2 = PluginId::from_u64(2);
-        let plugin3 = PluginId::from_u64(3);
+        let plugin1 = test_plugin_id(1);
+        let plugin2 = test_plugin_id(2);
+        let plugin3 = test_plugin_id(3);
 
         // Add specific functions for plugin1
         cap.add_function(plugin1, "func1".to_string());
@@ -422,7 +434,7 @@ mod tests {
     fn test_plugin_call_capability_permits() {
         let mut cap = PluginCallCapability::new();
 
-        let plugin1 = PluginId::from_u64(1);
+        let plugin1 = test_plugin_id(1);
 
         // Add specific functions for plugin1
         cap.add_function(plugin1, "func1".to_string());
@@ -446,7 +458,7 @@ mod tests {
         // Invalid plugin
         assert!(cap
             .permits(&AccessRequest::PluginCall {
-                plugin_id: PluginId::from_u64(2).to_string(),
+                plugin_id: test_plugin_id(2).to_string(),
                 function: "func1".to_string(),
             })
             .is_err());
@@ -466,7 +478,7 @@ mod tests {
     fn test_plugin_call_capability_constrain() {
         let mut cap = PluginCallCapability::new();
 
-        let plugin1 = PluginId::from_u64(1);
+        let plugin1 = test_plugin_id(1);
 
         // Add several functions for plugin1
         cap.add_function(plugin1, "func1".to_string());
@@ -501,7 +513,7 @@ mod tests {
         let mut cap1 = PluginCallCapability::new();
         let mut cap2 = PluginCallCapability::new();
 
-        let plugin1 = PluginId::from_u64(1);
+        let plugin1 = test_plugin_id(1);
 
         // Add specific function to cap1
         cap1.add_function(plugin1, "func1".to_string());
@@ -532,7 +544,7 @@ mod tests {
         let mut cap1 = PluginCallCapability::new();
         let mut cap2 = PluginCallCapability::new();
 
-        let plugin1 = PluginId::from_u64(1);
+        let plugin1 = test_plugin_id(1);
 
         // Add different functions to each capability
         cap1.add_function(plugin1, "func1".to_string());

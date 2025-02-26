@@ -6,6 +6,7 @@ use std::collections::BTreeMap;
 use super::capability::{AccessRequest, Capability, CapabilityError, Constraint};
 
 bitflags! {
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
     /// Represents memory operation permissions as a bit field
     pub struct MemoryOperations: u8 {
         const READ = 0b00000001;

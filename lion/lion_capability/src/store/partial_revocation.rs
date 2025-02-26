@@ -1,5 +1,3 @@
-use std::any::Any;
-
 use crate::model::{AccessRequest, Capability, CapabilityError};
 
 /// Apply partial revocation to a capability, removing specific access
@@ -51,7 +49,7 @@ pub fn apply_partial_revocation(
     // derived from the request to further constrain the capability
     match request {
         AccessRequest::File {
-            path,
+            path: _path,
             read,
             write,
             execute,

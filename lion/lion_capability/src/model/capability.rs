@@ -1,14 +1,13 @@
 use std::any::Any;
 use std::fmt::{Debug, Display};
 
-use lion_core::error::ErrorCode;
-use lion_core::id::CapabilityId;
 use thiserror::Error;
 
 /// Errors that can occur during capability operations
-#[derive(Error, Debug, Clone, PartialEq, Eq)]
+#[derive(Error, Debug)]
 pub enum CapabilityError {
     #[error("Access denied: {0}")]
+    // All error variants except the last one
     AccessDenied(String),
 
     #[error("Invalid constraint: {0}")]
@@ -30,21 +29,47 @@ pub enum CapabilityError {
     InvalidState(String),
 
     #[error("Core error: {0}")]
-    CoreError(#[from] lion_core::error::Error),
+    CoreError(lion_core::error::Error),
 }
 
 impl CapabilityError {
-    pub fn code(&self) -> ErrorCode {
+    pub fn from_core_error(e: lion_core::error::Error) -> Self {
+        CapabilityError::CoreError(e)
+    }
+}
+
+impl Clone for CapabilityError {
+    fn clone(&self) -> Self {
         match self {
-            CapabilityError::AccessDenied(_) => ErrorCode::PermissionDenied,
-            CapabilityError::InvalidConstraint(_) => ErrorCode::InvalidArgument,
-            CapabilityError::IncompatibleTypes(_) => ErrorCode::InvalidArgument,
-            CapabilityError::UnsupportedOperation(_) => ErrorCode::Unsupported,
-            CapabilityError::NotFound(_) => ErrorCode::NotFound,
-            CapabilityError::InternalError(_) => ErrorCode::Internal,
-            CapabilityError::InvalidState(_) => ErrorCode::InvalidState,
-            CapabilityError::CoreError(e) => e.code(),
+            CapabilityError::AccessDenied(s) => CapabilityError::AccessDenied(s.clone()),
+            CapabilityError::InvalidConstraint(s) => CapabilityError::InvalidConstraint(s.clone()),
+            CapabilityError::IncompatibleTypes(s) => CapabilityError::IncompatibleTypes(s.clone()),
+            CapabilityError::UnsupportedOperation(s) => {
+                CapabilityError::UnsupportedOperation(s.clone())
+            }
+            CapabilityError::NotFound(s) => CapabilityError::NotFound(s.clone()),
+            CapabilityError::InternalError(s) => CapabilityError::InternalError(s.clone()),
+            CapabilityError::InvalidState(s) => CapabilityError::InvalidState(s.clone()),
+            // Skip cloning the core error, just create a new internal error with the display string
+            CapabilityError::CoreError(e) => {
+                CapabilityError::InternalError(format!("Core error: {}", e))
+            }
         }
+    }
+}
+
+impl PartialEq for CapabilityError {
+    fn eq(&self, other: &Self) -> bool {
+        // Simple string comparison of errors (ignores CoreError details)
+        format!("{}", self) == format!("{}", other)
+    }
+}
+
+impl Eq for CapabilityError {}
+
+impl From<lion_core::error::Error> for CapabilityError {
+    fn from(e: lion_core::error::Error) -> Self {
+        CapabilityError::CoreError(e)
     }
 }
 
@@ -166,7 +191,7 @@ pub trait Capability: Send + Sync + Debug {
 
     /// Returns true if this capability is less than or equal to another in the partial order
     /// (i.e., this grants a subset of the permissions that other grants)
-    fn leq(&self, other: &dyn Capability) -> bool {
+    fn leq(&self, _other: &dyn Capability) -> bool {
         // Default implementation: A ≤ B if for all requests r, if A permits r then B permits r
         // This is a conservative approach and should be overridden by specific capability types
         // for better performance
@@ -175,7 +200,7 @@ pub trait Capability: Send + Sync + Debug {
 
     /// Meet operation (intersection of rights) - provides the greatest lower bound
     /// in the capability partial order
-    fn meet(&self, other: &dyn Capability) -> Result<Box<dyn Capability>, CapabilityError> {
+    fn meet(&self, _other: &dyn Capability) -> Result<Box<dyn Capability>, CapabilityError> {
         Err(CapabilityError::UnsupportedOperation(
             "Meet operation not implemented for this capability type".to_string(),
         ))
@@ -235,7 +260,7 @@ pub enum CapabilityOwner {
     Plugin(lion_core::id::PluginId),
 
     /// Capability owned by a system component
-    System(lion_core::id::ComponentId),
+    System(lion_core::id::PluginId),
 
     /// Capability owned by the kernel itself
     Kernel,

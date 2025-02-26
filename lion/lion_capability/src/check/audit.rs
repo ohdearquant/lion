@@ -115,11 +115,23 @@ impl AuditLog {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use uuid::Uuid;
+
+    fn test_plugin_id(value: u64) -> PluginId {
+        // Create a deterministic UUID from the value
+        let bytes = value.to_le_bytes();
+        let mut uuid_bytes = [0u8; 16];
+        for i in 0..std::cmp::min(8, uuid_bytes.len()) {
+            uuid_bytes[i] = bytes[i];
+        }
+        let uuid = Uuid::from_bytes(uuid_bytes);
+        PluginId::from_uuid(uuid)
+    }
 
     #[test]
     fn test_audit_log() {
         let audit_log = AuditLog::new(10);
-        let plugin_id = PluginId::from_u64(1);
+        let plugin_id = test_plugin_id(1);
 
         // Log some accesses
         audit_log.log_access(
@@ -164,7 +176,7 @@ mod tests {
     #[test]
     fn test_audit_log_max_entries() {
         let audit_log = AuditLog::new(2);
-        let plugin_id = PluginId::from_u64(1);
+        let plugin_id = test_plugin_id(1);
 
         // Log more than the maximum number of entries
         for i in 0..5 {

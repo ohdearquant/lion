@@ -6,6 +6,7 @@ use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use super::capability::{AccessRequest, Capability, CapabilityError, Constraint};
 
 bitflags! {
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
     /// Represents network operation permissions as a bit field
     pub struct NetworkOperations: u8 {
         const CONNECT = 0b00000001;
@@ -163,7 +164,7 @@ impl HostRule {
             ) => {
                 // A subnet is a subset if its prefix is longer (more specific) and the network addresses match
                 // when masked with the less specific subnet's mask
-                if prefix_len1 >= *prefix_len2 {
+                if *prefix_len1 >= *prefix_len2 {
                     let mask = !0u32 << (32 - prefix_len2);
                     let subnet1_bits = u32::from(*subnet1) & mask;
                     let subnet2_bits = u32::from(*subnet2) & mask;
@@ -179,7 +180,7 @@ impl HostRule {
                 HostRule::IpV6Subnet(subnet2, prefix_len2),
             ) => {
                 // Similar logic to IPv4 but with IPv6 addresses
-                if prefix_len1 >= *prefix_len2 {
+                if *prefix_len1 >= *prefix_len2 {
                     let segments1 = subnet1.segments();
                     let segments2 = subnet2.segments();
 
@@ -371,14 +372,14 @@ impl NetworkCapability {
         // Apply the constraint to all port operations
         let mut port_operations = HashMap::new();
         for (port, ops) in &self.port_operations {
-            let constrained_ops = *ops & new_ops;
+            let constrained_ops = ops.clone() & new_ops;
             if !constrained_ops.is_empty() {
                 port_operations.insert(*port, constrained_ops);
             }
         }
 
         // Apply to default operations
-        let default_operations = self.default_operations & new_ops;
+        let default_operations = self.default_operations.clone() & new_ops;
 
         // Ensure we still have some operations allowed
         if port_operations.is_empty() && default_operations.is_empty() {
@@ -518,7 +519,8 @@ impl Capability for NetworkCapability {
             }
 
             // Union of default operations
-            let default_operations = self.default_operations | other_net.default_operations;
+            let default_operations =
+                self.default_operations.clone() | other_net.default_operations.clone();
 
             Ok(Box::new(NetworkCapability {
                 host_rules,
@@ -551,16 +553,19 @@ impl Capability for NetworkCapability {
             }
 
             // Check default operations
-            if !(self.default_operations & other_net.default_operations).bits()
-                == self.default_operations.bits()
-            {
+            let ops_intersection =
+                self.default_operations.clone() & other_net.default_operations.clone();
+            let self_bits = self.default_operations.bits();
+
+            if ops_intersection.bits() != self_bits {
                 return false;
             }
 
             // Check port operations
             for (port, ops) in &self.port_operations {
                 let other_ops = other_net.operations_for_port(port);
-                if !(ops & other_ops).bits() == ops.bits() {
+                let ops_intersection = ops.clone() & other_ops;
+                if ops_intersection.bits() != ops.bits() {
                     return false;
                 }
             }
@@ -613,7 +618,8 @@ impl Capability for NetworkCapability {
             }
 
             // Intersect default operations
-            let default_operations = self.default_operations & other_net.default_operations;
+            let default_operations =
+                self.default_operations.clone() & other_net.default_operations.clone();
 
             // Ensure there are some operations allowed
             if port_operations.is_empty() && default_operations.is_empty() {

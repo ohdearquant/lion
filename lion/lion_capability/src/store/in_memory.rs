@@ -1,13 +1,11 @@
 use std::collections::HashSet;
-use std::sync::Arc;
 
-use atomic::Atomic;
 use dashmap::DashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use lion_core::id::{CapabilityId, PluginId};
 
-use super::{partial_revocation::apply_partial_revocation, CapabilityRef, CapabilityStore};
+use super::{partial_revocation::apply_partial_revocation, CapabilityStore};
 use crate::model::{AccessRequest, Capability, CapabilityError};
 
 /// Capability entry with a generation counter for safe revocation
@@ -48,7 +46,20 @@ impl InMemoryCapabilityStore {
     /// Generates a new unique capability ID
     fn generate_capability_id(&self) -> CapabilityId {
         let id = self.next_capability_id.fetch_add(1, Ordering::Relaxed);
-        CapabilityId::from_u64(id)
+        // Using the same test_capability_id function we define in the tests module
+        // to maintain consistent behavior
+        fn test_capability_id(value: u64) -> CapabilityId {
+            // Create a deterministic UUID from the value
+            let bytes = value.to_le_bytes();
+            let mut uuid_bytes = [0u8; 16];
+            for i in 0..std::cmp::min(8, uuid_bytes.len()) {
+                uuid_bytes[i] = bytes[i];
+            }
+            let uuid = uuid::Uuid::from_bytes(uuid_bytes);
+            CapabilityId::from_uuid(uuid)
+        }
+
+        test_capability_id(id)
     }
 
     /// Gets a capability entry by plugin ID and capability ID
@@ -238,16 +249,40 @@ impl CapabilityStore for InMemoryCapabilityStore {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::file::{FileCapability, FileOperations};
     use std::collections::HashSet;
+    use uuid::Uuid;
+
+    use crate::model::file::{FileCapability, FileOperations};
+
+    fn test_plugin_id(value: u64) -> PluginId {
+        // Create a deterministic UUID from the value
+        let bytes = value.to_le_bytes();
+        let mut uuid_bytes = [0u8; 16];
+        for i in 0..std::cmp::min(8, uuid_bytes.len()) {
+            uuid_bytes[i] = bytes[i];
+        }
+        let uuid = Uuid::from_bytes(uuid_bytes);
+        PluginId::from_uuid(uuid)
+    }
+
+    fn test_capability_id(value: u64) -> CapabilityId {
+        // Create a deterministic UUID from the value
+        let bytes = value.to_le_bytes();
+        let mut uuid_bytes = [0u8; 16];
+        for i in 0..std::cmp::min(8, uuid_bytes.len()) {
+            uuid_bytes[i] = bytes[i];
+        }
+        let uuid = Uuid::from_bytes(uuid_bytes);
+        CapabilityId::from_uuid(uuid)
+    }
 
     #[test]
     fn test_add_and_get_capability() {
         let store = InMemoryCapabilityStore::new();
-        let plugin_id = PluginId::from_u64(1);
+        let plugin_id = test_plugin_id(1);
 
         // Create a file capability
-        let paths = ["/tmp/file.txt".to_string()].into_iter().collect();
+        let paths: HashSet<String> = ["/tmp/file.txt".to_string()].into_iter().collect();
         let file_cap = FileCapability::new(paths, FileOperations::READ);
 
         // Add the capability to the store
@@ -273,13 +308,13 @@ mod tests {
     #[test]
     fn test_list_capabilities() {
         let store = InMemoryCapabilityStore::new();
-        let plugin_id = PluginId::from_u64(1);
+        let plugin_id = test_plugin_id(1);
 
         // Create two file capabilities
-        let paths1 = ["/tmp/file1.txt".to_string()].into_iter().collect();
+        let paths1: HashSet<String> = ["/tmp/file1.txt".to_string()].into_iter().collect();
         let file_cap1 = FileCapability::new(paths1, FileOperations::READ);
 
-        let paths2 = ["/tmp/file2.txt".to_string()].into_iter().collect();
+        let paths2: HashSet<String> = ["/tmp/file2.txt".to_string()].into_iter().collect();
         let file_cap2 = FileCapability::new(paths2, FileOperations::WRITE);
 
         // Add both capabilities to the store
@@ -307,10 +342,10 @@ mod tests {
     #[test]
     fn test_remove_capability() {
         let store = InMemoryCapabilityStore::new();
-        let plugin_id = PluginId::from_u64(1);
+        let plugin_id = test_plugin_id(1);
 
         // Create a file capability
-        let paths = ["/tmp/file.txt".to_string()].into_iter().collect();
+        let paths: HashSet<String> = ["/tmp/file.txt".to_string()].into_iter().collect();
         let file_cap = FileCapability::new(paths, FileOperations::READ);
 
         // Add the capability to the store
@@ -329,10 +364,10 @@ mod tests {
     #[test]
     fn test_replace_capability() {
         let store = InMemoryCapabilityStore::new();
-        let plugin_id = PluginId::from_u64(1);
+        let plugin_id = test_plugin_id(1);
 
         // Create a file capability with read permission
-        let paths = ["/tmp/file.txt".to_string()].into_iter().collect();
+        let paths: HashSet<String> = ["/tmp/file.txt".to_string()].into_iter().collect();
         let file_cap = FileCapability::new(paths.clone(), FileOperations::READ);
 
         // Add the capability to the store
@@ -372,10 +407,10 @@ mod tests {
     #[test]
     fn test_clear_plugin_capabilities() {
         let store = InMemoryCapabilityStore::new();
-        let plugin_id = PluginId::from_u64(1);
+        let plugin_id = test_plugin_id(1);
 
         // Create a file capability
-        let paths = ["/tmp/file.txt".to_string()].into_iter().collect();
+        let paths: HashSet<String> = ["/tmp/file.txt".to_string()].into_iter().collect();
         let file_cap = FileCapability::new(paths, FileOperations::READ);
 
         // Add the capability to the store
@@ -394,10 +429,10 @@ mod tests {
     #[test]
     fn test_check_permission() {
         let store = InMemoryCapabilityStore::new();
-        let plugin_id = PluginId::from_u64(1);
+        let plugin_id = test_plugin_id(1);
 
         // Create a file capability
-        let paths = ["/tmp/file.txt".to_string()].into_iter().collect();
+        let paths: HashSet<String> = ["/tmp/file.txt".to_string()].into_iter().collect();
         let file_cap = FileCapability::new(paths, FileOperations::READ);
 
         // Add the capability to the store
