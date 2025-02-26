@@ -183,7 +183,7 @@ impl LogRecord {
     /// A formatted string representation of this log record.
     pub fn format(&self) -> String {
         let mut result = format!(
-            "[{}] {} - {} [{}:{}]",
+            "{} [{}] - {} [{}:{}]",
             self.timestamp.format("%Y-%m-%d %H:%M:%S%.3f"),
             self.level,
             self.message,
