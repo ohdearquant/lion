@@ -13,8 +13,8 @@ pub use pool::{InstancePool, PooledInstance};
 
 use crate::interface::CapabilityChecker;
 use crate::resource::ResourceLimiter;
-use crate::wasm::{WasmEngine, WasmModule};
-use lion_core::error::{IsolationError, Result};
+use crate::wasm::WasmEngine;
+use lion_core::error::Result;
 use lion_core::PluginId;
 use std::sync::Arc;
 

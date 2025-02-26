@@ -171,7 +171,7 @@ impl WasmMemory {
 #[cfg(test)]
 mod tests {
     use crate::wasm::engine::WasmEngine;
-    use crate::{wasm::hostcall::HostCallContext, wasm::memory::WasmMemory};
+    use crate::wasm::hostcall::HostCallContext;
 
     #[test]
     fn test_read_write_memory() {

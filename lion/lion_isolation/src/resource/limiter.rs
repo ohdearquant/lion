@@ -3,8 +3,6 @@
 //! This module provides functionality for limiting the resources used by plugins.
 
 use lion_core::error::{IsolationError, Result};
-use std::sync::Arc;
-use std::time::{Duration, Instant};
 
 use crate::resource::usage::ResourceUsage;
 
@@ -138,6 +136,8 @@ impl ResourceLimiter for DefaultResourceLimiter {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::resource::usage::ResourceUsage;
+    use std::time::{Duration, Instant};
 
     #[test]
     fn test_default_resource_limiter() {

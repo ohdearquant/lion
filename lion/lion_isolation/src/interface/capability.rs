@@ -4,7 +4,7 @@
 
 use anyhow::Result;
 use tracing::{debug, error, info, trace};
-use wasmtime::{Caller, Func, Linker};
+use wasmtime::Caller;
 
 use crate::wasm::hostcall::HostCallContext;
 use crate::wasm::memory::WasmMemory;
@@ -40,6 +40,7 @@ pub trait CapabilityChecker: Send + Sync {
     fn check_capability(&self, plugin_id: &str, operation: &str, params: &[u8]) -> Result<()>;
 }
 
+#[allow(dead_code)]
 impl CapabilityInterface {
     /// Create a new capability interface.
     pub fn new() -> Self {
@@ -664,7 +665,6 @@ impl CapabilityInterface {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Arc;
 
     struct MockCapabilityChecker {
         // Define which operations are allowed

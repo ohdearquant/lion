@@ -2,17 +2,15 @@
 //!
 //! This module provides an isolation backend for managing plugin execution.
 
-use anyhow::Context;
 use dashmap::DashMap;
-use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
-use tracing::{debug, error, info, trace};
+use tracing::info;
 
 use super::lifecycle::{PluginLifecycle, PluginState};
-use super::pool::{InstancePool, PooledInstance};
+use super::pool::InstancePool;
 use crate::interface::CapabilityInterface;
 use crate::resource::ResourceLimiter;
-use crate::wasm::{HostCallContext, WasmEngine, WasmModule};
+use crate::wasm::{WasmEngine, WasmModule};
 use lion_core::error::{IsolationError, Result};
 use lion_core::types::ResourceUsage;
 use lion_core::PluginId;
