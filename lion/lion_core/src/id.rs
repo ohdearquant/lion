@@ -1,7 +1,28 @@
 //! Strongly-typed identifiers for the Lion microkernel.
 //! 
 //! This module provides a set of identifier types that are used throughout
-//! the system, ensuring type safety and clear semantics.
+//! the system, ensuring type safety and clear semantics. Each identifier
+//! type is a thin wrapper around a UUID with a phantom type parameter
+//! to ensure type safety.
+//! 
+//! # Examples
+//! 
+//! ```
+//! use lion_core::id::{PluginId, CapabilityId};
+//! use std::str::FromStr;
+//! 
+//! // Create new random IDs
+//! let plugin_id = PluginId::new();
+//! let capability_id = CapabilityId::new();
+//! 
+//! // Different ID types are different types, even with the same underlying UUID
+//! assert_ne!(plugin_id.to_string(), capability_id.to_string());
+//! 
+//! // Create from string
+//! let id_str = "550e8400-e29b-41d4-a716-446655440000";
+//! let plugin_id = PluginId::from_str(id_str).unwrap();
+//! assert_eq!(plugin_id.to_string(), id_str);
+//! ```
 
 use std::fmt;
 use std::str::FromStr;
@@ -9,6 +30,11 @@ use serde::{Serialize, Deserialize};
 use uuid::Uuid;
 
 /// A type-safe identifier based on UUID.
+/// 
+/// This is a generic identifier type that is specialized for different
+/// entity types using the phantom type parameter `T`. This ensures that
+/// identifiers for different entity types cannot be mixed up, even though
+/// they share the same underlying UUID structure.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct Id<T> {
     uuid: Uuid,
@@ -18,6 +44,17 @@ pub struct Id<T> {
 
 impl<T> Id<T> {
     /// Create a new random identifier.
+    /// 
+    /// This generates a new random UUID v4 and wraps it in the appropriate
+    /// identifier type.
+    /// 
+    /// # Examples
+    /// 
+    /// ```
+    /// use lion_core::id::PluginId;
+    /// 
+    /// let id = PluginId::new();
+    /// ```
     pub fn new() -> Self {
         Self {
             uuid: Uuid::new_v4(),
@@ -26,6 +63,20 @@ impl<T> Id<T> {
     }
     
     /// Create an identifier from a specific UUID.
+    /// 
+    /// This is useful when you need to create an identifier with a known UUID,
+    /// such as when deserializing from a database or message.
+    /// 
+    /// # Examples
+    /// 
+    /// ```
+    /// use lion_core::id::PluginId;
+    /// use uuid::Uuid;
+    /// 
+    /// let uuid = Uuid::new_v4();
+    /// let id = PluginId::from_uuid(uuid);
+    /// assert_eq!(id.uuid(), uuid);
+    /// ```
     pub fn from_uuid(uuid: Uuid) -> Self {
         Self {
             uuid,
@@ -34,16 +85,62 @@ impl<T> Id<T> {
     }
     
     /// Get the underlying UUID.
+    /// 
+    /// This is useful when you need to extract the raw UUID for serialization
+    /// or other purposes.
+    /// 
+    /// # Examples
+    /// 
+    /// ```
+    /// use lion_core::id::PluginId;
+    /// 
+    /// let id = PluginId::new();
+    /// let uuid = id.uuid();
+    /// ```
     pub fn uuid(&self) -> Uuid {
         self.uuid
     }
     
     /// Create a nil (all zeros) identifier.
+    /// 
+    /// This can be useful as a sentinel value or default value.
+    /// 
+    /// # Examples
+    /// 
+    /// ```
+    /// use lion_core::id::PluginId;
+    /// 
+    /// let nil_id = PluginId::nil();
+    /// assert_eq!(nil_id.to_string(), "00000000-0000-0000-0000-000000000000");
+    /// ```
     pub fn nil() -> Self {
         Self {
             uuid: Uuid::nil(),
             _marker: std::marker::PhantomData,
         }
+    }
+    
+    /// Check if this is a nil identifier.
+    /// 
+    /// # Examples
+    /// 
+    /// ```
+    /// use lion_core::id::PluginId;
+    /// 
+    /// let nil_id = PluginId::nil();
+    /// assert!(nil_id.is_nil());
+    /// 
+    /// let id = PluginId::new();
+    /// assert!(!id.is_nil());
+    /// ```
+    pub fn is_nil(&self) -> bool {
+        self.uuid == Uuid::nil()
+    }
+}
+
+impl<T> Default for Id<T> {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -125,6 +222,20 @@ mod tests {
     }
     
     #[test]
+    fn test_id_from_uuid() {
+        let uuid = Uuid::new_v4();
+        let id = PluginId::from_uuid(uuid);
+        assert_eq!(id.uuid(), uuid);
+    }
+    
+    #[test]
+    fn test_id_nil() {
+        let nil_id = PluginId::nil();
+        assert_eq!(nil_id.to_string(), "00000000-0000-0000-0000-000000000000");
+        assert!(nil_id.is_nil());
+    }
+    
+    #[test]
     fn test_type_safety() {
         let plugin_id = PluginId::new();
         let capability_id = CapabilityId::new();
@@ -141,5 +252,13 @@ mod tests {
         // But they're still different types
         // This would not compile:
         // assert_eq!(plugin_id, capability_id);
+    }
+    
+    #[test]
+    fn test_id_serde() {
+        let id = PluginId::new();
+        let serialized = serde_json::to_string(&id).unwrap();
+        let deserialized: PluginId = serde_json::from_str(&serialized).unwrap();
+        assert_eq!(id, deserialized);
     }
 }

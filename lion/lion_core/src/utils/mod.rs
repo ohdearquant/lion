@@ -1,7 +1,7 @@
 //! Utility functions and types.
 //! 
 //! This module provides various utility functions and types used throughout
-//! the system.
+//! the system, including logging, configuration, and version utilities.
 
 pub mod logging;
 pub mod version;

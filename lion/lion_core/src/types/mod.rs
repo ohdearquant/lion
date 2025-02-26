@@ -1,7 +1,8 @@
 //! Core data types for the Lion microkernel.
 //! 
 //! This module defines the fundamental data structures used throughout
-//! the system.
+//! the system, including plugin configuration, workflow definitions,
+//! memory management, and access control.
 
 pub mod plugin;
 pub mod workflow;
