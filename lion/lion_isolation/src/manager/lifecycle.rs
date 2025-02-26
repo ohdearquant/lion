@@ -128,11 +128,11 @@ mod tests {
     #[test]
     fn test_plugin_lifecycle() {
         // Create a plugin lifecycle
-        let plugin_id = "test-plugin".to_string();
-        let mut lifecycle = PluginLifecycle::new(plugin_id.clone(), PluginState::Loading);
+        let plugin_id = PluginId::new();
+        let mut lifecycle = PluginLifecycle::new(plugin_id, PluginState::Loading);
 
         // Check initial state
-        assert_eq!(lifecycle.plugin_id(), &plugin_id);
+        assert_eq!(*lifecycle.plugin_id(), plugin_id);
         assert_eq!(lifecycle.state(), PluginState::Loading);
         assert_eq!(lifecycle.function_calls(), 0);
 
