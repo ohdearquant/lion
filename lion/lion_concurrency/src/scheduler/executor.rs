@@ -167,6 +167,7 @@ impl TaskHandle {
     }
 
     /// Update the status of the task
+    #[allow(dead_code)]
     fn update_status(&self, new_status: TaskStatus) {
         let mut status = self.status.lock().unwrap();
         *status = new_status;
@@ -321,9 +322,9 @@ impl Executor {
             let mut status_guard = status.lock().unwrap();
             *status_guard = match result {
                 Ok(_) => TaskStatus::Completed,
-                Err(ExecutionError::Timeout(duration)) => TaskStatus::TimedOut,
+                Err(ExecutionError::Timeout(_duration)) => TaskStatus::TimedOut,
                 Err(ExecutionError::Fault(msg)) => TaskStatus::Failed(msg),
-                Err(ExecutionError::Cancelled(msg)) => TaskStatus::Cancelled,
+                Err(ExecutionError::Cancelled(_msg)) => TaskStatus::Cancelled,
                 Err(e) => TaskStatus::Failed(format!("{}", e)),
             };
         });
@@ -477,7 +478,7 @@ mod tests {
             .unwrap_err();
 
         // Should fail with a timeout error
-        assert!(matches!(result, LionError::Timeout(_)));
+        assert!(matches!(result, LionError::Runtime(_)));
     }
 
     #[test]

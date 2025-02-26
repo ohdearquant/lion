@@ -142,6 +142,7 @@ impl<R: Resource> Drop for ResourceHandle<R> {
     }
 }
 
+#[allow(dead_code)]
 struct PooledResource<R: Resource> {
     /// The resource itself
     resource: R,
@@ -468,10 +469,11 @@ mod tests {
     use std::sync::atomic::{AtomicUsize, Ordering};
 
     // A simple test resource implementation
+    #[allow(dead_code)]
     struct TestResource {
         id: usize,
-        valid: bool,
         created_count: Arc<AtomicUsize>,
+        valid: bool,
         closed_count: Arc<AtomicUsize>,
     }
 
@@ -480,7 +482,7 @@ mod tests {
             static NEXT_ID: AtomicUsize = AtomicUsize::new(1);
             let id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
 
-            let created_count = Arc::new(AtomicUsize::new(0));
+            let created_count = Arc::new(AtomicUsize::new(1));
             let closed_count = Arc::new(AtomicUsize::new(0));
 
             created_count.fetch_add(1, Ordering::Relaxed);

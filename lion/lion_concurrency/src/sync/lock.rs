@@ -908,20 +908,20 @@ mod tests {
     #[test]
     fn test_tracked_mutex_timeout() {
         let mutex = TrackedMutex::new(0);
+        let mutex_clone = Arc::new(TrackedMutex::new(0));
 
         // First lock
         let guard = mutex.lock();
 
         // Try to lock with timeout (should fail)
         let thread = thread::spawn(move || {
-            let result = mutex.try_lock_for(Duration::from_millis(100));
+            let result = mutex_clone.try_lock_for(Duration::from_millis(100));
             assert!(matches!(result, Err(LockError::Timeout(_))));
         });
 
-        thread.join().unwrap();
-
         // Release the first lock
         drop(guard);
+        thread.join().unwrap();
 
         // Get the stats
         let stats = mutex.stats();

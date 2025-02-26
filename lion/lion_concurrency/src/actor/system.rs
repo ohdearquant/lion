@@ -47,12 +47,15 @@ impl Default for ActorSystemConfig {
 }
 
 /// Metadata about an actor
+#[allow(dead_code)]
 #[derive(Debug)]
 struct ActorMetadata {
     /// Actor's current status
     status: ActorStatus,
+
     /// Type name of the actor
     actor_type: String,
+
     /// Actor's supervisor ID
     supervisor_id: Option<ActorId>,
 }
@@ -138,7 +141,7 @@ impl ActorSystem {
     where
         F: FnOnce() + Send + 'static,
     {
-        self.thread_pool.execute(f);
+        let _ = self.thread_pool.execute(f);
     }
 
     /// Create a default supervisor for this actor system

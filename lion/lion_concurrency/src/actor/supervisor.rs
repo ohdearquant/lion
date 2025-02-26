@@ -79,6 +79,7 @@ pub trait Supervisor: Send + Sync {
 }
 
 /// A basic implementation of the Supervisor trait
+#[allow(dead_code)]
 pub struct BasicSupervisor {
     /// Configuration for this supervisor
     config: SupervisorConfig,
@@ -123,7 +124,7 @@ impl Supervisor for BasicSupervisor {
                     SupervisionStrategy::RestartOne
                 }
             }
-            strategy => strategy,
+            strategy => strategy.clone(),
         }
     }
 

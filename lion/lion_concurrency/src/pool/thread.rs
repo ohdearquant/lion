@@ -96,6 +96,7 @@ impl Task {
 }
 
 /// A generic thread pool for executing tasks
+#[allow(dead_code)]
 pub struct ThreadPool {
     /// Channel for sending tasks to worker threads
     task_sender: Sender<Task>,
