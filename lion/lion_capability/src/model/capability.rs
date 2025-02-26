@@ -1,203 +1,290 @@
-//! Core capability trait.
-//! 
-//! This module defines the core `Capability` trait that is implemented by
-//! all specific capability types.
+use std::any::Any;
+use std::fmt::{Debug, Display};
 
-use std::fmt::Debug;
-use lion_core::error::{Result, CapabilityError};
-use lion_core::types::AccessRequest;
+use thiserror::Error;
 
-/// Core capability trait.
-///
-/// A capability is an unforgeable token of authority that grants specific
-/// permissions.
-pub trait Capability: Debug + Send + Sync {
-    /// Returns the type of this capability.
-    fn capability_type(&self) -> &str;
-    
-    /// Checks if this capability permits the given access request.
-    ///
-    /// # Arguments
-    ///
-    /// * `request` - The access request to check.
-    ///
-    /// # Returns
-    ///
-    /// * `Ok(())` if the access is permitted.
-    /// * `Err(CapabilityError)` if the access is denied.
-    fn permits(&self, request: &AccessRequest) -> Result<(), CapabilityError>;
-    
-    /// Constrains this capability with the given constraints.
-    ///
-    /// This is used to create a derived capability with reduced permissions.
-    ///
-    /// # Arguments
-    ///
-    /// * `constraints` - The constraints to apply.
-    ///
-    /// # Returns
-    ///
-    /// * `Ok(Box<dyn Capability>)` - A new capability with the constraints applied.
-    /// * `Err(CapabilityError)` - If the constraints cannot be applied.
-    fn constrain(&self, constraints: &[Constraint]) -> Result<Box<dyn Capability>, CapabilityError> {
-        Err(CapabilityError::ConstraintError("Constraint not supported".into()).into())
-    }
-    
-    /// Splits this capability into constituent parts.
-    ///
-    /// This is used for partial revocation.
-    ///
-    /// # Returns
-    ///
-    /// A vector of capabilities that, when combined, are equivalent to this capability.
-    fn split(&self) -> Vec<Box<dyn Capability>> {
-        vec![self.clone_box()]
-    }
-    
-    /// Checks if this capability can be joined with another.
-    ///
-    /// # Arguments
-    ///
-    /// * `other` - The other capability to join with.
-    ///
-    /// # Returns
-    ///
-    /// `true` if the capabilities can be joined, `false` otherwise.
-    fn can_join_with(&self, other: &dyn Capability) -> bool {
-        self.capability_type() == other.capability_type()
-    }
-    
-    /// Joins this capability with another compatible one.
-    ///
-    /// # Arguments
-    ///
-    /// * `other` - The other capability to join with.
-    ///
-    /// # Returns
-    ///
-    /// * `Ok(Box<dyn Capability>)` - A new capability that combines the permissions of both.
-    /// * `Err(CapabilityError)` - If the capabilities cannot be joined.
-    fn join(&self, other: &dyn Capability) -> Result<Box<dyn Capability>, CapabilityError> {
-        Err(CapabilityError::CompositionError("Join not supported".into()).into())
-    }
-    
-    /// Clone this capability as a boxed trait object.
-    fn clone_box(&self) -> Box<dyn Capability>;
+/// Errors that can occur during capability operations
+#[derive(Error, Debug)]
+pub enum CapabilityError {
+    #[error("Access denied: {0}")]
+    // All error variants except the last one
+    AccessDenied(String),
+
+    #[error("Invalid constraint: {0}")]
+    InvalidConstraint(String),
+
+    #[error("Incompatible capability types for operation: {0}")]
+    IncompatibleTypes(String),
+
+    #[error("Operation not supported: {0}")]
+    UnsupportedOperation(String),
+
+    #[error("Capability not found: {0}")]
+    NotFound(String),
+
+    #[error("Internal capability system error: {0}")]
+    InternalError(String),
+
+    #[error("Invalid capability state: {0}")]
+    InvalidState(String),
+
+    #[error("Core error: {0}")]
+    CoreError(lion_core::error::Error),
 }
 
-/// A constraint that can be applied to a capability.
-#[derive(Debug, Clone)]
-pub enum Constraint {
-    /// Constrain file paths.
-    FilePath(String),
-    
-    /// Constrain file operations.
-    FileOperation {
-        /// Whether read operations are allowed.
-        read: bool,
-        
-        /// Whether write operations are allowed.
-        write: bool,
-        
-        /// Whether execute operations are allowed.
-        execute: bool,
-    },
-    
-    /// Constrain network hosts.
-    NetworkHost(String),
-    
-    /// Constrain network ports.
-    NetworkPort(u16),
-    
-    /// Constrain network operations.
-    NetworkOperation {
-        /// Whether outbound connections are allowed.
-        connect: bool,
-        
-        /// Whether listening for inbound connections is allowed.
-        listen: bool,
-    },
-    
-    /// Constrain plugin calls.
-    PluginCall {
-        /// Plugin ID.
-        plugin_id: String,
-        
-        /// Function name.
-        function: String,
-    },
-    
-    /// Constrain memory regions.
-    MemoryRegion {
-        /// Region ID.
-        region_id: String,
-        
-        /// Whether read operations are allowed.
-        read: bool,
-        
-        /// Whether write operations are allowed.
-        write: bool,
-    },
-    
-    /// Constrain message sending.
-    Message {
-        /// Recipient plugin ID.
-        recipient: String,
-        
-        /// Topic.
-        topic: String,
-    },
-    
-    /// Custom constraint.
-    Custom {
-        /// The constraint type.
-        constraint_type: String,
-        
-        /// The constraint value.
-        value: String,
-    },
+impl CapabilityError {
+    pub fn from_core_error(e: lion_core::error::Error) -> Self {
+        CapabilityError::CoreError(e)
+    }
 }
 
-impl Constraint {
-    /// Get the type of this constraint.
-    pub fn constraint_type(&self) -> &str {
+impl Clone for CapabilityError {
+    fn clone(&self) -> Self {
         match self {
-            Self::FilePath(_) => "file_path",
-            Self::FileOperation { .. } => "file_operation",
-            Self::NetworkHost(_) => "network_host",
-            Self::NetworkPort(_) => "network_port",
-            Self::NetworkOperation { .. } => "network_operation",
-            Self::PluginCall { .. } => "plugin_call",
-            Self::MemoryRegion { .. } => "memory_region",
-            Self::Message { .. } => "message",
-            Self::Custom { constraint_type, .. } => constraint_type,
+            CapabilityError::AccessDenied(s) => CapabilityError::AccessDenied(s.clone()),
+            CapabilityError::InvalidConstraint(s) => CapabilityError::InvalidConstraint(s.clone()),
+            CapabilityError::IncompatibleTypes(s) => CapabilityError::IncompatibleTypes(s.clone()),
+            CapabilityError::UnsupportedOperation(s) => {
+                CapabilityError::UnsupportedOperation(s.clone())
+            }
+            CapabilityError::NotFound(s) => CapabilityError::NotFound(s.clone()),
+            CapabilityError::InternalError(s) => CapabilityError::InternalError(s.clone()),
+            CapabilityError::InvalidState(s) => CapabilityError::InvalidState(s.clone()),
+            // Skip cloning the core error, just create a new internal error with the display string
+            CapabilityError::CoreError(e) => {
+                CapabilityError::InternalError(format!("Core error: {}", e))
+            }
         }
     }
 }
 
-/// A custom capability type.
-#[derive(Debug, Clone)]
-pub struct CustomCapability {
-    /// The capability type.
-    pub capability_type: String,
-    
-    /// The capability value.
-    pub value: String,
-    
-    /// Custom permission check function.
-    pub check_fn: fn(&AccessRequest) -> Result<(), CapabilityError>,
+impl PartialEq for CapabilityError {
+    fn eq(&self, other: &Self) -> bool {
+        // Simple string comparison of errors (ignores CoreError details)
+        format!("{}", self) == format!("{}", other)
+    }
 }
 
-impl Capability for CustomCapability {
-    fn capability_type(&self) -> &str {
-        &self.capability_type
+impl Eq for CapabilityError {}
+
+impl From<lion_core::error::Error> for CapabilityError {
+    fn from(e: lion_core::error::Error) -> Self {
+        CapabilityError::CoreError(e)
     }
-    
-    fn permits(&self, request: &AccessRequest) -> Result<(), CapabilityError> {
-        (self.check_fn)(request)
+}
+
+/// Generic constraining mechanisms for capabilities
+#[derive(Debug, Clone, PartialEq)]
+pub enum Constraint {
+    /// Path-based constraint for filesystem capabilities
+    FilePath(String),
+
+    /// Operation-based constraint for file operations
+    FileOperation {
+        read: bool,
+        write: bool,
+        execute: bool,
+    },
+
+    /// Host-based constraint for network capabilities
+    NetworkHost(String),
+
+    /// Port-based constraint for network capabilities
+    NetworkPort(u16),
+
+    /// Operation-based constraint for network operations
+    NetworkOperation {
+        connect: bool,
+        listen: bool,
+        bind: bool,
+    },
+
+    /// Memory range constraint
+    MemoryRange {
+        base: usize,
+        size: usize,
+        read: bool,
+        write: bool,
+    },
+
+    /// Plugin call constraint
+    PluginCall { plugin_id: String, function: String },
+
+    /// Message topic constraint
+    MessageTopic(String),
+
+    /// Custom constraint with type and value
+    Custom {
+        constraint_type: String,
+        value: String,
+    },
+}
+
+/// Access request type for checking capabilities
+#[derive(Debug, Clone, PartialEq)]
+pub enum AccessRequest {
+    /// File access request
+    File {
+        path: String,
+        read: bool,
+        write: bool,
+        execute: bool,
+    },
+
+    /// Network access request
+    Network {
+        host: Option<String>,
+        port: Option<u16>,
+        connect: bool,
+        listen: bool,
+        bind: bool,
+    },
+
+    /// Memory access request
+    Memory {
+        address: usize,
+        size: usize,
+        read: bool,
+        write: bool,
+    },
+
+    /// Plugin call request
+    PluginCall { plugin_id: String, function: String },
+
+    /// Message sending request
+    Message {
+        topic: String,
+        recipient: Option<String>,
+    },
+
+    /// Custom access request
+    Custom {
+        request_type: String,
+        details: String,
+    },
+}
+
+/// Core capability trait that defines the behavior of all capability types
+///
+/// Capabilities form a partial order based on privilege inclusion:
+/// - A capability C₁ is less than or equal to another capability C₂ if C₁'s
+///   permissions are a subset of C₂'s permissions.
+/// - The "meet" operation represents the intersection of permissions.
+/// - The "join" operation represents the union of permissions.
+pub trait Capability: Send + Sync + Debug {
+    /// Returns the type identifier for this capability
+    fn capability_type(&self) -> &str;
+
+    /// Checks if this capability permits the given access request
+    fn permits(&self, request: &AccessRequest) -> Result<(), CapabilityError>;
+
+    /// Applies constraints to produce a more restricted capability
+    fn constrain(&self, constraints: &[Constraint])
+        -> Result<Box<dyn Capability>, CapabilityError>;
+
+    /// Splits this capability into multiple smaller capabilities if possible
+    fn split(&self) -> Vec<Box<dyn Capability>>;
+
+    /// Combines this capability with another, if they are compatible
+    /// Returns a new capability that permits what both input capabilities permit
+    fn join(&self, other: &dyn Capability) -> Result<Box<dyn Capability>, CapabilityError>;
+
+    /// Returns true if this capability is less than or equal to another in the partial order
+    /// (i.e., this grants a subset of the permissions that other grants)
+    fn leq(&self, _other: &dyn Capability) -> bool {
+        // Default implementation: A ≤ B if for all requests r, if A permits r then B permits r
+        // This is a conservative approach and should be overridden by specific capability types
+        // for better performance
+        false
     }
-    
-    fn clone_box(&self) -> Box<dyn Capability> {
-        Box::new(self.clone())
+
+    /// Meet operation (intersection of rights) - provides the greatest lower bound
+    /// in the capability partial order
+    fn meet(&self, _other: &dyn Capability) -> Result<Box<dyn Capability>, CapabilityError> {
+        Err(CapabilityError::UnsupportedOperation(
+            "Meet operation not implemented for this capability type".to_string(),
+        ))
     }
+
+    /// Clones this capability (since dyn Trait cannot implement Clone directly)
+    fn clone_box(&self) -> Box<dyn Capability>;
+
+    /// Convert to Any for downcasting
+    fn as_any(&self) -> &dyn Any;
+
+    /// Convert to mutable Any for downcasting
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        // Default implementation for capabilities that don't need mutable downcasting
+        panic!("as_any_mut not implemented for this capability type")
+    }
+}
+
+// Allow cloning of Box<dyn Capability>
+impl Clone for Box<dyn Capability> {
+    fn clone(&self) -> Self {
+        self.clone_box()
+    }
+}
+
+/// A utility for creating more granular capabilities by applying filters
+pub struct CapabilityBuilder {
+    base: Box<dyn Capability>,
+    constraints: Vec<Constraint>,
+}
+
+impl CapabilityBuilder {
+    /// Creates a new builder from a base capability
+    pub fn new(base: Box<dyn Capability>) -> Self {
+        Self {
+            base,
+            constraints: Vec::new(),
+        }
+    }
+
+    /// Adds a constraint to further restrict the capability
+    pub fn with_constraint(mut self, constraint: Constraint) -> Self {
+        self.constraints.push(constraint);
+        self
+    }
+
+    /// Builds the final capability by applying all constraints
+    pub fn build(self) -> Result<Box<dyn Capability>, CapabilityError> {
+        self.base.constrain(&self.constraints)
+    }
+}
+
+/// Capability manager identifier for tracking which component a capability belongs to
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum CapabilityOwner {
+    /// Capability owned by a plugin
+    Plugin(lion_core::id::PluginId),
+
+    /// Capability owned by a system component
+    System(lion_core::id::PluginId),
+
+    /// Capability owned by the kernel itself
+    Kernel,
+}
+
+impl Display for CapabilityOwner {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            CapabilityOwner::Plugin(id) => write!(f, "Plugin({})", id),
+            CapabilityOwner::System(id) => write!(f, "System({})", id),
+            CapabilityOwner::Kernel => write!(f, "Kernel"),
+        }
+    }
+}
+
+/// Utility function to check if a path matches a pattern
+/// Handles wildcards, prefixes, and exact matches
+pub fn path_matches(pattern: &str, path: &str) -> bool {
+    // Handle prefix matches with trailing /*
+    if pattern.ends_with("/*") {
+        let prefix = &pattern[..pattern.len() - 2];
+        return path.starts_with(prefix);
+    }
+
+    // Handle exact pattern matches
+    pattern == path
 }

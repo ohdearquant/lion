@@ -1,148 +1,134 @@
-//! File capability model.
-//! 
-//! This module defines capabilities for file access.
-
-use std::path::{Path, PathBuf};
+use bitflags::bitflags;
+use std::any::Any;
 use std::collections::HashSet;
-use lion_core::error::{Result, CapabilityError};
-use lion_core::types::AccessRequest;
 
-use super::capability::{Capability, Constraint};
+use super::capability::{path_matches, AccessRequest, Capability, CapabilityError, Constraint};
 
-/// A capability that grants permission to access files.
+bitflags! {
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    /// Represents file operation permissions as a bit field for efficient checking
+    pub struct FileOperations: u8 {
+        const READ = 0b00000001;
+        const WRITE = 0b00000010;
+        const EXECUTE = 0b00000100;
+    }
+}
+
+/// Represents a capability to access files in the filesystem
 #[derive(Debug, Clone)]
 pub struct FileCapability {
-    /// The paths that are allowed.
-    paths: HashSet<PathBuf>,
-    
-    /// Whether read operations are allowed.
-    read: bool,
-    
-    /// Whether write operations are allowed.
-    write: bool,
-    
-    /// Whether execute operations are allowed.
-    execute: bool,
+    /// Set of path patterns that this capability grants access to
+    paths: HashSet<String>,
+
+    /// Operations permitted on those paths
+    operations: FileOperations,
 }
 
 impl FileCapability {
-    /// Create a new file capability.
-    ///
-    /// # Arguments
-    ///
-    /// * `paths` - The paths that are allowed.
-    /// * `read` - Whether read operations are allowed.
-    /// * `write` - Whether write operations are allowed.
-    /// * `execute` - Whether execute operations are allowed.
-    ///
-    /// # Returns
-    ///
-    /// A new file capability.
-    pub fn new<P: AsRef<Path>>(
-        paths: impl IntoIterator<Item = P>,
+    /// Creates a new file capability with the specified paths and operations
+    pub fn new(paths: HashSet<String>, operations: FileOperations) -> Self {
+        Self { paths, operations }
+    }
+
+    /// Creates a new file capability with a single path and operations
+    pub fn with_path(path: String, operations: FileOperations) -> Self {
+        let mut paths = HashSet::new();
+        paths.insert(path);
+        Self { paths, operations }
+    }
+
+    /// Creates a new file capability for read access
+    pub fn read_only(paths: HashSet<String>) -> Self {
+        Self {
+            paths,
+            operations: FileOperations::READ,
+        }
+    }
+
+    /// Creates a new file capability for write access
+    pub fn write_only(paths: HashSet<String>) -> Self {
+        Self {
+            paths,
+            operations: FileOperations::WRITE,
+        }
+    }
+
+    /// Creates a new file capability for read and write access
+    pub fn read_write(paths: HashSet<String>) -> Self {
+        Self {
+            paths,
+            operations: FileOperations::READ | FileOperations::WRITE,
+        }
+    }
+
+    /// Gets paths this capability grants access to
+    pub fn paths(&self) -> &HashSet<String> {
+        &self.paths
+    }
+
+    /// Gets operations this capability permits
+    pub fn operations(&self) -> FileOperations {
+        self.operations
+    }
+
+    /// Checks if this capability allows access to the given path
+    fn path_allowed(&self, path: &str) -> bool {
+        self.paths.iter().any(|pattern| path_matches(pattern, path))
+    }
+
+    /// Applies a path constraint to this capability
+    fn apply_path_constraint(&self, path: &str) -> Result<Self, CapabilityError> {
+        // Check if the constrained path is allowed by any of our patterns
+        if !self.path_allowed(path) {
+            return Err(CapabilityError::InvalidConstraint(format!(
+                "Path '{}' is not covered by this capability",
+                path
+            )));
+        }
+
+        // Create a new capability with just this path
+        let mut paths = HashSet::new();
+        paths.insert(path.to_string());
+
+        Ok(Self {
+            paths,
+            operations: self.operations,
+        })
+    }
+
+    /// Applies an operation constraint to this capability
+    fn apply_operation_constraint(
+        &self,
         read: bool,
         write: bool,
         execute: bool,
-    ) -> Self {
-        Self {
-            paths: paths.into_iter().map(|p| p.as_ref().to_path_buf()).collect(),
-            read,
-            write,
-            execute,
+    ) -> Result<Self, CapabilityError> {
+        let mut new_ops = FileOperations::empty();
+
+        // Only allow operations that both the constraint and this capability permit
+        if read && self.operations.contains(FileOperations::READ) {
+            new_ops |= FileOperations::READ;
         }
-    }
-    
-    /// Create a new read-only file capability.
-    ///
-    /// # Arguments
-    ///
-    /// * `paths` - The paths that are allowed.
-    ///
-    /// # Returns
-    ///
-    /// A new read-only file capability.
-    pub fn read_only<P: AsRef<Path>>(paths: impl IntoIterator<Item = P>) -> Self {
-        Self::new(paths, true, false, false)
-    }
-    
-    /// Create a new write-only file capability.
-    ///
-    /// # Arguments
-    ///
-    /// * `paths` - The paths that are allowed.
-    ///
-    /// # Returns
-    ///
-    /// A new write-only file capability.
-    pub fn write_only<P: AsRef<Path>>(paths: impl IntoIterator<Item = P>) -> Self {
-        Self::new(paths, false, true, false)
-    }
-    
-    /// Create a new read-write file capability.
-    ///
-    /// # Arguments
-    ///
-    /// * `paths` - The paths that are allowed.
-    ///
-    /// # Returns
-    ///
-    /// A new read-write file capability.
-    pub fn read_write<P: AsRef<Path>>(paths: impl IntoIterator<Item = P>) -> Self {
-        Self::new(paths, true, true, false)
-    }
-    
-    /// Check if a path is allowed.
-    ///
-    /// A path is allowed if it is a direct prefix of one of the allowed paths.
-    ///
-    /// # Arguments
-    ///
-    /// * `path` - The path to check.
-    ///
-    /// # Returns
-    ///
-    /// `true` if the path is allowed, `false` otherwise.
-    fn is_path_allowed(&self, path: &Path) -> bool {
-        // Canonicalize the path to avoid path traversal attacks
-        let canonical_path = match path.canonicalize() {
-            Ok(p) => p,
-            Err(_) => return false,
-        };
-        
-        for allowed_path in &self.paths {
-            // Canonicalize the allowed path as well
-            let canonical_allowed_path = match allowed_path.canonicalize() {
-                Ok(p) => p,
-                Err(_) => continue,
-            };
-            
-            // Check if the canonical path starts with the canonical allowed path
-            if canonical_path.starts_with(&canonical_allowed_path) {
-                return true;
-            }
+
+        if write && self.operations.contains(FileOperations::WRITE) {
+            new_ops |= FileOperations::WRITE;
         }
-        
-        false
-    }
-    
-    /// Get the allowed paths.
-    pub fn paths(&self) -> &HashSet<PathBuf> {
-        &self.paths
-    }
-    
-    /// Check if read operations are allowed.
-    pub fn can_read(&self) -> bool {
-        self.read
-    }
-    
-    /// Check if write operations are allowed.
-    pub fn can_write(&self) -> bool {
-        self.write
-    }
-    
-    /// Check if execute operations are allowed.
-    pub fn can_execute(&self) -> bool {
-        self.execute
+
+        if execute && self.operations.contains(FileOperations::EXECUTE) {
+            new_ops |= FileOperations::EXECUTE;
+        }
+
+        // If no operations are allowed after applying the constraint, return an error
+        if new_ops.is_empty() {
+            return Err(CapabilityError::InvalidConstraint(
+                "No operations would be allowed after applying this constraint".to_string(),
+            ));
+        }
+
+        Ok(Self {
+            paths: self.paths.clone(),
+            operations: new_ops,
+        })
     }
 }
 
@@ -150,423 +136,354 @@ impl Capability for FileCapability {
     fn capability_type(&self) -> &str {
         "file"
     }
-    
+
     fn permits(&self, request: &AccessRequest) -> Result<(), CapabilityError> {
         match request {
-            AccessRequest::File { path, read, write, execute } => {
+            AccessRequest::File {
+                path,
+                read,
+                write,
+                execute,
+            } => {
                 // Check if the path is allowed
-                if !self.is_path_allowed(path) {
-                    return Err(CapabilityError::PermissionDenied(
-                        format!("Access to path {} is not allowed", path.display())
-                    ).into());
+                if !self.path_allowed(path) {
+                    return Err(CapabilityError::AccessDenied(format!(
+                        "Path '{}' is not allowed by this capability",
+                        path
+                    )));
                 }
-                
-                // Check if the operations are allowed
-                if *read && !self.read {
-                    return Err(CapabilityError::PermissionDenied(
-                        "Read access is not allowed".into()
-                    ).into());
+
+                // Check if the requested operations are permitted
+                let mut requested_ops = FileOperations::empty();
+                if *read {
+                    requested_ops |= FileOperations::READ;
                 }
-                
-                if *write && !self.write {
-                    return Err(CapabilityError::PermissionDenied(
-                        "Write access is not allowed".into()
-                    ).into());
+                if *write {
+                    requested_ops |= FileOperations::WRITE;
                 }
-                
-                if *execute && !self.execute {
-                    return Err(CapabilityError::PermissionDenied(
-                        "Execute access is not allowed".into()
-                    ).into());
+                if *execute {
+                    requested_ops |= FileOperations::EXECUTE;
                 }
-                
+
+                if !self.operations.contains(requested_ops) {
+                    return Err(CapabilityError::AccessDenied(format!(
+                        "Operation not permitted on path '{}'",
+                        path
+                    )));
+                }
+
                 Ok(())
-            },
-            _ => Err(CapabilityError::PermissionDenied(
-                "Only file access is allowed".into()
-            ).into()),
+            }
+            _ => Err(CapabilityError::IncompatibleTypes(format!(
+                "Expected File request, got {:?}",
+                request
+            ))),
         }
     }
-    
-    fn constrain(&self, constraints: &[Constraint]) -> Result<Box<dyn Capability>, CapabilityError> {
-        let mut paths = self.paths.clone();
-        let mut read = self.read;
-        let mut write = self.write;
-        let mut execute = self.execute;
-        
+
+    fn constrain(
+        &self,
+        constraints: &[Constraint],
+    ) -> Result<Box<dyn Capability>, CapabilityError> {
+        let mut result = self.clone();
+
         for constraint in constraints {
             match constraint {
                 Constraint::FilePath(path) => {
-                    // Filter paths that start with the constraint path
-                    paths.retain(|p| p.starts_with(path));
-                    
-                    // If no paths remain, return an error
-                    if paths.is_empty() {
-                        return Err(CapabilityError::ConstraintError(
-                            format!("No paths remain after applying constraint {}", path)
-                        ).into());
-                    }
-                },
-                Constraint::FileOperation { read: r, write: w, execute: e } => {
-                    // Can only remove permissions, not add them
-                    read = read && *r;
-                    write = write && *w;
-                    execute = execute && *e;
-                    
-                    // If all operations are disallowed, return an error
-                    if !read && !write && !execute {
-                        return Err(CapabilityError::ConstraintError(
-                            "No operations allowed after applying constraint".into()
-                        ).into());
-                    }
-                },
-                _ => return Err(CapabilityError::ConstraintError(
-                    format!("Constraint type {} not supported for file capability", constraint.constraint_type())
-                ).into()),
-            }
-        }
-        
-        Ok(Box::new(Self { paths, read, write, execute }))
-    }
-    
-    fn split(&self) -> Vec<Box<dyn Capability>> {
-        let mut capabilities = Vec::new();
-        
-        // Split by operation
-        if self.read {
-            capabilities.push(Box::new(Self::new(
-                self.paths.iter().cloned(),
-                true,
-                false,
-                false,
-            )) as Box<dyn Capability>);
-        }
-        
-        if self.write {
-            capabilities.push(Box::new(Self::new(
-                self.paths.iter().cloned(),
-                false,
-                true,
-                false,
-            )) as Box<dyn Capability>);
-        }
-        
-        if self.execute {
-            capabilities.push(Box::new(Self::new(
-                self.paths.iter().cloned(),
-                false,
-                false,
-                true,
-            )) as Box<dyn Capability>);
-        }
-        
-        // If we didn't split by operation, just clone
-        if capabilities.is_empty() {
-            capabilities.push(Box::new(self.clone()));
-        }
-        
-        capabilities
-    }
-    
-    fn can_join_with(&self, other: &dyn Capability) -> bool {
-        other.capability_type() == "file"
-    }
-    
-    fn join(&self, other: &dyn Capability) -> Result<Box<dyn Capability>, CapabilityError> {
-        if !self.can_join_with(other) {
-            return Err(CapabilityError::CompositionError(
-                format!("Cannot join file capability with {}", other.capability_type())
-            ).into());
-        }
-        
-        // Downcast the other capability to a FileCapability
-        let other = match other.permits(&AccessRequest::File {
-            path: PathBuf::from("/"),
-            read: true,
-            write: true,
-            execute: true,
-        }) {
-            Ok(()) => {
-                // If it permits everything, it's probably a super-capability
-                return Ok(Box::new(Self {
-                    paths: self.paths.union(&self.paths).cloned().collect(),
-                    read: true,
-                    write: true,
-                    execute: true,
-                }));
-            },
-            Err(_) => {
-                // Try to get more precise information
-                let mut paths = self.paths.clone();
-                let mut read = self.read;
-                let mut write = self.write;
-                let mut execute = self.execute;
-                
-                // Check if it permits read
-                if other.permits(&AccessRequest::File {
-                    path: PathBuf::from("/"),
-                    read: true,
-                    write: false,
-                    execute: false,
-                }).is_ok() {
-                    read = true;
+                    result = result.apply_path_constraint(path)?;
                 }
-                
-                // Check if it permits write
-                if other.permits(&AccessRequest::File {
-                    path: PathBuf::from("/"),
-                    read: false,
-                    write: true,
-                    execute: false,
-                }).is_ok() {
-                    write = true;
-                }
-                
-                // Check if it permits execute
-                if other.permits(&AccessRequest::File {
-                    path: PathBuf::from("/"),
-                    read: false,
-                    write: false,
-                    execute: true,
-                }).is_ok() {
-                    execute = true;
-                }
-                
-                // TODO: More precise path information
-                
-                Self {
-                    paths,
+                Constraint::FileOperation {
                     read,
                     write,
                     execute,
+                } => {
+                    result = result.apply_operation_constraint(*read, *write, *execute)?;
+                }
+                _ => {
+                    return Err(CapabilityError::InvalidConstraint(format!(
+                        "Constraint {:?} not applicable to FileCapability",
+                        constraint
+                    )))
                 }
             }
-        };
-        
-        // Join the capabilities
-        let joined = Self {
-            paths: self.paths.union(&other.paths).cloned().collect(),
-            read: self.read || other.read,
-            write: self.write || other.write,
-            execute: self.execute || other.execute,
-        };
-        
-        Ok(Box::new(joined))
+        }
+
+        Ok(Box::new(result))
     }
-    
+
+    fn split(&self) -> Vec<Box<dyn Capability>> {
+        let mut result = Vec::new();
+
+        // Split by path
+        for path in &self.paths {
+            result.push(Box::new(FileCapability {
+                paths: [path.clone()].into_iter().collect(),
+                operations: self.operations,
+            }) as Box<dyn Capability>);
+        }
+
+        result
+    }
+
+    fn join(&self, other: &dyn Capability) -> Result<Box<dyn Capability>, CapabilityError> {
+        // Try to downcast the other capability to FileCapability
+        if let Some(other_file) = other.as_any().downcast_ref::<FileCapability>() {
+            // Create a union of the paths
+            let mut paths = self.paths.clone();
+            paths.extend(other_file.paths.clone());
+
+            // Take the union of operations
+            let operations = self.operations | other_file.operations;
+
+            Ok(Box::new(FileCapability { paths, operations }))
+        } else {
+            Err(CapabilityError::IncompatibleTypes(
+                "Cannot join FileCapability with a different capability type".to_string(),
+            ))
+        }
+    }
+
+    fn leq(&self, other: &dyn Capability) -> bool {
+        // Try to downcast the other capability to FileCapability
+        if let Some(other_file) = other.as_any().downcast_ref::<FileCapability>() {
+            // This capability is <= other if:
+            // 1. All paths in self are allowed in other
+            // 2. Operations in self are a subset of operations in other
+
+            // Check operations first (faster)
+            if !(self.operations & other_file.operations).bits() == self.operations.bits() {
+                return false;
+            }
+
+            // Check paths
+            for path in &self.paths {
+                if !other_file.path_allowed(path) {
+                    return false;
+                }
+            }
+
+            true
+        } else {
+            false
+        }
+    }
+
+    fn meet(&self, other: &dyn Capability) -> Result<Box<dyn Capability>, CapabilityError> {
+        // Try to downcast the other capability to FileCapability
+        if let Some(other_file) = other.as_any().downcast_ref::<FileCapability>() {
+            // Find the intersection of paths
+            let paths: HashSet<String> = self
+                .paths
+                .intersection(&other_file.paths)
+                .cloned()
+                .collect();
+
+            if paths.is_empty() {
+                return Err(CapabilityError::InvalidState(
+                    "No paths in common between the capabilities".to_string(),
+                ));
+            }
+
+            // Take the intersection of operations
+            let operations = self.operations & other_file.operations;
+
+            if operations.is_empty() {
+                return Err(CapabilityError::InvalidState(
+                    "No operations in common between the capabilities".to_string(),
+                ));
+            }
+
+            Ok(Box::new(FileCapability { paths, operations }))
+        } else {
+            Err(CapabilityError::IncompatibleTypes(
+                "Cannot compute meet with different capability types".to_string(),
+            ))
+        }
+    }
+
     fn clone_box(&self) -> Box<dyn Capability> {
         Box::new(self.clone())
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::PathBuf;
-    
+
     #[test]
-    fn test_file_capability_permits() {
-        let capability = FileCapability::new(
-            vec![PathBuf::from("/tmp")],
-            true,
-            false,
-            false,
-        );
-        
-        // Test read access to allowed path
-        let request = AccessRequest::File {
-            path: PathBuf::from("/tmp/file"),
-            read: true,
-            write: false,
-            execute: false,
-        };
-        assert!(capability.permits(&request).is_ok());
-        
-        // Test write access to allowed path (should fail)
-        let request = AccessRequest::File {
-            path: PathBuf::from("/tmp/file"),
-            read: false,
-            write: true,
-            execute: false,
-        };
-        assert!(capability.permits(&request).is_err());
-        
-        // Test read access to disallowed path
-        let request = AccessRequest::File {
-            path: PathBuf::from("/etc/passwd"),
-            read: true,
-            write: false,
-            execute: false,
-        };
-        assert!(capability.permits(&request).is_err());
-        
-        // Test non-file access
-        let request = AccessRequest::Network {
-            host: "example.com".to_string(),
-            port: 80,
-            connect: true,
-            listen: false,
-        };
-        assert!(capability.permits(&request).is_err());
+    fn test_path_allowed() {
+        let paths = ["/tmp/*".to_string(), "/home/user/file.txt".to_string()]
+            .into_iter()
+            .collect();
+        let cap = FileCapability::new(paths, FileOperations::READ);
+
+        assert!(cap.path_allowed("/tmp/test.txt"));
+        assert!(cap.path_allowed("/home/user/file.txt"));
+        assert!(!cap.path_allowed("/home/user/other.txt"));
+        assert!(!cap.path_allowed("/var/log/system.log"));
     }
-    
+
     #[test]
-    fn test_file_capability_constrain() {
-        let capability = FileCapability::new(
-            vec![PathBuf::from("/tmp"), PathBuf::from("/var/log")],
-            true,
-            true,
-            false,
-        );
-        
-        // Constrain to a subset of paths
-        let constraints = vec![Constraint::FilePath("/tmp".to_string())];
-        let constrained = capability.constrain(&constraints).unwrap();
-        
-        // Should allow access to /tmp
-        let request = AccessRequest::File {
-            path: PathBuf::from("/tmp/file"),
-            read: true,
-            write: false,
-            execute: false,
-        };
-        assert!(constrained.permits(&request).is_ok());
-        
-        // Should deny access to /var/log
-        let request = AccessRequest::File {
-            path: PathBuf::from("/var/log/file"),
-            read: true,
-            write: false,
-            execute: false,
-        };
-        assert!(constrained.permits(&request).is_err());
-        
-        // Constrain to read-only
-        let constraints = vec![Constraint::FileOperation {
-            read: true,
-            write: false,
-            execute: false,
-        }];
-        let constrained = capability.constrain(&constraints).unwrap();
-        
-        // Should allow read access
-        let request = AccessRequest::File {
-            path: PathBuf::from("/tmp/file"),
-            read: true,
-            write: false,
-            execute: false,
-        };
-        assert!(constrained.permits(&request).is_ok());
-        
-        // Should deny write access
-        let request = AccessRequest::File {
-            path: PathBuf::from("/tmp/file"),
-            read: false,
-            write: true,
-            execute: false,
-        };
-        assert!(constrained.permits(&request).is_err());
+    fn test_permits() {
+        let paths = ["/tmp/*".to_string(), "/home/user/file.txt".to_string()]
+            .into_iter()
+            .collect();
+        let cap = FileCapability::new(paths, FileOperations::READ | FileOperations::WRITE);
+
+        // Valid requests
+        assert!(cap
+            .permits(&AccessRequest::File {
+                path: "/tmp/test.txt".to_string(),
+                read: true,
+                write: false,
+                execute: false,
+            })
+            .is_ok());
+
+        assert!(cap
+            .permits(&AccessRequest::File {
+                path: "/tmp/test.txt".to_string(),
+                read: false,
+                write: true,
+                execute: false,
+            })
+            .is_ok());
+
+        // Invalid path
+        assert!(cap
+            .permits(&AccessRequest::File {
+                path: "/var/log/system.log".to_string(),
+                read: true,
+                write: false,
+                execute: false,
+            })
+            .is_err());
+
+        // Invalid operation
+        assert!(cap
+            .permits(&AccessRequest::File {
+                path: "/tmp/test.txt".to_string(),
+                read: false,
+                write: false,
+                execute: true,
+            })
+            .is_err());
+
+        // Invalid request type
+        assert!(cap
+            .permits(&AccessRequest::Network {
+                host: Some("example.com".to_string()),
+                port: Some(80),
+                connect: true,
+                listen: false,
+                bind: false,
+            })
+            .is_err());
     }
-    
+
     #[test]
-    fn test_file_capability_split() {
-        let capability = FileCapability::new(
-            vec![PathBuf::from("/tmp")],
-            true,
-            true,
-            false,
-        );
-        
-        let split = capability.split();
-        assert_eq!(split.len(), 2);
-        
-        // Check that the first capability allows read but not write
-        let request = AccessRequest::File {
-            path: PathBuf::from("/tmp/file"),
-            read: true,
-            write: false,
-            execute: false,
-        };
-        assert!(split[0].permits(&request).is_ok());
-        
-        let request = AccessRequest::File {
-            path: PathBuf::from("/tmp/file"),
-            read: false,
-            write: true,
-            execute: false,
-        };
-        assert!(split[0].permits(&request).is_err());
-        
-        // Check that the second capability allows write but not read
-        let request = AccessRequest::File {
-            path: PathBuf::from("/tmp/file"),
-            read: true,
-            write: false,
-            execute: false,
-        };
-        assert!(split[1].permits(&request).is_err());
-        
-        let request = AccessRequest::File {
-            path: PathBuf::from("/tmp/file"),
-            read: false,
-            write: true,
-            execute: false,
-        };
-        assert!(split[1].permits(&request).is_ok());
+    fn test_constrain() {
+        let paths = ["/tmp/*".to_string(), "/home/user/file.txt".to_string()]
+            .into_iter()
+            .collect();
+        let cap = FileCapability::new(paths, FileOperations::READ | FileOperations::WRITE);
+
+        // Constrain by path
+        let constrained = cap
+            .constrain(&[Constraint::FilePath("/tmp/specific.txt".to_string())])
+            .unwrap();
+        assert!(constrained
+            .permits(&AccessRequest::File {
+                path: "/tmp/specific.txt".to_string(),
+                read: true,
+                write: false,
+                execute: false,
+            })
+            .is_ok());
+
+        assert!(constrained
+            .permits(&AccessRequest::File {
+                path: "/tmp/other.txt".to_string(),
+                read: true,
+                write: false,
+                execute: false,
+            })
+            .is_err());
+
+        // Constrain by operation
+        let constrained = cap
+            .constrain(&[Constraint::FileOperation {
+                read: true,
+                write: false,
+                execute: false,
+            }])
+            .unwrap();
+
+        assert!(constrained
+            .permits(&AccessRequest::File {
+                path: "/tmp/test.txt".to_string(),
+                read: true,
+                write: false,
+                execute: false,
+            })
+            .is_ok());
+
+        assert!(constrained
+            .permits(&AccessRequest::File {
+                path: "/tmp/test.txt".to_string(),
+                read: false,
+                write: true,
+                execute: false,
+            })
+            .is_err());
     }
-    
+
     #[test]
-    fn test_file_capability_join() {
-        let capability1 = FileCapability::new(
-            vec![PathBuf::from("/tmp")],
-            true,
-            false,
-            false,
-        );
-        
-        let capability2 = FileCapability::new(
-            vec![PathBuf::from("/var/log")],
-            false,
-            true,
-            false,
-        );
-        
-        let joined = capability1.join(&capability2).unwrap();
-        
-        // Should allow read access to /tmp
-        let request = AccessRequest::File {
-            path: PathBuf::from("/tmp/file"),
-            read: true,
-            write: false,
-            execute: false,
-        };
-        assert!(joined.permits(&request).is_ok());
-        
-        // Should allow write access to /var/log
-        let request = AccessRequest::File {
-            path: PathBuf::from("/var/log/file"),
-            read: false,
-            write: true,
-            execute: false,
-        };
-        assert!(joined.permits(&request).is_ok());
-        
-        // Should deny write access to /tmp
-        let request = AccessRequest::File {
-            path: PathBuf::from("/tmp/file"),
-            read: false,
-            write: true,
-            execute: false,
-        };
-        assert!(joined.permits(&request).is_err());
-        
-        // Should deny read access to /var/log
-        let request = AccessRequest::File {
-            path: PathBuf::from("/var/log/file"),
-            read: true,
-            write: false,
-            execute: false,
-        };
-        assert!(joined.permits(&request).is_err());
+    fn test_leq() {
+        let paths1 = ["/tmp/test.txt".to_string()].into_iter().collect();
+        let cap1 = FileCapability::new(paths1, FileOperations::READ);
+
+        let paths2 = ["/tmp/*".to_string()].into_iter().collect();
+        let cap2 = FileCapability::new(paths2, FileOperations::READ | FileOperations::WRITE);
+
+        // cap1 <= cap2 because cap1's paths are a subset and operations are a subset
+        assert!(cap1.leq(&cap2));
+
+        // cap2 !<= cap1 because cap2 has more operations
+        assert!(!cap2.leq(&cap1));
+    }
+
+    #[test]
+    fn test_join_and_meet() {
+        let paths1 = ["/tmp/file1.txt".to_string(), "/tmp/file2.txt".to_string()]
+            .into_iter()
+            .collect();
+        let cap1 = FileCapability::new(paths1, FileOperations::READ);
+
+        let paths2 = ["/tmp/file2.txt".to_string(), "/tmp/file3.txt".to_string()]
+            .into_iter()
+            .collect();
+        let cap2 = FileCapability::new(paths2, FileOperations::READ | FileOperations::WRITE);
+
+        // Join
+        let join = cap1.join(&cap2).unwrap();
+        let join_file = join.as_any().downcast_ref::<FileCapability>().unwrap();
+
+        assert_eq!(join_file.paths.len(), 3);
+        assert!(join_file.operations.contains(FileOperations::READ));
+        assert!(join_file.operations.contains(FileOperations::WRITE));
+
+        // Meet
+        let meet = cap1.meet(&cap2).unwrap();
+        let meet_file = meet.as_any().downcast_ref::<FileCapability>().unwrap();
+
+        assert_eq!(meet_file.paths.len(), 1);
+        assert!(meet_file.paths.contains("/tmp/file2.txt"));
+        assert!(meet_file.operations.contains(FileOperations::READ));
+        assert!(!meet_file.operations.contains(FileOperations::WRITE));
     }
 }

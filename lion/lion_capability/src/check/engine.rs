@@ -1,156 +1,186 @@
-//! Capability checking engine.
-//! 
-//! This module provides the capability checker engine.
+use std::sync::Arc;
 
-use lion_core::error::{Result, CapabilityError};
 use lion_core::id::PluginId;
-use lion_core::types::AccessRequest;
 
+use super::audit::AuditLog;
+use crate::model::{AccessRequest, CapabilityError};
 use crate::store::CapabilityStore;
 
-/// Capability checker engine.
+/// The main capability checking engine
 ///
-/// This engine checks if a plugin has the capability to perform a given access.
-#[derive(Clone)]
-pub struct CapabilityChecker<S> {
-    /// The capability store.
-    store: S,
+/// This component is responsible for verifying that a plugin has permission
+/// to perform a specific action by checking its assigned capabilities.
+pub struct CapabilityChecker {
+    /// The capability store to use for lookups
+    store: Arc<dyn CapabilityStore>,
+
+    /// Optional audit log for recording capability checks
+    audit_log: Option<Arc<AuditLog>>,
 }
 
-impl<S: CapabilityStore> CapabilityChecker<S> {
-    /// Create a new capability checker.
-    ///
-    /// # Arguments
-    ///
-    /// * `store` - The capability store.
-    ///
-    /// # Returns
-    ///
-    /// A new capability checker.
-    pub fn new(store: S) -> Self {
-        Self { store }
-    }
-    
-    /// Check if a plugin has the capability to perform a given access.
-    ///
-    /// # Arguments
-    ///
-    /// * `plugin_id` - The ID of the plugin to check.
-    /// * `request` - The access request to check.
-    ///
-    /// # Returns
-    ///
-    /// * `Ok(())` - If the plugin has the capability.
-    /// * `Err` - If the plugin does not have the capability.
-    pub fn check(&self, plugin_id: &PluginId, request: &AccessRequest) -> Result<()> {
-        // Get the capabilities for the plugin
-        let capabilities = self.store.list_capabilities(plugin_id)?;
-        
-        // Check if any capability permits the access
-        for (_, capability) in capabilities {
-            if capability.permits(request).is_ok() {
-                return Ok(());
-            }
+impl CapabilityChecker {
+    /// Creates a new capability checker with the specified store
+    pub fn new(store: Arc<dyn CapabilityStore>) -> Self {
+        Self {
+            store,
+            audit_log: None,
         }
-        
-        // No capability permitted the access
-        Err(CapabilityError::PermissionDenied(
-            format!("No capability permits {:?}", request)
-        ).into())
+    }
+
+    /// Creates a new capability checker with the specified store and audit log
+    pub fn with_audit(store: Arc<dyn CapabilityStore>, audit_log: Arc<AuditLog>) -> Self {
+        Self {
+            store,
+            audit_log: Some(audit_log),
+        }
+    }
+
+    /// Sets the audit log for this checker
+    pub fn set_audit_log(&mut self, audit_log: Option<Arc<AuditLog>>) {
+        self.audit_log = audit_log;
+    }
+
+    /// Checks if a plugin has permission for a specific access request
+    ///
+    /// This method delegates to the capability store to check if any of the
+    /// plugin's capabilities permit the request, and records the check in
+    /// the audit log if one is configured.
+    pub fn check(
+        &self,
+        plugin_id: &PluginId,
+        request: &AccessRequest,
+    ) -> Result<(), CapabilityError> {
+        // Check if the plugin has permission
+        let result = self.store.check_permission(plugin_id, request);
+
+        // Record in the audit log if available
+        if let Some(audit_log) = &self.audit_log {
+            audit_log.log_access(plugin_id, request, result.is_ok());
+        }
+
+        result
+    }
+
+    /// Gets a reference to the capability store
+    pub fn store(&self) -> &Arc<dyn CapabilityStore> {
+        &self.store
+    }
+
+    /// Gets a reference to the audit log, if one is configured
+    pub fn audit_log(&self) -> Option<&Arc<AuditLog>> {
+        self.audit_log.as_ref()
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::file::FileCapability;
+    use uuid::Uuid;
+
+    use crate::model::file::{FileCapability, FileOperations};
     use crate::store::InMemoryCapabilityStore;
-    use std::path::PathBuf;
-    
+
+    fn test_plugin_id(value: u64) -> PluginId {
+        // Create a deterministic UUID from the value
+        let bytes = value.to_le_bytes();
+        let mut uuid_bytes = [0u8; 16];
+        for i in 0..std::cmp::min(8, uuid_bytes.len()) {
+            uuid_bytes[i] = bytes[i];
+        }
+        let uuid = Uuid::from_bytes(uuid_bytes);
+        PluginId::from_uuid(uuid)
+    }
+
     #[test]
     fn test_capability_checker() {
-        let store = InMemoryCapabilityStore::new();
-        let checker = CapabilityChecker::new(store.clone());
-        let plugin_id = PluginId::new();
-        
-        // Add a capability
-        let capability = Box::new(FileCapability::read_only(vec![PathBuf::from("/tmp")]));
-        store.add_capability(plugin_id.clone(), capability).unwrap();
-        
-        // Check for read access to /tmp
-        let request = AccessRequest::File {
-            path: PathBuf::from("/tmp/file"),
-            read: true,
-            write: false,
-            execute: false,
-        };
-        assert!(checker.check(&plugin_id, &request).is_ok());
-        
-        // Check for write access to /tmp (should fail)
-        let request = AccessRequest::File {
-            path: PathBuf::from("/tmp/file"),
-            read: false,
-            write: true,
-            execute: false,
-        };
-        assert!(checker.check(&plugin_id, &request).is_err());
-        
-        // Check for read access to /etc (should fail)
-        let request = AccessRequest::File {
-            path: PathBuf::from("/etc/passwd"),
-            read: true,
-            write: false,
-            execute: false,
-        };
-        assert!(checker.check(&plugin_id, &request).is_err());
+        // Create a store
+        let store = Arc::new(InMemoryCapabilityStore::new());
+        let plugin_id = test_plugin_id(1);
+
+        // Add a capability to the store
+        let paths = ["/tmp/file.txt".to_string()].into_iter().collect();
+        let file_cap = FileCapability::new(paths, FileOperations::READ);
+
+        store.add_capability(plugin_id, Box::new(file_cap)).unwrap();
+
+        // Create a checker
+        let checker = CapabilityChecker::new(store);
+
+        // Check a permitted request
+        assert!(checker
+            .check(
+                &plugin_id,
+                &AccessRequest::File {
+                    path: "/tmp/file.txt".to_string(),
+                    read: true,
+                    write: false,
+                    execute: false,
+                }
+            )
+            .is_ok());
+
+        // Check a denied request
+        assert!(checker
+            .check(
+                &plugin_id,
+                &AccessRequest::File {
+                    path: "/tmp/file.txt".to_string(),
+                    read: false,
+                    write: true,
+                    execute: false,
+                }
+            )
+            .is_err());
     }
-    
+
     #[test]
-    fn test_capability_checker_multiple_capabilities() {
-        let store = InMemoryCapabilityStore::new();
-        let checker = CapabilityChecker::new(store.clone());
-        let plugin_id = PluginId::new();
-        
-        // Add capabilities
-        let capability1 = Box::new(FileCapability::read_only(vec![PathBuf::from("/tmp")]));
-        let capability2 = Box::new(FileCapability::write_only(vec![PathBuf::from("/var")]));
-        store.add_capability(plugin_id.clone(), capability1).unwrap();
-        store.add_capability(plugin_id.clone(), capability2).unwrap();
-        
-        // Check for read access to /tmp
-        let request = AccessRequest::File {
-            path: PathBuf::from("/tmp/file"),
-            read: true,
-            write: false,
-            execute: false,
-        };
-        assert!(checker.check(&plugin_id, &request).is_ok());
-        
-        // Check for write access to /var
-        let request = AccessRequest::File {
-            path: PathBuf::from("/var/file"),
-            read: false,
-            write: true,
-            execute: false,
-        };
-        assert!(checker.check(&plugin_id, &request).is_ok());
-        
-        // Check for write access to /tmp (should fail)
-        let request = AccessRequest::File {
-            path: PathBuf::from("/tmp/file"),
-            read: false,
-            write: true,
-            execute: false,
-        };
-        assert!(checker.check(&plugin_id, &request).is_err());
-        
-        // Check for read access to /var (should fail)
-        let request = AccessRequest::File {
-            path: PathBuf::from("/var/file"),
-            read: true,
-            write: false,
-            execute: false,
-        };
-        assert!(checker.check(&plugin_id, &request).is_err());
+    fn test_capability_checker_with_audit() {
+        // Create a store
+        let store = Arc::new(InMemoryCapabilityStore::new());
+        let plugin_id = test_plugin_id(1);
+
+        // Add a capability to the store
+        let paths = ["/tmp/file.txt".to_string()].into_iter().collect();
+        let file_cap = FileCapability::new(paths, FileOperations::READ);
+
+        store.add_capability(plugin_id, Box::new(file_cap)).unwrap();
+
+        // Create an audit log
+        let audit_log = Arc::new(AuditLog::new(100));
+
+        // Create a checker with audit
+        let checker = CapabilityChecker::with_audit(store, audit_log.clone());
+
+        // Make some checks
+        checker
+            .check(
+                &plugin_id,
+                &AccessRequest::File {
+                    path: "/tmp/file.txt".to_string(),
+                    read: true,
+                    write: false,
+                    execute: false,
+                },
+            )
+            .ok();
+
+        checker
+            .check(
+                &plugin_id,
+                &AccessRequest::File {
+                    path: "/tmp/file.txt".to_string(),
+                    read: false,
+                    write: true,
+                    execute: false,
+                },
+            )
+            .ok();
+
+        // Check the audit log
+        let entries = audit_log.get_entries(plugin_id);
+
+        assert_eq!(entries.len(), 2);
+        assert!(entries[0].permitted);
+        assert!(!entries[1].permitted);
     }
 }

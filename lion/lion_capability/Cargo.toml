@@ -3,16 +3,21 @@ name = "lion_capability"
 version = "0.1.0"
 edition = "2021"
 description = "Capability-based security system for the Lion microkernel"
-license = "MIT OR Apache-2.0"
 authors = ["Lion Microkernel Team"]
+license = "MIT OR Apache-2.0"
 
 [dependencies]
 lion_core = { path = "../lion_core" }
-thiserror = "1.0"
-serde = { version = "1.0", features = ["derive"] }
-uuid = { version = "1.0", features = ["v4", "serde"] }
-dashmap = "5.4.0"
-lazy_static = "1.4.0"
-chrono = { version = "0.4", features = ["serde"] }
+thiserror = "2.0"
+dashmap = "6.1"
+smallvec = "1.10"
+bitflags = "2.4"
+indexmap = "2.0"
 tracing = "0.1"
-parking_lot = "0.12"
+atomic = "0.6"
+ahash = "0.8"
+uuid = { version = "1.0", features = ["v4"] }
+
+[dev-dependencies]
+proptest = "1.2"
+criterion = "0.5"
