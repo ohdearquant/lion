@@ -4,6 +4,7 @@ members = [
     "lion/lion_capability",
     "lion/lion_concurrency",
     "lion/lion_isolation",
+    "lion/lion_observability",
     "plugins/calculator"
 ]
 resolver = "2"
