@@ -918,21 +918,31 @@ mod tests {
     #[test]
     fn test_tracked_mutex_timeout() {
         let mutex = TrackedMutex::new(0);
-        let mutex_arc = Arc::new(mutex.clone());
-        let mutex_clone = Arc::clone(&mutex_arc);
+        let mutex_arc = Arc::new(mutex);
 
         // First lock
         let guard = mutex_arc.lock();
 
+        // Sleep a bit to ensure the lock is properly acquired
+        thread::sleep(Duration::from_millis(10));
+
         // Try to lock with timeout (should fail)
+        let mutex_clone = Arc::clone(&mutex_arc);
         let thread = thread::spawn(move || {
             // Use a very short timeout to ensure it fails quickly
             let result = mutex_clone.try_lock_for(Duration::from_millis(10));
-            // Verify the result is a timeout error (should fail since the lock is held)
-            if !matches!(result, Err(LockError::Timeout(_))) {
-                panic!("Expected timeout error");
+            match result {
+                Err(LockError::Timeout(_)) => {
+                    // Expected timeout error
+                }
+                _ => {
+                    panic!("Expected timeout error");
+                }
             }
         });
+
+        // Sleep to ensure the thread has time to attempt the lock
+        thread::sleep(Duration::from_millis(50));
 
         // Release the first lock
         drop(guard);

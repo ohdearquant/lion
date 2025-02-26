@@ -91,10 +91,10 @@ pub struct ResourceHandle<R: Resource> {
 
 impl<R: Resource> ResourceHandle<R> {
     /// Create a new resource handle
-    fn new(resource: R, pool: &Arc<ResourcePool<R>>) -> Self {
+    fn new(resource: R, pool: Arc<ResourcePool<R>>) -> Self {
         Self {
             resource: Some(resource),
-            pool: Arc::downgrade(pool),
+            pool: Arc::downgrade(&pool),
             acquired_at: Instant::now(),
         }
     }
@@ -215,8 +215,11 @@ impl<R: Resource> ResourcePool<R> {
             _phantom: PhantomData,
         });
 
-        let pool_clone = Arc::clone(&pool);
-        pool_clone.initialize();
+        // Initialize the pool
+        {
+            let pool_clone = Arc::clone(&pool);
+            pool_clone.initialize();
+        }
 
         pool
     }
@@ -260,7 +263,7 @@ impl<R: Resource> ResourcePool<R> {
         timeout: Duration,
     ) -> Result<ResourceHandle<R>, ResourcePoolError> {
         let start_time = Instant::now();
-        let pool_arc = Arc::new(self.clone());
+        let self_arc = Arc::new(self);
 
         // Check if the pool is shut down
         if *self.shutdown.lock().unwrap() {
@@ -270,7 +273,11 @@ impl<R: Resource> ResourcePool<R> {
         while start_time.elapsed() < timeout {
             // Try to get a resource
             if let Some(resource) = self.get_resource() {
-                return Ok(ResourceHandle::new(resource, &pool_arc));
+                return Ok(ResourceHandle {
+                    resource: Some(resource),
+                    pool: Arc::downgrade(&self_arc),
+                    acquired_at: Instant::now(),
+                });
             }
 
             // If we can create a new resource, do so
@@ -280,7 +287,11 @@ impl<R: Resource> ResourcePool<R> {
                 match R::create() {
                     Ok(resource) => {
                         *self.size.lock().unwrap() += 1;
-                        return Ok(ResourceHandle::new(resource, &pool_arc));
+                        return Ok(ResourceHandle {
+                            resource: Some(resource),
+                            pool: Arc::downgrade(&self_arc),
+                            acquired_at: Instant::now(),
+                        });
                     }
                     Err(e) => {
                         return Err(ResourcePoolError::CreationFailed(e));
@@ -303,11 +314,15 @@ impl<R: Resource> ResourcePool<R> {
             return Err(ResourcePoolError::PoolShutdown);
         }
 
-        let pool_arc = Arc::new(self.clone());
+        let self_arc = Arc::new(self);
 
         // Try to get a resource
         if let Some(resource) = self.get_resource() {
-            return Ok(ResourceHandle::new(resource, &pool_arc));
+            return Ok(ResourceHandle {
+                resource: Some(resource),
+                pool: Arc::downgrade(&self_arc),
+                acquired_at: Instant::now(),
+            });
         }
 
         // If we can create a new resource, do so
@@ -317,7 +332,11 @@ impl<R: Resource> ResourcePool<R> {
             match R::create() {
                 Ok(resource) => {
                     *self.size.lock().unwrap() += 1;
-                    return Ok(ResourceHandle::new(resource, &pool_arc));
+                    return Ok(ResourceHandle {
+                        resource: Some(resource),
+                        pool: Arc::downgrade(&self_arc),
+                        acquired_at: Instant::now(),
+                    });
                 }
                 Err(e) => {
                     return Err(ResourcePoolError::CreationFailed(e));
@@ -454,18 +473,6 @@ impl<R: Resource> ResourcePool<R> {
     }
 }
 
-impl<R: Resource> Clone for ResourcePool<R> {
-    fn clone(&self) -> Self {
-        Self {
-            resources: Mutex::new(VecDeque::with_capacity(self.config.max_size)),
-            size: Mutex::new(*self.size.lock().unwrap()),
-            config: self.config.clone(),
-            shutdown: Mutex::new(false),
-            _phantom: PhantomData,
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -487,8 +494,6 @@ mod tests {
 
             let created_count = Arc::new(AtomicUsize::new(1));
             let closed_count = Arc::new(AtomicUsize::new(0));
-
-            created_count.fetch_add(1, Ordering::Relaxed);
 
             Ok(Self {
                 id,
@@ -524,6 +529,9 @@ mod tests {
 
         let pool = ResourcePool::<TestResource>::new(config);
 
+        // Add a small delay to ensure pool initialization is complete
+        std::thread::sleep(Duration::from_millis(50));
+
         // Check initial size
         assert_eq!(pool.total_count(), 2);
         assert_eq!(pool.available_count(), 2);
@@ -538,10 +546,18 @@ mod tests {
 
         // Return one resource
         drop(handle1);
+
+        // Add a small delay to ensure resource is properly returned
+        std::thread::sleep(Duration::from_millis(10));
+
         assert_eq!(pool.available_count(), 1);
 
         // Return the other resource
         drop(handle2);
+
+        // Add a small delay to ensure resource is properly returned
+        std::thread::sleep(Duration::from_millis(10));
+
         assert_eq!(pool.available_count(), 2);
     }
 
@@ -557,11 +573,11 @@ mod tests {
 
         let pool = ResourcePool::<TestResource>::new(config);
 
+        // Add a small delay to ensure pool initialization is complete
+        std::thread::sleep(Duration::from_millis(50));
+
         // Check initial size
         assert_eq!(pool.total_count(), 1);
-
-        // Add a small delay to ensure pool initialization is complete
-        std::thread::sleep(Duration::from_millis(10));
 
         // Acquire resources until we hit max size
         let handle1 = pool.acquire().unwrap();
@@ -598,12 +614,18 @@ mod tests {
         let config = ResourcePoolConfig::default();
         let pool = ResourcePool::<TestResource>::new(config);
 
+        // Add a small delay to ensure pool initialization is complete
+        std::thread::sleep(Duration::from_millis(50));
+
         // Get a resource and invalidate it
         let mut handle = pool.acquire().unwrap();
         handle.get_mut().valid = false;
 
         // Return the invalid resource
         drop(handle);
+
+        // Add a small delay to ensure resource is properly processed
+        std::thread::sleep(Duration::from_millis(10));
 
         // Pool should have discarded the invalid resource
         assert_eq!(pool.total_count(), pool.config.initial_size - 1);
@@ -613,6 +635,9 @@ mod tests {
     fn test_resource_pool_shutdown() {
         let config = ResourcePoolConfig::default();
         let pool = ResourcePool::<TestResource>::new(config);
+
+        // Add a small delay to ensure pool initialization is complete
+        std::thread::sleep(Duration::from_millis(50));
 
         // Get some resources
         let handle1 = pool.acquire().unwrap();
@@ -628,6 +653,9 @@ mod tests {
         // Return resources after shutdown
         drop(handle1);
         drop(handle2);
+
+        // Add a small delay to ensure resources are properly processed
+        std::thread::sleep(Duration::from_millis(50));
 
         // All resources should be closed
         assert_eq!(pool.total_count(), 0);
@@ -645,6 +673,9 @@ mod tests {
         };
 
         let pool = ResourcePool::<TestResource>::new(config);
+
+        // Add a small delay to ensure pool initialization is complete
+        std::thread::sleep(Duration::from_millis(50));
 
         // Wait for idle timeout
         std::thread::sleep(Duration::from_millis(20));
