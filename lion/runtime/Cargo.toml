@@ -1,0 +1,30 @@
+[package]
+name = "runtime"
+version = "0.3.0"
+edition = "2021"
+description = "Runtime for the Lion plugin system"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+core = { path = "../core" }
+capabilities = { path = "../capabilities" }
+policy = { path = "../policy" }
+isolation = { path = "../isolation" }
+concurrency = { path = "../concurrency" }
+workflow = { path = "../workflow" }
+observability = { path = "../observability", optional = true }
+clap = { version = "4.3.11", features = ["derive"] }
+serde = { version = "1.0.171", features = ["derive"] }
+serde_json = "1.0.100"
+serde_yaml = "0.9.25"
+toml = "0.7.6"
+dashmap = "5.5.0"
+parking_lot = "0.12.1"
+log = "0.4.19"
+thiserror = "1.0.44"
+uuid = { version = "1.4.1", features = ["v4", "serde"] }
+tempfile = "3.8.0"
+
+[features]
+default = []
+observability = ["dep:observability"]

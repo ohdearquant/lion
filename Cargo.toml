@@ -1,8 +1,18 @@
 [workspace]
 members = [
-    "lion/lion_core",
-    "lion/lion_cli",
-    "lion/lion_ui",
-    "plugins/calculator"
+    "lion/core",
+    "lion/capabilities",
+    "lion/policy",
+    "lion/isolation",
+    "lion/concurrency",
+    "lion/workflow",
+    "lion/observability",
+    "lion/runtime",
 ]
 resolver = "2"
+
+[profile.release]
+lto = true
+codegen-units = 1
+opt-level = 3
+debug = false

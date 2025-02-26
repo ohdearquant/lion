@@ -1,0 +1,16 @@
+[package]
+name = "lion_policy"
+version = "0.3.0"
+edition = "2021"
+description = "Policy engine for the Lion plugin system"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+lion_core = { path = "../lion_core" }
+lion_capabilities = { path = "../lion_capabilities" }
+serde = { version = "1.0.171", features = ["derive"] }
+serde_yaml = "0.9.25"
+dashmap = "5.5.0"
+thiserror = "1.0.44"
+regex = "1.9.1"
+uuid = { version = "1.4.1", features = ["v4", "serde"] }

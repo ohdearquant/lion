@@ -1,0 +1,22 @@
+[package]
+name = "lion_isolation"
+version = "0.3.0"
+edition = "2021"
+description = "Plugin isolation for the Lion runtime"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+lion_core = { path = "../lion_core" }
+wasmtime = "10.0.1"
+wasmtime-wasi = "10.0.1"
+anyhow = "1.0.72"
+dashmap = "5.5.0"
+parking_lot = "0.12.1"
+thiserror = "1.0.44"
+uuid = { version = "1.4.1", features = ["v4", "serde"] }
+log = "0.4.19"
+
+[features]
+default = []
+wasm = []
+native = []

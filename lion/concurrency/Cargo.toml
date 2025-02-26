@@ -1,0 +1,22 @@
+[package]
+name = "concurrency"
+version = "0.3.0"
+edition = "2021"
+description = "Thread-safe instance pooling for the Lion plugin system"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+core = { path = "../core" }
+isolation = { path = "../isolation" }
+tokio = { version = "1.29.1", features = ["rt", "sync", "time"], optional = true }
+async-trait = { version = "0.1.71", optional = true }
+futures = { version = "0.3.28", optional = true }
+dashmap = "5.5.0"
+parking_lot = "0.12.1"
+thiserror = "1.0.44"
+crossbeam-queue = "0.3.8"
+uuid = { version = "1.4.1", features = ["v4", "serde"] }
+
+[features]
+default = []
+async = ["dep:tokio", "dep:async-trait", "dep:futures"]

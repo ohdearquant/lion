@@ -1,0 +1,15 @@
+[package]
+name = "lion_capabilities"
+version = "0.3.0"
+edition = "2021"
+description = "Capability-based security for the Lion plugin system"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+lion_core = { path = "../lion_core" }
+dashmap = "5.5.0"
+parking_lot = "0.12.1"
+regex = "1.9.1"
+thiserror = "1.0.44"
+serde = { version = "1.0.171", features = ["derive"] }
+uuid = { version = "1.4.1", features = ["v4", "serde"] }

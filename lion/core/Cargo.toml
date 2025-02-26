@@ -1,0 +1,14 @@
+[package]
+name = "lion_core"
+version = "0.3.0"
+edition = "2021"
+description = "Core types and interfaces for the Lion plugin system"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+thiserror = "2.0"
+serde = { version = "1.0.171", features = ["derive"] }
+uuid = { version = "1.4.1", features = ["v4", "serde"] }
+chrono = { version = "0.4.26", features = ["serde"] }
+
+# Minimal external dependencies - core should be lightweight
