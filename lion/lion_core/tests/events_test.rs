@@ -10,9 +10,9 @@ use std::thread;
 use std::time::Duration;
 
 use lion_core::error::{ConcurrencyError, Error, Result};
-use lion_core::id::{MessageId, NodeId, PluginId};
+use lion_core::id::{MessageId, PluginId};
 use lion_core::traits::{Capability, ConcurrencyManager};
-use lion_core::types::{AccessRequest, ExecutionOptions, NodeType, Workflow, WorkflowNode};
+use lion_core::types::{AccessRequest, Workflow, WorkflowNode};
 
 /// A message in the event system.
 #[derive(Debug, Clone)]
@@ -127,8 +127,9 @@ impl EventBus {
         // Combine all recipients, excluding the source
         let mut recipients = subscribers;
         recipients.extend(global_listeners.iter().filter(|id| **id != event.source));
-        recipients.sort();
-        recipients.dedup();
+        // Sort recipients by their string representation
+        recipients.sort_by(|a, b| a.to_string().cmp(&b.to_string()));
+        recipients.dedup_by(|a, b| a.to_string() == b.to_string());
 
         // Add to each recipient's queue
         let mut queues = self.event_queues.lock().unwrap();
@@ -290,13 +291,14 @@ impl TestConcurrencyManager {
     fn register_agent(&self, agent: Arc<TestAgent>) {
         self.agents.lock().unwrap().insert(agent.id, agent.clone());
     }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
 }
 
 impl ConcurrencyManager for TestConcurrencyManager {
-    fn schedule_task(
-        &self,
-        task: Box<dyn FnOnce() + Send + 'static>,
-    ) -> Result<(), ConcurrencyError> {
+    fn schedule_task(&self, task: Box<dyn FnOnce() + Send + 'static>) -> Result<()> {
         // Execute the task in a new thread
         thread::spawn(move || {
             task();
@@ -333,7 +335,7 @@ impl ConcurrencyManager for TestConcurrencyManager {
         plugin_id: &PluginId,
         function: &str,
         params: &[u8],
-        timeout: Duration,
+        _timeout: Duration,
     ) -> Result<Vec<u8>> {
         // Simple implementation that ignores timeout for testing
         self.call_function(plugin_id, function, params)
@@ -356,10 +358,7 @@ impl Capability for PluginCallCapability {
         "plugin_call"
     }
 
-    fn permits(
-        &self,
-        request: &AccessRequest,
-    ) -> std::result::Result<(), lion_core::error::CapabilityError> {
+    fn permits(&self, request: &AccessRequest) -> lion_core::error::Result<()> {
         match request {
             AccessRequest::PluginCall {
                 plugin_id,
@@ -368,13 +367,18 @@ impl Capability for PluginCallCapability {
                 if self.allowed_plugins.contains(plugin_id) {
                     Ok(())
                 } else {
-                    Err(lion_core::error::CapabilityError::PermissionDenied(
-                        format!("Plugin {} not in allowed list", plugin_id),
+                    Err(Error::Capability(
+                        lion_core::error::CapabilityError::PermissionDenied(format!(
+                            "Plugin {} not in allowed list",
+                            plugin_id
+                        )),
                     ))
                 }
             }
-            _ => Err(lion_core::error::CapabilityError::PermissionDenied(
-                "Only plugin calls are allowed".into(),
+            _ => Err(Error::Capability(
+                lion_core::error::CapabilityError::PermissionDenied(
+                    "Only plugin calls are allowed".into(),
+                ),
             )),
         }
     }
@@ -528,8 +532,11 @@ fn test_capability_based_function_calling() {
     ));
 
     // Register agent2 with the concurrency manager
-    (concurrency_manager.as_ref() as &dyn ConcurrencyManager as &TestConcurrencyManager)
-        .register_agent(agent2.clone());
+    let test_cm = concurrency_manager
+        .as_any()
+        .downcast_ref::<TestConcurrencyManager>()
+        .expect("Failed to downcast ConcurrencyManager");
+    test_cm.register_agent(agent2.clone());
 
     // Add capability to agent1 allowing it to call agent2
     agent1.add_capability(Box::new(PluginCallCapability::new(vec![

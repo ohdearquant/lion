@@ -295,7 +295,7 @@ pub trait IsolationBackend: Send + Sync {
 }
 
 /// Type of resource limit.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ResourceLimitType {
     /// Maximum memory usage in bytes.
     Memory,

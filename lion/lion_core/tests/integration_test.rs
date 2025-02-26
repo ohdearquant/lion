@@ -9,11 +9,11 @@ use std::path::PathBuf;
 use std::str::FromStr;
 
 use lion_core::error::{CapabilityError, Error, Result};
-use lion_core::id::{CapabilityId, NodeId, PluginId, WorkflowId};
+use lion_core::id::{CapabilityId, NodeId, PluginId};
 use lion_core::traits::{capability::Constraint, Capability};
 use lion_core::types::{
-    AccessRequest, ErrorPolicy, ExecutionOptions, MemoryRegion, MemoryRegionType, NodeType,
-    PluginConfig, PluginMetadata, PluginState, ResourceUsage, Workflow, WorkflowNode,
+    AccessRequest, ErrorPolicy, ExecutionOptions, MemoryRegion, MemoryRegionType, PluginConfig,
+    PluginMetadata, PluginState, Workflow, WorkflowNode,
 };
 use lion_core::utils::{config::Config, ConfigValue, LogLevel, Version};
 use lion_core::{check_capability, log_event, with_capability};
@@ -351,7 +351,7 @@ fn test_workflow_integration() {
     let node3_id = node3.id;
 
     // Make node2 depend on node3, creating a cycle: node2 -> node3 -> node2
-    let mut node2 = invalid_workflow.get_node_mut(&node2_id).unwrap();
+    let node2 = invalid_workflow.get_node_mut(&node2_id).unwrap();
     node2.add_dependency(node3_id);
 
     // Validate should fail due to the cycle
@@ -551,7 +551,7 @@ fn test_complete_scenario() {
         .set("plugins.data_processor.timeout_ms", 5000)
         .unwrap();
 
-    let plugin_config = PluginConfig {
+    let _plugin_config = PluginConfig {
         max_memory_bytes: Some(
             config
                 .get_as::<i64>("plugins.data_processor.max_memory_mb")
@@ -567,7 +567,7 @@ fn test_complete_scenario() {
 
     // 2. Create plugin metadata
     let plugin_id = PluginId::new();
-    let metadata = PluginMetadata {
+    let _metadata = PluginMetadata {
         id: plugin_id,
         name: "Data Processor".to_string(),
         version: "1.0.0".to_string(),
@@ -609,7 +609,7 @@ fn test_complete_scenario() {
     assert!(workflow.validate().is_ok());
 
     // 6. Create execution options for the workflow
-    let execution_options = ExecutionOptions {
+    let _execution_options = ExecutionOptions {
         input: Some(serde_json::json!({
             "file_path": "/data/sales.csv",
             "columns": ["date", "sales", "region"],

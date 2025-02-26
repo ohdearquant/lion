@@ -25,6 +25,7 @@
 //! ```
 
 use serde::{Deserialize, Serialize};
+use std::cmp::{Ord, PartialOrd};
 use std::fmt;
 use std::str::FromStr;
 use uuid::Uuid;
@@ -35,7 +36,7 @@ use uuid::Uuid;
 /// entity types using the phantom type parameter `T`. This ensures that
 /// identifiers for different entity types cannot be mixed up, even though
 /// they share the same underlying UUID structure.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, PartialOrd, Ord)]
 pub struct Id<T> {
     uuid: Uuid,
     #[serde(skip)]
@@ -135,6 +136,11 @@ impl<T> Id<T> {
     /// ```
     pub fn is_nil(&self) -> bool {
         self.uuid == Uuid::nil()
+    }
+
+    /// Convert the ID to bytes for serialization
+    pub fn to_bytes(&self) -> Vec<u8> {
+        self.uuid.as_bytes().to_vec()
     }
 }
 

@@ -38,12 +38,9 @@ impl TestConcurrencyManager {
 }
 
 impl ConcurrencyManager for TestConcurrencyManager {
-    fn schedule_task(
-        &self,
-        task: Box<dyn FnOnce() + Send + 'static>,
-    ) -> Result<(), ConcurrencyError> {
+    fn schedule_task(&self, task: Box<dyn FnOnce() + Send + 'static>) -> Result<()> {
         if *self.should_fail.lock().unwrap() {
-            return Err(ConcurrencyError::ThreadPoolExhausted);
+            return Err(Error::Concurrency(ConcurrencyError::ThreadPoolExhausted));
         }
 
         // Introduce an artificial delay to test timing
@@ -122,7 +119,7 @@ impl ConcurrencyManager for TestConcurrencyManager {
         plugin_id: &PluginId,
         min_instances: usize,
         max_instances: usize,
-    ) -> Result<(), ConcurrencyError> {
+    ) -> Result<()> {
         let tasks = self.tasks_executed.clone();
         let plugin_id_str = plugin_id.to_string();
 
@@ -134,15 +131,15 @@ impl ConcurrencyManager for TestConcurrencyManager {
         tasks.lock().unwrap().push(call);
 
         if *self.should_fail.lock().unwrap() {
-            return Err(ConcurrencyError::PoolLimitReached(
+            return Err(Error::Concurrency(ConcurrencyError::PoolLimitReached(
                 "Test failure".to_string(),
-            ));
+            )));
         }
 
         Ok(())
     }
 
-    fn send_message(&self, plugin_id: &PluginId, message: Vec<u8>) -> Result<(), ConcurrencyError> {
+    fn send_message(&self, plugin_id: &PluginId, message: Vec<u8>) -> Result<()> {
         let tasks = self.tasks_executed.clone();
         let plugin_id_str = plugin_id.to_string();
 
@@ -151,9 +148,9 @@ impl ConcurrencyManager for TestConcurrencyManager {
         tasks.lock().unwrap().push(msg);
 
         if *self.should_fail.lock().unwrap() {
-            return Err(ConcurrencyError::MessageDeliveryFailed(
+            return Err(Error::Concurrency(ConcurrencyError::MessageDeliveryFailed(
                 "Test failure".to_string(),
-            ));
+            )));
         }
 
         Ok(())
@@ -204,7 +201,7 @@ fn test_schedule_task_failure() {
     // Verify that the task failed to schedule
     assert!(result.is_err());
     match result {
-        Err(ConcurrencyError::ThreadPoolExhausted) => {}
+        Err(Error::Concurrency(ConcurrencyError::ThreadPoolExhausted)) => {}
         _ => panic!("Expected ThreadPoolExhausted error"),
     }
 
@@ -294,7 +291,7 @@ fn test_configure_concurrency() {
     // Verify that configuration failed
     assert!(result.is_err());
     match result {
-        Err(ConcurrencyError::PoolLimitReached(_)) => {}
+        Err(Error::Concurrency(ConcurrencyError::PoolLimitReached(_))) => {}
         _ => panic!("Expected PoolLimitReached error"),
     }
 }
@@ -324,7 +321,7 @@ fn test_send_message() {
     // Verify that message sending failed
     assert!(result.is_err());
     match result {
-        Err(ConcurrencyError::MessageDeliveryFailed(_)) => {}
+        Err(Error::Concurrency(ConcurrencyError::MessageDeliveryFailed(_))) => {}
         _ => panic!("Expected MessageDeliveryFailed error"),
     }
 }
