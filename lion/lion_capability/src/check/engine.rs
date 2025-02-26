@@ -75,7 +75,6 @@ impl CapabilityChecker {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::collections::HashSet;
     use uuid::Uuid;
 
     use crate::model::file::{FileCapability, FileOperations};

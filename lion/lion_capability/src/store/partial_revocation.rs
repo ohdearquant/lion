@@ -74,7 +74,6 @@ pub fn apply_partial_revocation(
 mod tests {
     use super::*;
     use crate::model::file::{FileCapability, FileOperations};
-    use std::collections::HashSet;
 
     #[test]
     fn test_partial_revocation_file() {

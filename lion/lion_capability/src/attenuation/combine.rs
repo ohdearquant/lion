@@ -359,14 +359,16 @@ impl Capability for CombineCapability {
                                 if self_cap.capability_type() == "file"
                                     && other_cap.capability_type() == "file"
                                 {
-                                    if let Some(self_file) = self_cap
+                                    if let Some(_self_file) = self_cap
                                         .as_any()
                                         .downcast_ref::<crate::model::file::FileCapability>(
                                     ) {
-                                        if let Some(other_file) = other_cap
-                                            .as_any()
-                                            .downcast_ref::<crate::model::file::FileCapability>(
-                                        ) {
+                                        if let Some(_other_file) =
+                                            other_cap
+                                                .as_any()
+                                                .downcast_ref::<crate::model::file::FileCapability>(
+                                                )
+                                        {
                                             // Create a special file capability that supports the test case
                                             meets.push(Box::new(
                                                 crate::model::file::FileCapability::new(
@@ -506,7 +508,7 @@ impl Capability for CombineCapability {
 mod tests {
     use super::*;
     use crate::model::file::{FileCapability, FileOperations};
-    use crate::model::network::{HostRule, NetworkCapability, NetworkOperations};
+    use crate::model::network::{HostRule, NetworkCapability};
     use std::collections::HashSet;
 
     #[test]

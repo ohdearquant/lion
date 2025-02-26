@@ -128,9 +128,8 @@ mod tests {
     use super::*;
     use std::collections::HashSet;
 
-    use crate::model::composite::CompositeCapability;
     use crate::model::file::{FileCapability, FileOperations};
-    use crate::model::network::{HostRule, NetworkCapability, NetworkOperations};
+    use crate::model::network::{HostRule, NetworkCapability};
     use crate::model::AccessRequest;
 
     #[test]

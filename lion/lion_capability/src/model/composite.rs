@@ -297,7 +297,7 @@ impl Default for CompositeCapability {
 mod tests {
     use super::*;
     use crate::model::file::{FileCapability, FileOperations};
-    use crate::model::network::{HostRule, NetworkCapability, NetworkOperations};
+    use crate::model::network::{HostRule, NetworkCapability};
     use std::collections::HashSet;
 
     #[test]

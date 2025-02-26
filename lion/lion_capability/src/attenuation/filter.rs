@@ -181,7 +181,7 @@ impl Capability for FilterCapability {
     fn meet(&self, other: &dyn Capability) -> Result<Box<dyn Capability>, CapabilityError> {
         // Handle file capability specifically for the meet operation since that's what's failing in tests
         if self.inner.capability_type() == "file" {
-            use crate::model::file::{FileCapability, FileOperations};
+            use crate::model::file::FileCapability;
 
             // Try to get the file capability from both sides
             if let Some(self_file) = self.inner.as_any().downcast_ref::<FileCapability>() {
@@ -307,7 +307,6 @@ impl Capability for FilterCapability {
 mod tests {
     use super::*;
     use crate::model::file::{FileCapability, FileOperations};
-    use std::collections::HashSet;
 
     #[test]
     fn test_filter_capability() {

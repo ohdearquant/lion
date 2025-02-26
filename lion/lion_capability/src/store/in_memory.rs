@@ -265,6 +265,7 @@ mod tests {
         PluginId::from_uuid(uuid)
     }
 
+    #[allow(dead_code)]
     fn test_capability_id(value: u64) -> CapabilityId {
         // Create a deterministic UUID from the value
         let bytes = value.to_le_bytes();

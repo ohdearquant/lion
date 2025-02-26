@@ -228,7 +228,6 @@ impl Capability for ProxyCapability {
 mod tests {
     use super::*;
     use crate::model::file::{FileCapability, FileOperations};
-    use std::collections::HashSet;
 
     #[test]
     fn test_proxy_capability() {

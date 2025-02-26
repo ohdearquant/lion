@@ -21,18 +21,20 @@
 //! use std::collections::HashSet;
 //! use std::sync::Arc;
 //!
-//! use lion_capability::model::{FileCapability, FileOperations, AccessRequest};
+//! use lion_capability::model::{FileCapability, AccessRequest};
+//! use lion_capability::model::file::FileOperations;
 //! use lion_capability::store::InMemoryCapabilityStore;
+//! use lion_capability::store::CapabilityStore;
 //! use lion_capability::check::CapabilityChecker;
 //! use lion_core::id::PluginId;
 //!
 //! // Create a capability store
 //! let store = Arc::new(InMemoryCapabilityStore::new());
-//! let plugin_id = PluginId::from_u64(1);
+//! let plugin_id = PluginId::new();
 //!
 //! // Create a file capability
 //! let paths = ["/tmp/*".to_string()].into_iter().collect();
-//! let file_cap = FileCapability::new(paths, FileOperations::READ);
+//! let file_cap = FileCapability::new(paths, FileOperations::READ.into());
 //!
 //! // Add the capability to the store
 //! let capability_id = store.add_capability(plugin_id, Box::new(file_cap)).unwrap();

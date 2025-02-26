@@ -114,6 +114,7 @@ impl MemoryCapability {
     }
 
     /// Finds the range containing the given address, if any
+    #[allow(dead_code)]
     fn find_range_containing(&self, address: usize) -> Option<&MemoryRange> {
         // Find the last range that starts at or before the address
         let mut candidate = None;
