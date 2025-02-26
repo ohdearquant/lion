@@ -1,187 +1,168 @@
-//! Partial capability revocation.
-//! 
-//! This module provides functionality for partially revoking capabilities.
+use std::any::Any;
 
-use lion_core::error::{Result, CapabilityError};
-use lion_core::id::{PluginId, CapabilityId};
-use lion_core::types::AccessRequest;
+use crate::model::{AccessRequest, Capability, CapabilityError};
 
-use crate::model::Capability;
-use crate::store::CapabilityStore;
+/// Apply partial revocation to a capability, removing specific access
+///
+/// This function takes a capability and an access request, and returns a new
+/// capability that no longer permits that specific access request, but still
+/// permits all other access that the original capability permitted.
+///
+/// The implementation uses the capability's `split` and `permits` methods to
+/// identify and remove only the parts that would permit the specified access.
+pub fn apply_partial_revocation(
+    capability: Box<dyn Capability>,
+    request: &AccessRequest,
+) -> Result<Box<dyn Capability>, CapabilityError> {
+    // Check if this capability even permits the request
+    if !capability.permits(request).is_ok() {
+        // Already doesn't permit this request, so no need to revoke
+        return Ok(capability);
+    }
 
-/// Trait for partial capability revocation.
-pub trait PartialRevocation {
-    /// Partially revoke a capability.
-    ///
-    /// # Arguments
-    ///
-    /// * `plugin_id` - The ID of the plugin that owns the capability.
-    /// * `capability_id` - The ID of the capability to revoke.
-    /// * `revocation` - The access request that should no longer be permitted.
-    ///
-    /// # Returns
-    ///
-    /// * `Ok(())` - If the capability was successfully revoked.
-    /// * `Err` - If the capability could not be revoked.
-    fn partial_revoke(
-        &self,
-        plugin_id: &PluginId,
-        capability_id: &CapabilityId,
-        revocation: &AccessRequest,
-    ) -> Result<()>;
-}
+    // Strategy 1: If the capability supports splitting, split it and
+    // recombine all parts that don't permit the request
+    let parts = capability.split();
 
-impl<T: CapabilityStore> PartialRevocation for T {
-    fn partial_revoke(
-        &self,
-        plugin_id: &PluginId,
-        capability_id: &CapabilityId,
-        revocation: &AccessRequest,
-    ) -> Result<()> {
-        // Get the original capability
-        let old_capability = self.get_capability(plugin_id, capability_id)?;
-        
-        // Check if the capability permits the revocation request
-        if old_capability.permits(revocation).is_err() {
-            // The capability already doesn't permit this request
-            return Ok(());
+    if parts.len() > 1 {
+        // Filter out parts that permit the request
+        let remaining_parts: Vec<Box<dyn Capability>> = parts
+            .into_iter()
+            .filter(|part| !part.permits(request).is_ok())
+            .collect();
+
+        if remaining_parts.is_empty() {
+            return Err(CapabilityError::InvalidState(
+                "Partial revocation would remove all permissions".to_string(),
+            ));
         }
-        
-        // Split the capability into constituent parts
-        let mut parts = old_capability.split();
-        
-        // Filter out parts that permit the revocation request
-        parts.retain(|part| part.permits(revocation).is_err());
-        
-        // If no parts remain, the capability would be completely revoked
-        if parts.is_empty() {
-            return Err(CapabilityError::RevocationFailed(
-                "Cannot completely revoke a capability with partial revocation".into()
-            ).into());
+
+        // Join all remaining parts
+        let mut result = remaining_parts[0].clone_box();
+
+        for part in &remaining_parts[1..] {
+            result = result.join(part.as_ref())?;
         }
-        
-        // Create a new composite capability from the remaining parts
-        let mut new_capability = parts.remove(0);
-        for part in parts {
-            new_capability = new_capability.join(&*part)?;
+
+        return Ok(result);
+    }
+
+    // Strategy 2: For capabilities that don't split well, try to apply constraints
+    // derived from the request to further constrain the capability
+    match request {
+        AccessRequest::File {
+            path,
+            read,
+            write,
+            execute,
+        } => {
+            // For file capabilities, we can apply constraints to remove specific paths
+            // or operations without removing everything
+
+            use crate::model::Constraint;
+
+            // If it's a specific path request, create a constraint that excludes just that path
+            // by permitting only operations other than the requested ones
+            let constraints = vec![Constraint::FileOperation {
+                read: *read,
+                write: *write,
+                execute: *execute,
+            }];
+
+            // Apply the constraints to get a reduced capability
+            let reduced = capability.constrain(&constraints)?;
+
+            // Verify that the reduced capability no longer permits the request
+            if reduced.permits(request).is_ok() {
+                return Err(CapabilityError::InvalidState(
+                    "Failed to revoke specific access through constraints".to_string(),
+                ));
+            }
+
+            Ok(reduced)
         }
-        
-        // Replace the old capability with the new one
-        self.replace_capability(plugin_id, capability_id, new_capability)
+        // Handle other request types similarly
+        // For now we'll just return an error for other types
+        _ => Err(CapabilityError::UnsupportedOperation(
+            "Partial revocation not implemented for this request type".to_string(),
+        )),
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::file::FileCapability;
-    use crate::store::InMemoryCapabilityStore;
-    use std::path::PathBuf;
-    
+    use crate::model::file::{FileCapability, FileOperations};
+    use std::collections::HashSet;
+
     #[test]
-    fn test_partial_revoke() {
-        let store = InMemoryCapabilityStore::new();
-        let plugin_id = PluginId::new();
-        let capability = Box::new(FileCapability::new(
-            vec![PathBuf::from("/tmp"), PathBuf::from("/var")],
-            true,
-            true,
-            false,
-        ));
-        
-        // Add the capability
-        let capability_id = store.add_capability(plugin_id.clone(), capability).unwrap();
-        
-        // Revoke write access to /tmp
-        let revocation = AccessRequest::File {
-            path: PathBuf::from("/tmp/file"),
-            read: false,
-            write: true,
-            execute: false,
-        };
-        store.partial_revoke(&plugin_id, &capability_id, &revocation).unwrap();
-        
-        // Get the capability
-        let retrieved = store.get_capability(&plugin_id, &capability_id).unwrap();
-        
-        // Check that it still permits read access to /tmp
+    fn test_partial_revocation_file() {
+        // Create a file capability with multiple paths
+        let paths = ["/tmp/file1.txt".to_string(), "/tmp/file2.txt".to_string()]
+            .into_iter()
+            .collect();
+
+        let file_cap = FileCapability::new(paths, FileOperations::READ | FileOperations::WRITE);
+
+        // Create a request for a specific access
         let request = AccessRequest::File {
-            path: PathBuf::from("/tmp/file"),
+            path: "/tmp/file1.txt".to_string(),
             read: true,
             write: false,
             execute: false,
         };
-        assert!(retrieved.permits(&request).is_ok());
-        
-        // Check that it no longer permits write access to /tmp
-        let request = AccessRequest::File {
-            path: PathBuf::from("/tmp/file"),
-            read: false,
-            write: true,
-            execute: false,
-        };
-        assert!(retrieved.permits(&request).is_err());
-        
-        // Check that it still permits read and write access to /var
-        let request = AccessRequest::File {
-            path: PathBuf::from("/var/file"),
-            read: true,
-            write: true,
-            execute: false,
-        };
-        assert!(retrieved.permits(&request).is_ok());
+
+        // Apply partial revocation
+        let reduced = apply_partial_revocation(Box::new(file_cap), &request).unwrap();
+
+        // The reduced capability should no longer permit the request
+        assert!(reduced.permits(&request).is_err());
+
+        // But it should still permit other access
+        assert!(reduced
+            .permits(&AccessRequest::File {
+                path: "/tmp/file2.txt".to_string(),
+                read: true,
+                write: false,
+                execute: false,
+            })
+            .is_ok());
+
+        assert!(reduced
+            .permits(&AccessRequest::File {
+                path: "/tmp/file1.txt".to_string(),
+                read: false,
+                write: true,
+                execute: false,
+            })
+            .is_ok());
     }
-    
+
     #[test]
-    fn test_partial_revoke_already_revoked() {
-        let store = InMemoryCapabilityStore::new();
-        let plugin_id = PluginId::new();
-        let capability = Box::new(FileCapability::read_only(vec![PathBuf::from("/tmp")]));
-        
-        // Add the capability
-        let capability_id = store.add_capability(plugin_id.clone(), capability).unwrap();
-        
-        // Try to revoke write access to /tmp (which is already not permitted)
-        let revocation = AccessRequest::File {
-            path: PathBuf::from("/tmp/file"),
+    fn test_partial_revocation_no_change() {
+        // Create a file capability
+        let paths = ["/tmp/file.txt".to_string()].into_iter().collect();
+        let file_cap = FileCapability::new(paths, FileOperations::READ);
+
+        // Create a request that the capability does not permit
+        let request = AccessRequest::File {
+            path: "/tmp/file.txt".to_string(),
             read: false,
             write: true,
             execute: false,
         };
-        store.partial_revoke(&plugin_id, &capability_id, &revocation).unwrap();
-        
-        // Get the capability
-        let retrieved = store.get_capability(&plugin_id, &capability_id).unwrap();
-        
-        // Check that it still permits read access to /tmp
-        let request = AccessRequest::File {
-            path: PathBuf::from("/tmp/file"),
-            read: true,
-            write: false,
-            execute: false,
-        };
-        assert!(retrieved.permits(&request).is_ok());
-    }
-    
-    #[test]
-    fn test_partial_revoke_complete_revocation() {
-        let store = InMemoryCapabilityStore::new();
-        let plugin_id = PluginId::new();
-        let capability = Box::new(FileCapability::read_only(vec![PathBuf::from("/tmp")]));
-        
-        // Add the capability
-        let capability_id = store.add_capability(plugin_id.clone(), capability).unwrap();
-        
-        // Try to revoke read access to /tmp (which would completely revoke the capability)
-        let revocation = AccessRequest::File {
-            path: PathBuf::from("/tmp/file"),
-            read: true,
-            write: false,
-            execute: false,
-        };
-        
-        // This should fail
-        let result = store.partial_revoke(&plugin_id, &capability_id, &revocation);
-        assert!(result.is_err());
+
+        // Apply partial revocation
+        let reduced = apply_partial_revocation(Box::new(file_cap), &request).unwrap();
+
+        // The reduced capability should be unchanged
+        assert!(reduced
+            .permits(&AccessRequest::File {
+                path: "/tmp/file.txt".to_string(),
+                read: true,
+                write: false,
+                execute: false,
+            })
+            .is_ok());
     }
 }

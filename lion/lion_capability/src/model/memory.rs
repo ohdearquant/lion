@@ -1,116 +1,187 @@
-//! Memory capability model.
-//! 
-//! This module defines capabilities for memory access.
+use bitflags::bitflags;
+use std::any::Any;
+use std::cmp::{max, min};
+use std::collections::BTreeMap;
 
-use std::collections::HashSet;
-use lion_core::error::{Result, CapabilityError};
-use lion_core::types::AccessRequest;
-use lion_core::id::RegionId;
+use super::capability::{AccessRequest, Capability, CapabilityError, Constraint};
 
-use super::capability::{Capability, Constraint};
+bitflags! {
+    /// Represents memory operation permissions as a bit field
+    pub struct MemoryOperations: u8 {
+        const READ = 0b00000001;
+        const WRITE = 0b00000010;
+    }
+}
 
-/// A capability that grants permission to access memory regions.
+/// A range of memory addresses
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct MemoryRange {
+    /// Base address of the range
+    pub base: usize,
+    /// Size of the range in bytes
+    pub size: usize,
+    /// Operations permitted on this range
+    pub operations: MemoryOperations,
+}
+
+impl MemoryRange {
+    /// Creates a new memory range
+    pub fn new(base: usize, size: usize, operations: MemoryOperations) -> Self {
+        Self {
+            base,
+            size,
+            operations,
+        }
+    }
+
+    /// The end address of this range (exclusive)
+    pub fn end(&self) -> usize {
+        self.base + self.size
+    }
+
+    /// Returns true if this range contains the given address
+    pub fn contains(&self, address: usize) -> bool {
+        address >= self.base && address < self.end()
+    }
+
+    /// Returns true if this range fully contains another range
+    pub fn contains_range(&self, other: &MemoryRange) -> bool {
+        self.base <= other.base && self.end() >= other.end()
+    }
+
+    /// Returns true if this range overlaps with another range
+    pub fn overlaps(&self, other: &MemoryRange) -> bool {
+        self.base < other.end() && other.base < self.end()
+    }
+
+    /// Returns the intersection of this range with another
+    pub fn intersect(&self, other: &MemoryRange) -> Option<MemoryRange> {
+        if !self.overlaps(other) {
+            return None;
+        }
+
+        let base = max(self.base, other.base);
+        let end = min(self.end(), other.end());
+        let size = end - base;
+
+        // Combine operations (intersection)
+        let operations = self.operations & other.operations;
+
+        if operations.is_empty() {
+            return None;
+        }
+
+        Some(MemoryRange::new(base, size, operations))
+    }
+
+    /// Returns true if this range has a subset of the permissions of another range
+    pub fn is_permission_subset_of(&self, other: &MemoryRange) -> bool {
+        (self.operations & other.operations).bits() == self.operations.bits()
+    }
+}
+
+/// Represents a capability to access memory regions
 #[derive(Debug, Clone)]
 pub struct MemoryCapability {
-    /// The regions that are allowed.
-    regions: HashSet<String>,
-    
-    /// Whether read operations are allowed.
-    read: bool,
-    
-    /// Whether write operations are allowed.
-    write: bool,
+    /// Map of memory ranges sorted by base address
+    ranges: BTreeMap<usize, MemoryRange>,
 }
 
 impl MemoryCapability {
-    /// Create a new memory capability.
-    ///
-    /// # Arguments
-    ///
-    /// * `regions` - The regions that are allowed.
-    /// * `read` - Whether read operations are allowed.
-    /// * `write` - Whether write operations are allowed.
-    ///
-    /// # Returns
-    ///
-    /// A new memory capability.
-    pub fn new(
-        regions: impl IntoIterator<Item = String>,
+    /// Creates a new memory capability with the given ranges
+    pub fn new(ranges: Vec<MemoryRange>) -> Self {
+        let mut map = BTreeMap::new();
+        for range in ranges {
+            map.insert(range.base, range);
+        }
+        Self { ranges: map }
+    }
+
+    /// Adds a range to this capability
+    pub fn add_range(&mut self, range: MemoryRange) {
+        self.ranges.insert(range.base, range);
+    }
+
+    /// Gets the ranges in this capability
+    pub fn ranges(&self) -> impl Iterator<Item = &MemoryRange> {
+        self.ranges.values()
+    }
+
+    /// Finds the range containing the given address, if any
+    fn find_range_containing(&self, address: usize) -> Option<&MemoryRange> {
+        // Find the last range that starts at or before the address
+        let mut candidate = None;
+
+        // Find ranges where base <= address
+        for (_, range) in self.ranges.range(..=address) {
+            if range.contains(address) {
+                candidate = Some(range);
+            }
+        }
+
+        candidate
+    }
+
+    /// Finds all ranges that overlap with the given range
+    fn find_overlapping_ranges(&self, start: usize, end: usize) -> Vec<&MemoryRange> {
+        let mut result = Vec::new();
+
+        // Check ranges where base < end
+        for (_, range) in self.ranges.range(..end) {
+            if range.base < end && range.end() > start {
+                result.push(range);
+            }
+        }
+
+        result
+    }
+
+    /// Applies a memory range constraint to this capability
+    fn apply_range_constraint(
+        &self,
+        base: usize,
+        size: usize,
         read: bool,
         write: bool,
-    ) -> Self {
-        Self {
-            regions: regions.into_iter().collect(),
-            read,
-            write,
+    ) -> Result<Self, CapabilityError> {
+        let request_range = MemoryRange::new(base, size, {
+            let mut ops = MemoryOperations::empty();
+            if read {
+                ops |= MemoryOperations::READ;
+            }
+            if write {
+                ops |= MemoryOperations::WRITE;
+            }
+            ops
+        });
+
+        // Find overlapping ranges
+        let overlapping = self.find_overlapping_ranges(base, base + size);
+
+        if overlapping.is_empty() {
+            return Err(CapabilityError::InvalidConstraint(format!(
+                "Memory range {}:{} is not covered by this capability",
+                base, size
+            )));
         }
-    }
-    
-    /// Create a new read-only memory capability.
-    ///
-    /// # Arguments
-    ///
-    /// * `regions` - The regions that are allowed.
-    ///
-    /// # Returns
-    ///
-    /// A new read-only memory capability.
-    pub fn read_only(regions: impl IntoIterator<Item = String>) -> Self {
-        Self::new(regions, true, false)
-    }
-    
-    /// Create a new write-only memory capability.
-    ///
-    /// # Arguments
-    ///
-    /// * `regions` - The regions that are allowed.
-    ///
-    /// # Returns
-    ///
-    /// A new write-only memory capability.
-    pub fn write_only(regions: impl IntoIterator<Item = String>) -> Self {
-        Self::new(regions, false, true)
-    }
-    
-    /// Create a new read-write memory capability.
-    ///
-    /// # Arguments
-    ///
-    /// * `regions` - The regions that are allowed.
-    ///
-    /// # Returns
-    ///
-    /// A new read-write memory capability.
-    pub fn read_write(regions: impl IntoIterator<Item = String>) -> Self {
-        Self::new(regions, true, true)
-    }
-    
-    /// Get the allowed regions.
-    pub fn regions(&self) -> &HashSet<String> {
-        &self.regions
-    }
-    
-    /// Check if read operations are allowed.
-    pub fn can_read(&self) -> bool {
-        self.read
-    }
-    
-    /// Check if write operations are allowed.
-    pub fn can_write(&self) -> bool {
-        self.write
-    }
-    
-    /// Check if a region is allowed.
-    ///
-    /// # Arguments
-    ///
-    /// * `region_id` - The region to check.
-    ///
-    /// # Returns
-    ///
-    /// `true` if the region is allowed, `false` otherwise.
-    fn is_region_allowed(&self, region_id: &str) -> bool {
-        self.regions.contains(region_id)
+
+        // Create a new capability with the intersections
+        let mut new_ranges = Vec::new();
+
+        for range in overlapping {
+            if let Some(intersection) = range.intersect(&request_range) {
+                new_ranges.push(intersection);
+            }
+        }
+
+        if new_ranges.is_empty() {
+            return Err(CapabilityError::InvalidConstraint(format!(
+                "No valid permissions for memory range {}:{}",
+                base, size
+            )));
+        }
+
+        Ok(Self::new(new_ranges))
     }
 }
 
@@ -118,348 +189,464 @@ impl Capability for MemoryCapability {
     fn capability_type(&self) -> &str {
         "memory"
     }
-    
+
     fn permits(&self, request: &AccessRequest) -> Result<(), CapabilityError> {
         match request {
-            AccessRequest::Memory { region_id, read, write } => {
-                // Check if the region is allowed
-                if !self.is_region_allowed(region_id) {
-                    return Err(CapabilityError::PermissionDenied(
-                        format!("Access to memory region {} is not allowed", region_id)
-                    ).into());
+            AccessRequest::Memory {
+                address,
+                size,
+                read,
+                write,
+            } => {
+                // Quick check for zero-size requests
+                if *size == 0 {
+                    return Ok(());
                 }
-                
-                // Check if the operations are allowed
-                if *read && !self.read {
-                    return Err(CapabilityError::PermissionDenied(
-                        "Read access to memory is not allowed".into()
-                    ).into());
+
+                let end_address = address + size;
+
+                // Find all ranges that overlap with the request
+                let overlapping = self.find_overlapping_ranges(*address, end_address);
+
+                if overlapping.is_empty() {
+                    return Err(CapabilityError::AccessDenied(format!(
+                        "Memory range {}:{} is not covered by this capability",
+                        address, size
+                    )));
                 }
-                
-                if *write && !self.write {
-                    return Err(CapabilityError::PermissionDenied(
-                        "Write access to memory is not allowed".into()
-                    ).into());
+
+                // Check if the ranges collectively cover the entire request range
+                let mut covered_end = *address;
+
+                // Sort by base address
+                let mut sorted_ranges = overlapping;
+                sorted_ranges.sort_by_key(|r| r.base);
+
+                for range in sorted_ranges {
+                    // There's a gap in coverage
+                    if range.base > covered_end {
+                        return Err(CapabilityError::AccessDenied(format!(
+                            "Memory range {}:{} has gaps in coverage",
+                            address, size
+                        )));
+                    }
+
+                    // Check operations
+                    let mut required_ops = MemoryOperations::empty();
+                    if *read {
+                        required_ops |= MemoryOperations::READ;
+                    }
+                    if *write {
+                        required_ops |= MemoryOperations::WRITE;
+                    }
+
+                    if !range.operations.contains(required_ops) {
+                        return Err(CapabilityError::AccessDenied(format!(
+                            "Operation not permitted on memory range {}:{}",
+                            address, size
+                        )));
+                    }
+
+                    // Update covered range
+                    covered_end = std::cmp::max(covered_end, range.end());
+
+                    // If we've covered the entire request, we're done
+                    if covered_end >= end_address {
+                        return Ok(());
+                    }
                 }
-                
-                Ok(())
-            },
-            _ => Err(CapabilityError::PermissionDenied(
-                "Only memory access is allowed".into()
-            ).into()),
+
+                // If we get here, there's a gap at the end
+                Err(CapabilityError::AccessDenied(format!(
+                    "Memory range {}:{} not fully covered by this capability",
+                    address, size
+                )))
+            }
+            _ => Err(CapabilityError::IncompatibleTypes(format!(
+                "Expected Memory request, got {:?}",
+                request
+            ))),
         }
     }
-    
-    fn constrain(&self, constraints: &[Constraint]) -> Result<Box<dyn Capability>, CapabilityError> {
-        let mut regions = self.regions.clone();
-        let mut read = self.read;
-        let mut write = self.write;
-        
+
+    fn constrain(
+        &self,
+        constraints: &[Constraint],
+    ) -> Result<Box<dyn Capability>, CapabilityError> {
+        let mut result = self.clone();
+
         for constraint in constraints {
             match constraint {
-                Constraint::MemoryRegion { region_id, read: r, write: w } => {
-                    // Check if the region is already allowed
-                    if !regions.contains(region_id) {
-                        regions.insert(region_id.clone());
-                    }
-                    
-                    // Can only remove permissions, not add them
-                    read = read && *r;
-                    write = write && *w;
-                    
-                    // If all operations are disallowed, return an error
-                    if !read && !write {
-                        return Err(CapabilityError::ConstraintError(
-                            "No operations allowed after applying constraint".into()
-                        ).into());
-                    }
-                },
-                _ => return Err(CapabilityError::ConstraintError(
-                    format!("Constraint type {} not supported for memory capability", constraint.constraint_type())
-                ).into()),
-            }
-        }
-        
-        Ok(Box::new(Self { regions, read, write }))
-    }
-    
-    fn split(&self) -> Vec<Box<dyn Capability>> {
-        let mut capabilities = Vec::new();
-        
-        // Split by operation
-        if self.read {
-            capabilities.push(Box::new(Self::new(
-                self.regions.iter().cloned(),
-                true,
-                false,
-            )) as Box<dyn Capability>);
-        }
-        
-        if self.write {
-            capabilities.push(Box::new(Self::new(
-                self.regions.iter().cloned(),
-                false,
-                true,
-            )) as Box<dyn Capability>);
-        }
-        
-        // If we didn't split by operation, just clone
-        if capabilities.is_empty() {
-            capabilities.push(Box::new(self.clone()));
-        }
-        
-        capabilities
-    }
-    
-    fn can_join_with(&self, other: &dyn Capability) -> bool {
-        other.capability_type() == "memory"
-    }
-    
-    fn join(&self, other: &dyn Capability) -> Result<Box<dyn Capability>, CapabilityError> {
-        if !self.can_join_with(other) {
-            return Err(CapabilityError::CompositionError(
-                format!("Cannot join memory capability with {}", other.capability_type())
-            ).into());
-        }
-        
-        // Downcast the other capability to a MemoryCapability
-        let other = match other.permits(&AccessRequest::Memory {
-            region_id: "test".to_string(),
-            read: true,
-            write: true,
-        }) {
-            Ok(()) => {
-                // If it permits everything, it's probably a super-capability
-                return Ok(Box::new(Self {
-                    regions: self.regions.union(&self.regions).cloned().collect(),
-                    read: true,
-                    write: true,
-                }));
-            },
-            Err(_) => {
-                // Try to get more precise information
-                let mut regions = self.regions.clone();
-                let mut read = self.read;
-                let mut write = self.write;
-                
-                // Check if it permits read
-                if other.permits(&AccessRequest::Memory {
-                    region_id: "test".to_string(),
-                    read: true,
-                    write: false,
-                }).is_ok() {
-                    read = true;
-                }
-                
-                // Check if it permits write
-                if other.permits(&AccessRequest::Memory {
-                    region_id: "test".to_string(),
-                    read: false,
-                    write: true,
-                }).is_ok() {
-                    write = true;
-                }
-                
-                // TODO: More precise region information
-                
-                Self {
-                    regions,
+                Constraint::MemoryRange {
+                    base,
+                    size,
                     read,
                     write,
+                } => {
+                    result = result.apply_range_constraint(*base, *size, *read, *write)?;
+                }
+                _ => {
+                    return Err(CapabilityError::InvalidConstraint(format!(
+                        "Constraint {:?} not applicable to MemoryCapability",
+                        constraint
+                    )))
                 }
             }
-        };
-        
-        // Join the capabilities
-        let joined = Self {
-            regions: self.regions.union(&other.regions).cloned().collect(),
-            read: self.read || other.read,
-            write: self.write || other.write,
-        };
-        
-        Ok(Box::new(joined))
+        }
+
+        Ok(Box::new(result))
     }
-    
+
+    fn split(&self) -> Vec<Box<dyn Capability>> {
+        let mut result = Vec::new();
+
+        // Split by individual range
+        for range in self.ranges.values() {
+            result.push(Box::new(MemoryCapability::new(vec![*range])) as Box<dyn Capability>);
+        }
+
+        result
+    }
+
+    fn join(&self, other: &dyn Capability) -> Result<Box<dyn Capability>, CapabilityError> {
+        // Try to downcast the other capability to MemoryCapability
+        if let Some(other_mem) = other.as_any().downcast_ref::<MemoryCapability>() {
+            // Create a union of the ranges
+            let mut ranges = Vec::new();
+
+            // Add all ranges from self
+            ranges.extend(self.ranges.values().cloned());
+
+            // Add all ranges from other
+            ranges.extend(other_mem.ranges.values().cloned());
+
+            Ok(Box::new(MemoryCapability::new(ranges)))
+        } else {
+            Err(CapabilityError::IncompatibleTypes(
+                "Cannot join MemoryCapability with a different capability type".to_string(),
+            ))
+        }
+    }
+
+    fn leq(&self, other: &dyn Capability) -> bool {
+        // Try to downcast the other capability to MemoryCapability
+        if let Some(other_mem) = other.as_any().downcast_ref::<MemoryCapability>() {
+            // For each range in self, there must be a range in other that:
+            // 1. Contains it completely
+            // 2. Permits all operations that self permits
+
+            for self_range in self.ranges.values() {
+                let mut is_covered = false;
+
+                for other_range in other_mem.ranges.values() {
+                    if other_range.contains_range(self_range)
+                        && self_range.is_permission_subset_of(other_range)
+                    {
+                        is_covered = true;
+                        break;
+                    }
+                }
+
+                if !is_covered {
+                    return false;
+                }
+            }
+
+            true
+        } else {
+            false
+        }
+    }
+
+    fn meet(&self, other: &dyn Capability) -> Result<Box<dyn Capability>, CapabilityError> {
+        // Try to downcast the other capability to MemoryCapability
+        if let Some(other_mem) = other.as_any().downcast_ref::<MemoryCapability>() {
+            let mut intersections = Vec::new();
+
+            // Find all intersections between ranges
+            for self_range in self.ranges.values() {
+                for other_range in other_mem.ranges.values() {
+                    if let Some(intersection) = self_range.intersect(other_range) {
+                        intersections.push(intersection);
+                    }
+                }
+            }
+
+            if intersections.is_empty() {
+                return Err(CapabilityError::InvalidState(
+                    "No memory ranges in common between the capabilities".to_string(),
+                ));
+            }
+
+            Ok(Box::new(MemoryCapability::new(intersections)))
+        } else {
+            Err(CapabilityError::IncompatibleTypes(
+                "Cannot compute meet with different capability types".to_string(),
+            ))
+        }
+    }
+
     fn clone_box(&self) -> Box<dyn Capability> {
         Box::new(self.clone())
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
+    #[test]
+    fn test_memory_range_operations() {
+        let range1 = MemoryRange::new(1000, 1000, MemoryOperations::READ);
+        let range2 = MemoryRange::new(1500, 1000, MemoryOperations::READ | MemoryOperations::WRITE);
+
+        // Test contains
+        assert!(range1.contains(1000));
+        assert!(range1.contains(1999));
+        assert!(!range1.contains(2000));
+
+        // Test overlaps
+        assert!(range1.overlaps(&range2));
+        assert!(range2.overlaps(&range1));
+
+        // Test intersection
+        let intersection = range1.intersect(&range2).unwrap();
+        assert_eq!(intersection.base, 1500);
+        assert_eq!(intersection.size, 500);
+        assert_eq!(intersection.operations, MemoryOperations::READ);
+
+        // Test non-overlapping ranges
+        let range3 = MemoryRange::new(3000, 1000, MemoryOperations::READ);
+        assert!(!range1.overlaps(&range3));
+        assert!(range1.intersect(&range3).is_none());
+    }
+
     #[test]
     fn test_memory_capability_permits() {
-        let capability = MemoryCapability::new(
-            vec!["region1".to_string(), "region2".to_string()],
-            true,
-            false,
-        );
-        
-        // Test read access to allowed region
-        let request = AccessRequest::Memory {
-            region_id: "region1".to_string(),
-            read: true,
-            write: false,
-        };
-        assert!(capability.permits(&request).is_ok());
-        
-        // Test write access to allowed region (should fail)
-        let request = AccessRequest::Memory {
-            region_id: "region1".to_string(),
-            read: false,
-            write: true,
-        };
-        assert!(capability.permits(&request).is_err());
-        
-        // Test read access to disallowed region
-        let request = AccessRequest::Memory {
-            region_id: "region3".to_string(),
-            read: true,
-            write: false,
-        };
-        assert!(capability.permits(&request).is_err());
-        
-        // Test non-memory access
-        let request = AccessRequest::File {
-            path: std::path::PathBuf::from("/tmp/file"),
-            read: true,
-            write: false,
-            execute: false,
-        };
-        assert!(capability.permits(&request).is_err());
+        // Create a capability with several ranges
+        let ranges = vec![
+            MemoryRange::new(1000, 1000, MemoryOperations::READ),
+            MemoryRange::new(2000, 1000, MemoryOperations::READ | MemoryOperations::WRITE),
+            MemoryRange::new(4000, 1000, MemoryOperations::WRITE),
+        ];
+
+        let cap = MemoryCapability::new(ranges);
+
+        // Test valid read request
+        assert!(cap
+            .permits(&AccessRequest::Memory {
+                address: 1500,
+                size: 100,
+                read: true,
+                write: false,
+            })
+            .is_ok());
+
+        // Test valid write request
+        assert!(cap
+            .permits(&AccessRequest::Memory {
+                address: 2500,
+                size: 100,
+                read: false,
+                write: true,
+            })
+            .is_ok());
+
+        // Test invalid request (gap in coverage)
+        assert!(cap
+            .permits(&AccessRequest::Memory {
+                address: 1500,
+                size: 2000,
+                read: true,
+                write: false,
+            })
+            .is_err());
+
+        // Test invalid request (wrong operation)
+        assert!(cap
+            .permits(&AccessRequest::Memory {
+                address: 1500,
+                size: 100,
+                read: false,
+                write: true,
+            })
+            .is_err());
+
+        // Test invalid request (outside range)
+        assert!(cap
+            .permits(&AccessRequest::Memory {
+                address: 8000,
+                size: 100,
+                read: true,
+                write: false,
+            })
+            .is_err());
     }
-    
+
     #[test]
     fn test_memory_capability_constrain() {
-        let capability = MemoryCapability::new(
-            vec!["region1".to_string(), "region2".to_string()],
-            true,
-            true,
-        );
-        
-        // Constrain to read-only
-        let constraints = vec![Constraint::MemoryRegion {
-            region_id: "region1".to_string(),
-            read: true,
-            write: false,
-        }];
-        let constrained = capability.constrain(&constraints).unwrap();
-        
-        // Should allow read access to region1
-        let request = AccessRequest::Memory {
-            region_id: "region1".to_string(),
-            read: true,
-            write: false,
-        };
-        assert!(constrained.permits(&request).is_ok());
-        
-        // Should deny write access to region1
-        let request = AccessRequest::Memory {
-            region_id: "region1".to_string(),
-            read: false,
-            write: true,
-        };
-        assert!(constrained.permits(&request).is_err());
-        
-        // Should still allow access to region2
-        let request = AccessRequest::Memory {
-            region_id: "region2".to_string(),
-            read: true,
-            write: true,
-        };
-        assert!(constrained.permits(&request).is_ok());
+        // Create a capability with several ranges
+        let ranges = vec![
+            MemoryRange::new(1000, 1000, MemoryOperations::READ | MemoryOperations::WRITE),
+            MemoryRange::new(2000, 1000, MemoryOperations::READ),
+        ];
+
+        let cap = MemoryCapability::new(ranges);
+
+        // Constrain to specific range
+        let constrained = cap
+            .constrain(&[Constraint::MemoryRange {
+                base: 1500,
+                size: 1000,
+                read: true,
+                write: false,
+            }])
+            .unwrap();
+
+        // The constrained capability should have two ranges:
+        // 1. 1500-2000 with READ|WRITE (intersection with first range)
+        // 2. 2000-2500 with READ (intersection with second range)
+
+        assert!(constrained
+            .permits(&AccessRequest::Memory {
+                address: 1600,
+                size: 100,
+                read: true,
+                write: false,
+            })
+            .is_ok());
+
+        assert!(constrained
+            .permits(&AccessRequest::Memory {
+                address: 2100,
+                size: 100,
+                read: true,
+                write: false,
+            })
+            .is_ok());
+
+        // Should deny write to second range
+        assert!(constrained
+            .permits(&AccessRequest::Memory {
+                address: 2100,
+                size: 100,
+                read: false,
+                write: true,
+            })
+            .is_err());
+
+        // Should deny access outside the constrained range
+        assert!(constrained
+            .permits(&AccessRequest::Memory {
+                address: 1000,
+                size: 100,
+                read: true,
+                write: false,
+            })
+            .is_err());
     }
-    
+
     #[test]
-    fn test_memory_capability_split() {
-        let capability = MemoryCapability::new(
-            vec!["region1".to_string()],
-            true,
-            true,
-        );
-        
-        let split = capability.split();
-        assert_eq!(split.len(), 2);
-        
-        // Check that the first capability allows read but not write
-        let request = AccessRequest::Memory {
-            region_id: "region1".to_string(),
-            read: true,
-            write: false,
-        };
-        assert!(split[0].permits(&request).is_ok());
-        
-        let request = AccessRequest::Memory {
-            region_id: "region1".to_string(),
-            read: false,
-            write: true,
-        };
-        assert!(split[0].permits(&request).is_err());
-        
-        // Check that the second capability allows write but not read
-        let request = AccessRequest::Memory {
-            region_id: "region1".to_string(),
-            read: true,
-            write: false,
-        };
-        assert!(split[1].permits(&request).is_err());
-        
-        let request = AccessRequest::Memory {
-            region_id: "region1".to_string(),
-            read: false,
-            write: true,
-        };
-        assert!(split[1].permits(&request).is_ok());
+    fn test_memory_capability_leq() {
+        // Create two capabilities
+        let ranges1 = vec![MemoryRange::new(1000, 500, MemoryOperations::READ)];
+
+        let ranges2 = vec![MemoryRange::new(
+            500,
+            2000,
+            MemoryOperations::READ | MemoryOperations::WRITE,
+        )];
+
+        let cap1 = MemoryCapability::new(ranges1);
+        let cap2 = MemoryCapability::new(ranges2);
+
+        // cap1 <= cap2 because cap1's range is fully contained in cap2's range
+        // and cap1's operations are a subset of cap2's operations
+        assert!(cap1.leq(&cap2));
+
+        // cap2 !<= cap1 because cap2's range is not fully contained in cap1's range
+        assert!(!cap2.leq(&cap1));
+
+        // Create a capability with non-overlapping ranges
+        let ranges3 = vec![MemoryRange::new(3000, 1000, MemoryOperations::READ)];
+
+        let cap3 = MemoryCapability::new(ranges3);
+
+        // Neither capability is <= the other
+        assert!(!cap1.leq(&cap3));
+        assert!(!cap3.leq(&cap1));
     }
-    
+
     #[test]
-    fn test_memory_capability_join() {
-        let capability1 = MemoryCapability::new(
-            vec!["region1".to_string()],
-            true,
-            false,
-        );
-        
-        let capability2 = MemoryCapability::new(
-            vec!["region2".to_string()],
-            false,
-            true,
-        );
-        
-        let joined = capability1.join(&capability2).unwrap();
-        
-        // Should allow read access to region1
-        let request = AccessRequest::Memory {
-            region_id: "region1".to_string(),
-            read: true,
-            write: false,
-        };
-        assert!(joined.permits(&request).is_ok());
-        
-        // Should allow write access to region2
-        let request = AccessRequest::Memory {
-            region_id: "region2".to_string(),
-            read: false,
-            write: true,
-        };
-        assert!(joined.permits(&request).is_ok());
-        
-        // Should deny write access to region1
-        let request = AccessRequest::Memory {
-            region_id: "region1".to_string(),
-            read: false,
-            write: true,
-        };
-        assert!(joined.permits(&request).is_err());
-        
-        // Should deny read access to region2
-        let request = AccessRequest::Memory {
-            region_id: "region2".to_string(),
-            read: true,
-            write: false,
-        };
-        assert!(joined.permits(&request).is_err());
+    fn test_memory_capability_join_and_meet() {
+        // Create two capabilities with overlapping ranges
+        let ranges1 = vec![MemoryRange::new(1000, 1000, MemoryOperations::READ)];
+
+        let ranges2 = vec![MemoryRange::new(
+            1500,
+            1000,
+            MemoryOperations::READ | MemoryOperations::WRITE,
+        )];
+
+        let cap1 = MemoryCapability::new(ranges1);
+        let cap2 = MemoryCapability::new(ranges2);
+
+        // Join
+        let join = cap1.join(&cap2).unwrap();
+
+        // The joined capability should allow both ranges
+        assert!(join
+            .permits(&AccessRequest::Memory {
+                address: 1200,
+                size: 100,
+                read: true,
+                write: false,
+            })
+            .is_ok());
+
+        assert!(join
+            .permits(&AccessRequest::Memory {
+                address: 1800,
+                size: 100,
+                read: true,
+                write: true,
+            })
+            .is_ok());
+
+        // Meet
+        let meet = cap1.meet(&cap2).unwrap();
+
+        // The meet capability should only allow reading in the intersection
+        assert!(meet
+            .permits(&AccessRequest::Memory {
+                address: 1600,
+                size: 100,
+                read: true,
+                write: false,
+            })
+            .is_ok());
+
+        assert!(meet
+            .permits(&AccessRequest::Memory {
+                address: 1600,
+                size: 100,
+                read: false,
+                write: true,
+            })
+            .is_err());
+
+        // Should deny access outside the intersection
+        assert!(meet
+            .permits(&AccessRequest::Memory {
+                address: 1200,
+                size: 100,
+                read: true,
+                write: false,
+            })
+            .is_err());
     }
 }

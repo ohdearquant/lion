@@ -1,246 +1,397 @@
-//! Network capability model.
-//! 
-//! This module defines capabilities for network access.
+use bitflags::bitflags;
+use std::any::Any;
+use std::collections::{HashMap, HashSet};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
-use std::collections::HashSet;
-use std::net::IpAddr;
-use std::str::FromStr;
-use lion_core::error::{Result, CapabilityError};
-use lion_core::types::AccessRequest;
+use super::capability::{AccessRequest, Capability, CapabilityError, Constraint};
 
-use super::capability::{Capability, Constraint};
-
-/// A network host specification.
-#[derive(Debug, Clone, Eq, PartialEq, Hash)]
-pub enum NetworkHost {
-    /// A specific IPv4 or IPv6 address.
-    IpAddress(IpAddr),
-    
-    /// A domain name.
-    Domain(String),
-    
-    /// Any host.
-    Any,
+bitflags! {
+    /// Represents network operation permissions as a bit field
+    pub struct NetworkOperations: u8 {
+        const CONNECT = 0b00000001;
+        const LISTEN = 0b00000010;
+        const BIND = 0b00000100;
+    }
 }
 
-impl NetworkHost {
-    /// Check if this host specification matches the given host.
-    ///
-    /// # Arguments
-    ///
-    /// * `host` - The host to check.
-    ///
-    /// # Returns
-    ///
-    /// `true` if the host matches, `false` otherwise.
+/// Rule for matching network hosts
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum HostRule {
+    /// Any host
+    Any,
+    /// Exact domain name
+    Domain(String),
+    /// Domain with wildcard prefix (e.g., *.example.com)
+    WildcardDomain(String),
+    /// Exact IP address
+    ExactIp(IpAddr),
+    /// IP subnet (IPv4)
+    IpV4Subnet(Ipv4Addr, u8),
+    /// IP subnet (IPv6)
+    IpV6Subnet(Ipv6Addr, u8),
+}
+
+impl HostRule {
+    /// Checks if a host matches this rule
     pub fn matches(&self, host: &str) -> bool {
         match self {
-            Self::IpAddress(ip) => {
-                // Try to parse the host as an IP address
-                if let Ok(host_ip) = IpAddr::from_str(host) {
-                    return host_ip == *ip;
+            HostRule::Any => true,
+            HostRule::Domain(domain) => host == domain,
+            HostRule::WildcardDomain(suffix) => {
+                host.ends_with(suffix)
+                    && host.len() > suffix.len()
+                    && host.as_bytes()[host.len() - suffix.len() - 1] == b'.'
+            }
+            HostRule::ExactIp(ip) => {
+                if let Ok(host_ip) = host.parse::<IpAddr>() {
+                    &host_ip == ip
+                } else {
+                    false
                 }
-                
-                // Maybe it's a domain that resolves to this IP?
-                // For now, we just return false
-                false
-            },
-            Self::Domain(domain) => {
-                // Exact match
-                if host == domain {
-                    return true;
+            }
+            HostRule::IpV4Subnet(subnet_ip, prefix_len) => {
+                if let Ok(host_ip) = host.parse::<IpAddr>() {
+                    if let IpAddr::V4(ipv4) = host_ip {
+                        // Compare masked IPs
+                        let mask = !0u32 << (32 - prefix_len);
+                        let subnet_bits = u32::from(*subnet_ip) & mask;
+                        let ip_bits = u32::from(ipv4) & mask;
+                        subnet_bits == ip_bits
+                    } else {
+                        false
+                    }
+                } else {
+                    false
                 }
-                
-                // Check if host is a subdomain of domain
-                host.ends_with(&format!(".{}", domain))
-            },
-            Self::Any => true,
+            }
+            HostRule::IpV6Subnet(subnet_ip, prefix_len) => {
+                if let Ok(host_ip) = host.parse::<IpAddr>() {
+                    if let IpAddr::V6(ipv6) = host_ip {
+                        // Compare the relevant segments of the address based on prefix length
+                        let segments = ipv6.segments();
+                        let subnet_segments = subnet_ip.segments();
+
+                        let full_segments = (*prefix_len / 16) as usize;
+
+                        // Compare full segments
+                        for i in 0..full_segments {
+                            if segments[i] != subnet_segments[i] {
+                                return false;
+                            }
+                        }
+
+                        // Compare partial segment if needed
+                        let remaining_bits = *prefix_len % 16;
+                        if remaining_bits > 0 && full_segments < 8 {
+                            let mask = !0u16 << (16 - remaining_bits);
+                            let subnet_bits = subnet_segments[full_segments] & mask;
+                            let ip_bits = segments[full_segments] & mask;
+                            if subnet_bits != ip_bits {
+                                return false;
+                            }
+                        }
+
+                        true
+                    } else {
+                        false
+                    }
+                } else {
+                    false
+                }
+            }
+        }
+    }
+
+    /// Returns true if this rule is more specific than or equal to another
+    pub fn is_subset_of(&self, other: &HostRule) -> bool {
+        match (self, other) {
+            // Any host is a superset of all other rules
+            (_, HostRule::Any) => true,
+            (HostRule::Any, _) => false,
+
+            // Exact domain is a subset of the same domain or a wildcard for that domain
+            (HostRule::Domain(d1), HostRule::Domain(d2)) => d1 == d2,
+            (HostRule::Domain(d), HostRule::WildcardDomain(suffix)) => {
+                d.ends_with(suffix) && d.len() > suffix.len()
+            }
+
+            // Wildcard domain is a subset only if the other is the same wildcard or Any
+            (HostRule::WildcardDomain(s1), HostRule::WildcardDomain(s2)) => {
+                s1 == s2 || s1.ends_with(s2)
+            }
+
+            // Exact IP is a subset of itself or a subnet containing it
+            (HostRule::ExactIp(ip1), HostRule::ExactIp(ip2)) => ip1 == ip2,
+            (HostRule::ExactIp(IpAddr::V4(ip)), HostRule::IpV4Subnet(subnet, prefix_len)) => {
+                let mask = !0u32 << (32 - prefix_len);
+                let subnet_bits = u32::from(*subnet) & mask;
+                let ip_bits = u32::from(*ip) & mask;
+                subnet_bits == ip_bits
+            }
+            (HostRule::ExactIp(IpAddr::V6(ip)), HostRule::IpV6Subnet(subnet, prefix_len)) => {
+                // Compare masked IPs for IPv6
+                let segments = ip.segments();
+                let subnet_segments = subnet.segments();
+
+                let full_segments = (*prefix_len / 16) as usize;
+
+                // Compare full segments
+                for i in 0..full_segments {
+                    if segments[i] != subnet_segments[i] {
+                        return false;
+                    }
+                }
+
+                // Compare partial segment if needed
+                let remaining_bits = *prefix_len % 16;
+                if remaining_bits > 0 && full_segments < 8 {
+                    let mask = !0u16 << (16 - remaining_bits);
+                    let subnet_bits = subnet_segments[full_segments] & mask;
+                    let ip_bits = segments[full_segments] & mask;
+                    if subnet_bits != ip_bits {
+                        return false;
+                    }
+                }
+
+                true
+            }
+
+            // IPv4 subnet is a subset of another IPv4 subnet if this subnet is contained in the other
+            (
+                HostRule::IpV4Subnet(subnet1, prefix_len1),
+                HostRule::IpV4Subnet(subnet2, prefix_len2),
+            ) => {
+                // A subnet is a subset if its prefix is longer (more specific) and the network addresses match
+                // when masked with the less specific subnet's mask
+                if prefix_len1 >= *prefix_len2 {
+                    let mask = !0u32 << (32 - prefix_len2);
+                    let subnet1_bits = u32::from(*subnet1) & mask;
+                    let subnet2_bits = u32::from(*subnet2) & mask;
+                    subnet1_bits == subnet2_bits
+                } else {
+                    false
+                }
+            }
+
+            // IPv6 subnet is a subset of another IPv6 subnet
+            (
+                HostRule::IpV6Subnet(subnet1, prefix_len1),
+                HostRule::IpV6Subnet(subnet2, prefix_len2),
+            ) => {
+                // Similar logic to IPv4 but with IPv6 addresses
+                if prefix_len1 >= *prefix_len2 {
+                    let segments1 = subnet1.segments();
+                    let segments2 = subnet2.segments();
+
+                    let full_segments = (*prefix_len2 / 16) as usize;
+
+                    // Compare full segments
+                    for i in 0..full_segments {
+                        if segments1[i] != segments2[i] {
+                            return false;
+                        }
+                    }
+
+                    // Compare partial segment if needed
+                    let remaining_bits = *prefix_len2 % 16;
+                    if remaining_bits > 0 && full_segments < 8 {
+                        let mask = !0u16 << (16 - remaining_bits);
+                        let subnet1_bits = segments1[full_segments] & mask;
+                        let subnet2_bits = segments2[full_segments] & mask;
+                        if subnet1_bits != subnet2_bits {
+                            return false;
+                        }
+                    }
+
+                    true
+                } else {
+                    false
+                }
+            }
+
+            // All other combinations are not subset relationships
+            _ => false,
         }
     }
 }
 
-/// A network port specification.
-#[derive(Debug, Clone, Eq, PartialEq, Hash)]
-pub enum NetworkPort {
-    /// A specific port.
-    Port(u16),
-    
-    /// A range of ports.
-    Range(u16, u16),
-    
-    /// Any port.
-    Any,
-}
-
-impl NetworkPort {
-    /// Check if this port specification matches the given port.
-    ///
-    /// # Arguments
-    ///
-    /// * `port` - The port to check.
-    ///
-    /// # Returns
-    ///
-    /// `true` if the port matches, `false` otherwise.
-    pub fn matches(&self, port: u16) -> bool {
-        match self {
-            Self::Port(p) => port == *p,
-            Self::Range(start, end) => port >= *start && port <= *end,
-            Self::Any => true,
-        }
-    }
-}
-
-/// A capability that grants permission to access the network.
+/// Represents a capability to access network resources
 #[derive(Debug, Clone)]
 pub struct NetworkCapability {
-    /// The hosts that are allowed.
-    hosts: HashSet<NetworkHost>,
-    
-    /// The ports that are allowed.
-    ports: HashSet<NetworkPort>,
-    
-    /// Whether outbound connections are allowed.
-    connect: bool,
-    
-    /// Whether listening for inbound connections is allowed.
-    listen: bool,
+    /// Set of host rules that this capability grants access to
+    host_rules: HashSet<HostRule>,
+
+    /// Map of port numbers to allowed operations
+    port_operations: HashMap<Option<u16>, NetworkOperations>,
+
+    /// Default operations allowed for any port not in the port_operations map
+    default_operations: NetworkOperations,
 }
 
 impl NetworkCapability {
-    /// Create a new network capability.
-    ///
-    /// # Arguments
-    ///
-    /// * `hosts` - The hosts that are allowed.
-    /// * `ports` - The ports that are allowed.
-    /// * `connect` - Whether outbound connections are allowed.
-    /// * `listen` - Whether listening for inbound connections is allowed.
-    ///
-    /// # Returns
-    ///
-    /// A new network capability.
+    /// Creates a new network capability
     pub fn new(
-        hosts: impl IntoIterator<Item = NetworkHost>,
-        ports: impl IntoIterator<Item = NetworkPort>,
-        connect: bool,
-        listen: bool,
+        host_rules: HashSet<HostRule>,
+        port_operations: HashMap<Option<u16>, NetworkOperations>,
+        default_operations: NetworkOperations,
     ) -> Self {
         Self {
-            hosts: hosts.into_iter().collect(),
-            ports: ports.into_iter().collect(),
-            connect,
-            listen,
+            host_rules,
+            port_operations,
+            default_operations,
         }
     }
-    
-    /// Create a new outbound-only network capability.
-    ///
-    /// # Arguments
-    ///
-    /// * `hosts` - The hosts that are allowed.
-    /// * `ports` - The ports that are allowed.
-    ///
-    /// # Returns
-    ///
-    /// A new outbound-only network capability.
-    pub fn outbound_only(
-        hosts: impl IntoIterator<Item = NetworkHost>,
-        ports: impl IntoIterator<Item = NetworkPort>,
-    ) -> Self {
-        Self::new(hosts, ports, true, false)
-    }
-    
-    /// Create a new inbound-only network capability.
-    ///
-    /// # Arguments
-    ///
-    /// * `hosts` - The hosts that are allowed.
-    /// * `ports` - The ports that are allowed.
-    ///
-    /// # Returns
-    ///
-    /// A new inbound-only network capability.
-    pub fn inbound_only(
-        hosts: impl IntoIterator<Item = NetworkHost>,
-        ports: impl IntoIterator<Item = NetworkPort>,
-    ) -> Self {
-        Self::new(hosts, ports, false, true)
-    }
-    
-    /// Create a new bidirectional network capability.
-    ///
-    /// # Arguments
-    ///
-    /// * `hosts` - The hosts that are allowed.
-    /// * `ports` - The ports that are allowed.
-    ///
-    /// # Returns
-    ///
-    /// A new bidirectional network capability.
-    pub fn bidirectional(
-        hosts: impl IntoIterator<Item = NetworkHost>,
-        ports: impl IntoIterator<Item = NetworkPort>,
-    ) -> Self {
-        Self::new(hosts, ports, true, true)
-    }
-    
-    /// Check if a host is allowed.
-    ///
-    /// # Arguments
-    ///
-    /// * `host` - The host to check.
-    ///
-    /// # Returns
-    ///
-    /// `true` if the host is allowed, `false` otherwise.
-    fn is_host_allowed(&self, host: &str) -> bool {
-        // If the hosts set is empty, nothing is allowed
-        if self.hosts.is_empty() {
-            return false;
+
+    /// Creates a new network capability that allows connections to specific hosts on any port
+    pub fn outbound(host_rules: HashSet<HostRule>) -> Self {
+        Self {
+            host_rules,
+            port_operations: HashMap::new(),
+            default_operations: NetworkOperations::CONNECT,
         }
-        
-        // Check if any host specification matches
-        self.hosts.iter().any(|h| h.matches(host))
     }
-    
-    /// Check if a port is allowed.
-    ///
-    /// # Arguments
-    ///
-    /// * `port` - The port to check.
-    ///
-    /// # Returns
-    ///
-    /// `true` if the port is allowed, `false` otherwise.
-    fn is_port_allowed(&self, port: u16) -> bool {
-        // If the ports set is empty, nothing is allowed
-        if self.ports.is_empty() {
-            return false;
+
+    /// Creates a new network capability that allows listening on specific ports
+    pub fn inbound(ports: Vec<u16>) -> Self {
+        let mut port_operations = HashMap::new();
+
+        for port in ports {
+            port_operations.insert(
+                Some(port),
+                NetworkOperations::LISTEN | NetworkOperations::BIND,
+            );
         }
-        
-        // Check if any port specification matches
-        self.ports.iter().any(|p| p.matches(port))
+
+        Self {
+            host_rules: [HostRule::Any].into_iter().collect(),
+            port_operations,
+            default_operations: NetworkOperations::empty(),
+        }
     }
-    
-    /// Get the allowed hosts.
-    pub fn hosts(&self) -> &HashSet<NetworkHost> {
-        &self.hosts
+
+    /// Returns host rules this capability grants access to
+    pub fn host_rules(&self) -> &HashSet<HostRule> {
+        &self.host_rules
     }
-    
-    /// Get the allowed ports.
-    pub fn ports(&self) -> &HashSet<NetworkPort> {
-        &self.ports
+
+    /// Returns port operations this capability permits
+    pub fn port_operations(&self) -> &HashMap<Option<u16>, NetworkOperations> {
+        &self.port_operations
     }
-    
-    /// Check if outbound connections are allowed.
-    pub fn can_connect(&self) -> bool {
-        self.connect
+
+    /// Checks if the capability allows access to the given host
+    fn host_allowed(&self, host: &Option<String>) -> bool {
+        match host {
+            None => self.host_rules.contains(&HostRule::Any),
+            Some(host_str) => self.host_rules.iter().any(|rule| rule.matches(host_str)),
+        }
     }
-    
-    /// Check if inbound connections are allowed.
-    pub fn can_listen(&self) -> bool {
-        self.listen
+
+    /// Gets the operations allowed for a specific port
+    fn operations_for_port(&self, port: &Option<u16>) -> NetworkOperations {
+        self.port_operations
+            .get(port)
+            .copied()
+            .unwrap_or(self.default_operations)
+    }
+
+    /// Applies a host constraint to this capability
+    fn apply_host_constraint(&self, host: &str) -> Result<Self, CapabilityError> {
+        // Check if the host is allowed by any of our rules
+        if !self.host_allowed(&Some(host.to_string())) {
+            return Err(CapabilityError::InvalidConstraint(format!(
+                "Host '{}' is not covered by this capability",
+                host
+            )));
+        }
+
+        // Create a new rule for this specific host
+        let host_rule = if host.contains('*') {
+            HostRule::WildcardDomain(host.to_string())
+        } else if let Ok(ip) = host.parse::<IpAddr>() {
+            HostRule::ExactIp(ip)
+        } else {
+            HostRule::Domain(host.to_string())
+        };
+
+        // Create a new capability with just this host rule
+        let mut host_rules = HashSet::new();
+        host_rules.insert(host_rule);
+
+        Ok(Self {
+            host_rules,
+            port_operations: self.port_operations.clone(),
+            default_operations: self.default_operations,
+        })
+    }
+
+    /// Applies a port constraint to this capability
+    fn apply_port_constraint(&self, port: u16) -> Result<Self, CapabilityError> {
+        // Check if we have specific operations for this port, or use default
+        let operations = self.operations_for_port(&Some(port));
+
+        if operations.is_empty() {
+            return Err(CapabilityError::InvalidConstraint(format!(
+                "Port {} is not allowed by this capability",
+                port
+            )));
+        }
+
+        // Create a new capability with just this port
+        let mut port_operations = HashMap::new();
+        port_operations.insert(Some(port), operations);
+
+        Ok(Self {
+            host_rules: self.host_rules.clone(),
+            port_operations,
+            default_operations: NetworkOperations::empty(),
+        })
+    }
+
+    /// Applies an operation constraint to this capability
+    fn apply_operation_constraint(
+        &self,
+        connect: bool,
+        listen: bool,
+        bind: bool,
+    ) -> Result<Self, CapabilityError> {
+        let mut new_ops = NetworkOperations::empty();
+
+        // Only allow operations that the constraint enables
+        if connect {
+            new_ops |= NetworkOperations::CONNECT;
+        }
+        if listen {
+            new_ops |= NetworkOperations::LISTEN;
+        }
+        if bind {
+            new_ops |= NetworkOperations::BIND;
+        }
+
+        // Apply the constraint to all port operations
+        let mut port_operations = HashMap::new();
+        for (port, ops) in &self.port_operations {
+            let constrained_ops = *ops & new_ops;
+            if !constrained_ops.is_empty() {
+                port_operations.insert(*port, constrained_ops);
+            }
+        }
+
+        // Apply to default operations
+        let default_operations = self.default_operations & new_ops;
+
+        // Ensure we still have some operations allowed
+        if port_operations.is_empty() && default_operations.is_empty() {
+            return Err(CapabilityError::InvalidConstraint(
+                "No operations would be allowed after applying this constraint".to_string(),
+            ));
+        }
+
+        Ok(Self {
+            host_rules: self.host_rules.clone(),
+            port_operations,
+            default_operations,
+        })
     }
 }
 
@@ -248,449 +399,506 @@ impl Capability for NetworkCapability {
     fn capability_type(&self) -> &str {
         "network"
     }
-    
+
     fn permits(&self, request: &AccessRequest) -> Result<(), CapabilityError> {
         match request {
-            AccessRequest::Network { host, port, connect, listen } => {
+            AccessRequest::Network {
+                host,
+                port,
+                connect,
+                listen,
+                bind,
+            } => {
                 // Check if the host is allowed
-                if !self.is_host_allowed(host) {
-                    return Err(CapabilityError::PermissionDenied(
-                        format!("Access to host {} is not allowed", host)
-                    ).into());
+                if !self.host_allowed(host) {
+                    return Err(CapabilityError::AccessDenied(format!(
+                        "Host '{:?}' is not allowed by this capability",
+                        host
+                    )));
                 }
-                
-                // Check if the port is allowed
-                if !self.is_port_allowed(*port) {
-                    return Err(CapabilityError::PermissionDenied(
-                        format!("Access to port {} is not allowed", port)
-                    ).into());
+
+                // Get the operations allowed for this port
+                let allowed_ops = self.operations_for_port(port);
+
+                // Check if the requested operations are permitted
+                let mut requested_ops = NetworkOperations::empty();
+                if *connect {
+                    requested_ops |= NetworkOperations::CONNECT;
                 }
-                
-                // Check if the operations are allowed
-                if *connect && !self.connect {
-                    return Err(CapabilityError::PermissionDenied(
-                        "Outbound connections are not allowed".into()
-                    ).into());
+                if *listen {
+                    requested_ops |= NetworkOperations::LISTEN;
                 }
-                
-                if *listen && !self.listen {
-                    return Err(CapabilityError::PermissionDenied(
-                        "Inbound connections are not allowed".into()
-                    ).into());
+                if *bind {
+                    requested_ops |= NetworkOperations::BIND;
                 }
-                
+
+                if !allowed_ops.contains(requested_ops) {
+                    return Err(CapabilityError::AccessDenied(format!(
+                        "Operation not permitted on host '{:?}' port '{:?}'",
+                        host, port
+                    )));
+                }
+
                 Ok(())
-            },
-            _ => Err(CapabilityError::PermissionDenied(
-                "Only network access is allowed".into()
-            ).into()),
+            }
+            _ => Err(CapabilityError::IncompatibleTypes(format!(
+                "Expected Network request, got {:?}",
+                request
+            ))),
         }
     }
-    
-    fn constrain(&self, constraints: &[Constraint]) -> Result<Box<dyn Capability>, CapabilityError> {
-        let mut hosts = self.hosts.clone();
-        let mut ports = self.ports.clone();
-        let mut connect = self.connect;
-        let mut listen = self.listen;
-        
+
+    fn constrain(
+        &self,
+        constraints: &[Constraint],
+    ) -> Result<Box<dyn Capability>, CapabilityError> {
+        let mut result = self.clone();
+
         for constraint in constraints {
             match constraint {
                 Constraint::NetworkHost(host) => {
-                    // Add the host to the set
-                    hosts.insert(NetworkHost::Domain(host.clone()));
-                },
+                    result = result.apply_host_constraint(host)?;
+                }
                 Constraint::NetworkPort(port) => {
-                    // Add the port to the set
-                    ports.insert(NetworkPort::Port(*port));
-                },
-                Constraint::NetworkOperation { connect: c, listen: l } => {
-                    // Can only remove permissions, not add them
-                    connect = connect && *c;
-                    listen = listen && *l;
-                    
-                    // If all operations are disallowed, return an error
-                    if !connect && !listen {
-                        return Err(CapabilityError::ConstraintError(
-                            "No operations allowed after applying constraint".into()
-                        ).into());
-                    }
-                },
-                _ => return Err(CapabilityError::ConstraintError(
-                    format!("Constraint type {} not supported for network capability", constraint.constraint_type())
-                ).into()),
-            }
-        }
-        
-        Ok(Box::new(Self { hosts, ports, connect, listen }))
-    }
-    
-    fn split(&self) -> Vec<Box<dyn Capability>> {
-        let mut capabilities = Vec::new();
-        
-        // Split by operation
-        if self.connect {
-            capabilities.push(Box::new(Self::new(
-                self.hosts.iter().cloned(),
-                self.ports.iter().cloned(),
-                true,
-                false,
-            )) as Box<dyn Capability>);
-        }
-        
-        if self.listen {
-            capabilities.push(Box::new(Self::new(
-                self.hosts.iter().cloned(),
-                self.ports.iter().cloned(),
-                false,
-                true,
-            )) as Box<dyn Capability>);
-        }
-        
-        // If we didn't split by operation, just clone
-        if capabilities.is_empty() {
-            capabilities.push(Box::new(self.clone()));
-        }
-        
-        capabilities
-    }
-    
-    fn can_join_with(&self, other: &dyn Capability) -> bool {
-        other.capability_type() == "network"
-    }
-    
-    fn join(&self, other: &dyn Capability) -> Result<Box<dyn Capability>, CapabilityError> {
-        if !self.can_join_with(other) {
-            return Err(CapabilityError::CompositionError(
-                format!("Cannot join network capability with {}", other.capability_type())
-            ).into());
-        }
-        
-        // Downcast the other capability to a NetworkCapability
-        let other = match other.permits(&AccessRequest::Network {
-            host: "example.com".to_string(),
-            port: 80,
-            connect: true,
-            listen: true,
-        }) {
-            Ok(()) => {
-                // If it permits everything, it's probably a super-capability
-                return Ok(Box::new(Self {
-                    hosts: self.hosts.union(&self.hosts).cloned().collect(),
-                    ports: self.ports.union(&self.ports).cloned().collect(),
-                    connect: true,
-                    listen: true,
-                }));
-            },
-            Err(_) => {
-                // Try to get more precise information
-                let mut hosts = self.hosts.clone();
-                let mut ports = self.ports.clone();
-                let mut connect = self.connect;
-                let mut listen = self.listen;
-                
-                // Check if it permits connect
-                if other.permits(&AccessRequest::Network {
-                    host: "example.com".to_string(),
-                    port: 80,
-                    connect: true,
-                    listen: false,
-                }).is_ok() {
-                    connect = true;
+                    result = result.apply_port_constraint(*port)?;
                 }
-                
-                // Check if it permits listen
-                if other.permits(&AccessRequest::Network {
-                    host: "example.com".to_string(),
-                    port: 80,
-                    connect: false,
-                    listen: true,
-                }).is_ok() {
-                    listen = true;
-                }
-                
-                // TODO: More precise host and port information
-                
-                Self {
-                    hosts,
-                    ports,
+                Constraint::NetworkOperation {
                     connect,
                     listen,
+                    bind,
+                } => {
+                    result = result.apply_operation_constraint(*connect, *listen, *bind)?;
+                }
+                _ => {
+                    return Err(CapabilityError::InvalidConstraint(format!(
+                        "Constraint {:?} not applicable to NetworkCapability",
+                        constraint
+                    )))
                 }
             }
-        };
-        
-        // Join the capabilities
-        let joined = Self {
-            hosts: self.hosts.union(&other.hosts).cloned().collect(),
-            ports: self.ports.union(&other.ports).cloned().collect(),
-            connect: self.connect || other.connect,
-            listen: self.listen || other.listen,
-        };
-        
-        Ok(Box::new(joined))
+        }
+
+        Ok(Box::new(result))
     }
-    
+
+    fn split(&self) -> Vec<Box<dyn Capability>> {
+        let mut result = Vec::new();
+
+        // Split by host rule
+        for host_rule in &self.host_rules {
+            let mut host_rules = HashSet::new();
+            host_rules.insert(host_rule.clone());
+
+            result.push(Box::new(NetworkCapability {
+                host_rules,
+                port_operations: self.port_operations.clone(),
+                default_operations: self.default_operations,
+            }) as Box<dyn Capability>);
+        }
+
+        result
+    }
+
+    fn join(&self, other: &dyn Capability) -> Result<Box<dyn Capability>, CapabilityError> {
+        // Try to downcast the other capability to NetworkCapability
+        if let Some(other_net) = other.as_any().downcast_ref::<NetworkCapability>() {
+            // Create a union of the host rules
+            let mut host_rules = self.host_rules.clone();
+            host_rules.extend(other_net.host_rules.clone());
+
+            // Merge port operations
+            let mut port_operations = self.port_operations.clone();
+
+            for (port, ops) in &other_net.port_operations {
+                if let Some(existing_ops) = port_operations.get_mut(port) {
+                    *existing_ops |= *ops;
+                } else {
+                    port_operations.insert(*port, *ops);
+                }
+            }
+
+            // Union of default operations
+            let default_operations = self.default_operations | other_net.default_operations;
+
+            Ok(Box::new(NetworkCapability {
+                host_rules,
+                port_operations,
+                default_operations,
+            }))
+        } else {
+            Err(CapabilityError::IncompatibleTypes(
+                "Cannot join NetworkCapability with a different capability type".to_string(),
+            ))
+        }
+    }
+
+    fn leq(&self, other: &dyn Capability) -> bool {
+        // Try to downcast the other capability to NetworkCapability
+        if let Some(other_net) = other.as_any().downcast_ref::<NetworkCapability>() {
+            // This capability is <= other if:
+            // 1. All host rules in self have a superset in other
+            // 2. All port operations in self are a subset of those in other
+
+            // Check host rules
+            for self_rule in &self.host_rules {
+                if !other_net
+                    .host_rules
+                    .iter()
+                    .any(|other_rule| self_rule.is_subset_of(other_rule))
+                {
+                    return false;
+                }
+            }
+
+            // Check default operations
+            if !(self.default_operations & other_net.default_operations).bits()
+                == self.default_operations.bits()
+            {
+                return false;
+            }
+
+            // Check port operations
+            for (port, ops) in &self.port_operations {
+                let other_ops = other_net.operations_for_port(port);
+                if !(ops & other_ops).bits() == ops.bits() {
+                    return false;
+                }
+            }
+
+            true
+        } else {
+            false
+        }
+    }
+
+    fn meet(&self, other: &dyn Capability) -> Result<Box<dyn Capability>, CapabilityError> {
+        // Try to downcast the other capability to NetworkCapability
+        if let Some(other_net) = other.as_any().downcast_ref::<NetworkCapability>() {
+            // This is a simplification for the meet operation that creates host rules only for exact matches
+            // A more complete implementation would find the intersection of host rules
+
+            // Find host rules that are in both capabilities
+            let mut host_rules = HashSet::new();
+            for self_rule in &self.host_rules {
+                for other_rule in &other_net.host_rules {
+                    if self_rule == other_rule {
+                        host_rules.insert(self_rule.clone());
+                    }
+                }
+            }
+
+            if host_rules.is_empty() {
+                return Err(CapabilityError::InvalidState(
+                    "No hosts in common between the capabilities".to_string(),
+                ));
+            }
+
+            // Intersect port operations
+            let mut port_operations = HashMap::new();
+
+            // Collect all ports from both capabilities
+            let mut all_ports = self.port_operations.keys().cloned().collect::<Vec<_>>();
+            all_ports.extend(other_net.port_operations.keys().cloned());
+            all_ports.sort();
+            all_ports.dedup();
+
+            for port in all_ports {
+                let self_ops = self.operations_for_port(&port);
+                let other_ops = other_net.operations_for_port(&port);
+
+                let combined_ops = self_ops & other_ops;
+                if !combined_ops.is_empty() {
+                    port_operations.insert(port, combined_ops);
+                }
+            }
+
+            // Intersect default operations
+            let default_operations = self.default_operations & other_net.default_operations;
+
+            // Ensure there are some operations allowed
+            if port_operations.is_empty() && default_operations.is_empty() {
+                return Err(CapabilityError::InvalidState(
+                    "No operations in common between the capabilities".to_string(),
+                ));
+            }
+
+            Ok(Box::new(NetworkCapability {
+                host_rules,
+                port_operations,
+                default_operations,
+            }))
+        } else {
+            Err(CapabilityError::IncompatibleTypes(
+                "Cannot compute meet with different capability types".to_string(),
+            ))
+        }
+    }
+
     fn clone_box(&self) -> Box<dyn Capability> {
         Box::new(self.clone())
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
-    fn test_network_host_matches() {
-        // Test IP address matching
-        let host = NetworkHost::IpAddress("127.0.0.1".parse().unwrap());
-        assert!(host.matches("127.0.0.1"));
-        assert!(!host.matches("192.168.1.1"));
-        assert!(!host.matches("localhost"));
-        
-        // Test domain matching
-        let host = NetworkHost::Domain("example.com".to_string());
-        assert!(host.matches("example.com"));
-        assert!(host.matches("sub.example.com"));
-        assert!(!host.matches("example.org"));
-        
-        // Test wildcard matching
-        let host = NetworkHost::Any;
-        assert!(host.matches("example.com"));
-        assert!(host.matches("192.168.1.1"));
+    fn test_host_rules_matching() {
+        let any = HostRule::Any;
+        let domain = HostRule::Domain("example.com".to_string());
+        let wildcard = HostRule::WildcardDomain(".example.com".to_string());
+        let exact_ip = HostRule::ExactIp("192.168.1.1".parse().unwrap());
+        let subnet = HostRule::IpV4Subnet("192.168.1.0".parse().unwrap(), 24);
+
+        // Test Any rule
+        assert!(any.matches("example.com"));
+        assert!(any.matches("192.168.1.1"));
+
+        // Test Domain rule
+        assert!(domain.matches("example.com"));
+        assert!(!domain.matches("subdomain.example.com"));
+        assert!(!domain.matches("example.org"));
+
+        // Test Wildcard rule
+        assert!(wildcard.matches("subdomain.example.com"));
+        assert!(wildcard.matches("sub.sub.example.com"));
+        assert!(!wildcard.matches("example.com"));
+        assert!(!wildcard.matches("exampleXcom"));
+
+        // Test ExactIp rule
+        assert!(exact_ip.matches("192.168.1.1"));
+        assert!(!exact_ip.matches("192.168.1.2"));
+        assert!(!exact_ip.matches("example.com"));
+
+        // Test Subnet rule
+        assert!(subnet.matches("192.168.1.1"));
+        assert!(subnet.matches("192.168.1.254"));
+        assert!(!subnet.matches("192.168.2.1"));
+        assert!(!subnet.matches("example.com"));
     }
-    
+
     #[test]
-    fn test_network_port_matches() {
-        // Test specific port matching
-        let port = NetworkPort::Port(80);
-        assert!(port.matches(80));
-        assert!(!port.matches(443));
-        
-        // Test port range matching
-        let port = NetworkPort::Range(8000, 9000);
-        assert!(port.matches(8000));
-        assert!(port.matches(8500));
-        assert!(port.matches(9000));
-        assert!(!port.matches(7999));
-        assert!(!port.matches(9001));
-        
-        // Test wildcard matching
-        let port = NetworkPort::Any;
-        assert!(port.matches(80));
-        assert!(port.matches(443));
+    fn test_host_rule_subset() {
+        let any = HostRule::Any;
+        let domain = HostRule::Domain("example.com".to_string());
+        let subdomain = HostRule::Domain("sub.example.com".to_string());
+        let wildcard = HostRule::WildcardDomain(".example.com".to_string());
+        let exact_ip = HostRule::ExactIp("192.168.1.1".parse().unwrap());
+        let subnet = HostRule::IpV4Subnet("192.168.1.0".parse().unwrap(), 24);
+        let smaller_subnet = HostRule::IpV4Subnet("192.168.1.0".parse().unwrap(), 28);
+
+        // Test relationships with Any
+        assert!(domain.is_subset_of(&any));
+        assert!(wildcard.is_subset_of(&any));
+        assert!(exact_ip.is_subset_of(&any));
+        assert!(subnet.is_subset_of(&any));
+        assert!(!any.is_subset_of(&domain));
+
+        // Test domain relationships
+        assert!(subdomain.is_subset_of(&wildcard));
+        assert!(!domain.is_subset_of(&wildcard)); // example.com is not a subdomain of .example.com
+        assert!(!wildcard.is_subset_of(&domain));
+
+        // Test IP relationships
+        assert!(exact_ip.is_subset_of(&subnet));
+        assert!(!subnet.is_subset_of(&exact_ip));
+        assert!(smaller_subnet.is_subset_of(&subnet));
+        assert!(!subnet.is_subset_of(&smaller_subnet));
     }
-    
+
     #[test]
     fn test_network_capability_permits() {
-        let capability = NetworkCapability::new(
-            vec![NetworkHost::Domain("example.com".to_string())],
-            vec![NetworkPort::Port(80), NetworkPort::Port(443)],
-            true,
-            false,
+        // Create a capability that allows connecting to example.com and listening on port 8080
+        let mut host_rules = HashSet::new();
+        host_rules.insert(HostRule::Domain("example.com".to_string()));
+
+        let mut port_operations = HashMap::new();
+        port_operations.insert(
+            Some(8080),
+            NetworkOperations::LISTEN | NetworkOperations::BIND,
         );
-        
-        // Test outbound connection to allowed host and port
-        let request = AccessRequest::Network {
-            host: "example.com".to_string(),
-            port: 80,
-            connect: true,
-            listen: false,
-        };
-        assert!(capability.permits(&request).is_ok());
-        
-        // Test outbound connection to allowed host and disallowed port
-        let request = AccessRequest::Network {
-            host: "example.com".to_string(),
-            port: 8080,
-            connect: true,
-            listen: false,
-        };
-        assert!(capability.permits(&request).is_err());
-        
-        // Test outbound connection to disallowed host and allowed port
-        let request = AccessRequest::Network {
-            host: "evil.com".to_string(),
-            port: 80,
-            connect: true,
-            listen: false,
-        };
-        assert!(capability.permits(&request).is_err());
-        
-        // Test inbound connection to allowed host and port (should fail)
-        let request = AccessRequest::Network {
-            host: "example.com".to_string(),
-            port: 80,
-            connect: false,
-            listen: true,
-        };
-        assert!(capability.permits(&request).is_err());
-        
-        // Test non-network access
-        let request = AccessRequest::File {
-            path: std::path::PathBuf::from("/tmp/file"),
-            read: true,
-            write: false,
-            execute: false,
-        };
-        assert!(capability.permits(&request).is_err());
+
+        let cap = NetworkCapability::new(host_rules, port_operations, NetworkOperations::CONNECT);
+
+        // Test valid connect request
+        assert!(cap
+            .permits(&AccessRequest::Network {
+                host: Some("example.com".to_string()),
+                port: None,
+                connect: true,
+                listen: false,
+                bind: false,
+            })
+            .is_ok());
+
+        // Test valid listen request
+        assert!(cap
+            .permits(&AccessRequest::Network {
+                host: None,
+                port: Some(8080),
+                connect: false,
+                listen: true,
+                bind: false,
+            })
+            .is_ok());
+
+        // Test invalid host
+        assert!(cap
+            .permits(&AccessRequest::Network {
+                host: Some("example.org".to_string()),
+                port: None,
+                connect: true,
+                listen: false,
+                bind: false,
+            })
+            .is_err());
+
+        // Test invalid operation on valid port
+        assert!(cap
+            .permits(&AccessRequest::Network {
+                host: None,
+                port: Some(9090),
+                connect: false,
+                listen: true,
+                bind: false,
+            })
+            .is_err());
     }
-    
+
     #[test]
     fn test_network_capability_constrain() {
-        let capability = NetworkCapability::new(
-            vec![NetworkHost::Any],
-            vec![NetworkPort::Any],
-            true,
-            true,
-        );
-        
-        // Constrain to a specific host
-        let constraints = vec![Constraint::NetworkHost("example.com".to_string())];
-        let constrained = capability.constrain(&constraints).unwrap();
-        
-        // Should allow access to example.com
-        let request = AccessRequest::Network {
-            host: "example.com".to_string(),
-            port: 80,
-            connect: true,
-            listen: false,
-        };
-        assert!(constrained.permits(&request).is_ok());
-        
-        // Should still allow any port
-        let request = AccessRequest::Network {
-            host: "example.com".to_string(),
-            port: 1234,
-            connect: true,
-            listen: false,
-        };
-        assert!(constrained.permits(&request).is_ok());
-        
-        // Constrain to outbound-only
-        let constraints = vec![Constraint::NetworkOperation {
-            connect: true,
-            listen: false,
-        }];
-        let constrained = capability.constrain(&constraints).unwrap();
-        
-        // Should allow outbound connection
-        let request = AccessRequest::Network {
-            host: "example.com".to_string(),
-            port: 80,
-            connect: true,
-            listen: false,
-        };
-        assert!(constrained.permits(&request).is_ok());
-        
-        // Should deny inbound connection
-        let request = AccessRequest::Network {
-            host: "example.com".to_string(),
-            port: 80,
-            connect: false,
-            listen: true,
-        };
-        assert!(constrained.permits(&request).is_err());
+        // Create a capability that allows connecting to any host and listening on any port
+        let mut host_rules = HashSet::new();
+        host_rules.insert(HostRule::Any);
+
+        let cap = NetworkCapability::new(host_rules, HashMap::new(), NetworkOperations::all());
+
+        // Constrain to specific host
+        let constrained = cap
+            .constrain(&[Constraint::NetworkHost("example.com".to_string())])
+            .unwrap();
+
+        assert!(constrained
+            .permits(&AccessRequest::Network {
+                host: Some("example.com".to_string()),
+                port: None,
+                connect: true,
+                listen: false,
+                bind: false,
+            })
+            .is_ok());
+
+        assert!(constrained
+            .permits(&AccessRequest::Network {
+                host: Some("example.org".to_string()),
+                port: None,
+                connect: true,
+                listen: false,
+                bind: false,
+            })
+            .is_err());
+
+        // Constrain to specific port
+        let constrained = cap.constrain(&[Constraint::NetworkPort(8080)]).unwrap();
+
+        assert!(constrained
+            .permits(&AccessRequest::Network {
+                host: None,
+                port: Some(8080),
+                connect: true,
+                listen: false,
+                bind: false,
+            })
+            .is_ok());
+
+        assert!(constrained
+            .permits(&AccessRequest::Network {
+                host: None,
+                port: Some(9090),
+                connect: true,
+                listen: false,
+                bind: false,
+            })
+            .is_err());
+
+        // Constrain to specific operation
+        let constrained = cap
+            .constrain(&[Constraint::NetworkOperation {
+                connect: true,
+                listen: false,
+                bind: false,
+            }])
+            .unwrap();
+
+        assert!(constrained
+            .permits(&AccessRequest::Network {
+                host: None,
+                port: None,
+                connect: true,
+                listen: false,
+                bind: false,
+            })
+            .is_ok());
+
+        assert!(constrained
+            .permits(&AccessRequest::Network {
+                host: None,
+                port: None,
+                connect: false,
+                listen: true,
+                bind: false,
+            })
+            .is_err());
     }
-    
-    #[test]
-    fn test_network_capability_split() {
-        let capability = NetworkCapability::new(
-            vec![NetworkHost::Any],
-            vec![NetworkPort::Any],
-            true,
-            true,
-        );
-        
-        let split = capability.split();
-        assert_eq!(split.len(), 2);
-        
-        // Check that the first capability allows connect but not listen
-        let request = AccessRequest::Network {
-            host: "example.com".to_string(),
-            port: 80,
-            connect: true,
-            listen: false,
-        };
-        assert!(split[0].permits(&request).is_ok());
-        
-        let request = AccessRequest::Network {
-            host: "example.com".to_string(),
-            port: 80,
-            connect: false,
-            listen: true,
-        };
-        assert!(split[0].permits(&request).is_err());
-        
-        // Check that the second capability allows listen but not connect
-        let request = AccessRequest::Network {
-            host: "example.com".to_string(),
-            port: 80,
-            connect: true,
-            listen: false,
-        };
-        assert!(split[1].permits(&request).is_err());
-        
-        let request = AccessRequest::Network {
-            host: "example.com".to_string(),
-            port: 80,
-            connect: false,
-            listen: true,
-        };
-        assert!(split[1].permits(&request).is_ok());
-    }
-    
+
     #[test]
     fn test_network_capability_join() {
-        let capability1 = NetworkCapability::new(
-            vec![NetworkHost::Domain("example.com".to_string())],
-            vec![NetworkPort::Port(80)],
-            true,
-            false,
-        );
-        
-        let capability2 = NetworkCapability::new(
-            vec![NetworkHost::Domain("example.org".to_string())],
-            vec![NetworkPort::Port(443)],
-            false,
-            true,
-        );
-        
-        let joined = capability1.join(&capability2).unwrap();
-        
-        // Should allow outbound connection to example.com:80
-        let request = AccessRequest::Network {
-            host: "example.com".to_string(),
-            port: 80,
-            connect: true,
-            listen: false,
-        };
-        assert!(joined.permits(&request).is_ok());
-        
-        // Should allow inbound connection to example.org:443
-        let request = AccessRequest::Network {
-            host: "example.org".to_string(),
-            port: 443,
-            connect: false,
-            listen: true,
-        };
-        assert!(joined.permits(&request).is_ok());
-        
-        // Should deny outbound connection to example.org:443
-        let request = AccessRequest::Network {
-            host: "example.org".to_string(),
-            port: 443,
-            connect: true,
-            listen: false,
-        };
-        assert!(joined.permits(&request).is_err());
-        
-        // Should deny inbound connection to example.com:80
-        let request = AccessRequest::Network {
-            host: "example.com".to_string(),
-            port: 80,
-            connect: false,
-            listen: true,
-        };
-        assert!(joined.permits(&request).is_err());
+        // Create two capabilities with different hosts and operations
+        let mut host_rules1 = HashSet::new();
+        host_rules1.insert(HostRule::Domain("example.com".to_string()));
+
+        let mut port_operations1 = HashMap::new();
+        port_operations1.insert(Some(8080), NetworkOperations::LISTEN);
+
+        let cap1 =
+            NetworkCapability::new(host_rules1, port_operations1, NetworkOperations::empty());
+
+        let mut host_rules2 = HashSet::new();
+        host_rules2.insert(HostRule::Domain("example.org".to_string()));
+
+        let mut port_operations2 = HashMap::new();
+        port_operations2.insert(Some(9090), NetworkOperations::CONNECT);
+
+        let cap2 =
+            NetworkCapability::new(host_rules2, port_operations2, NetworkOperations::empty());
+
+        // Join the capabilities
+        let joined = cap1.join(&cap2).unwrap();
+
+        // The joined capability should allow both hosts and operations
+        assert!(joined
+            .permits(&AccessRequest::Network {
+                host: Some("example.com".to_string()),
+                port: Some(8080),
+                connect: false,
+                listen: true,
+                bind: false,
+            })
+            .is_ok());
+
+        assert!(joined
+            .permits(&AccessRequest::Network {
+                host: Some("example.org".to_string()),
+                port: Some(9090),
+                connect: true,
+                listen: false,
+                bind: false,
+            })
+            .is_ok());
     }
 }

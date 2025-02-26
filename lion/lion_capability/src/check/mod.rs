@@ -1,11 +1,7 @@
-//! Capability checking.
-//! 
-//! This module provides functionality for checking capabilities.
-
-mod engine;
 mod aggregator;
 mod audit;
+mod engine;
 
-pub use engine::CapabilityChecker;
-pub use aggregator::CapabilityAggregator;
+pub use aggregator::{merge_capabilities_by_type, CapabilitySet};
 pub use audit::AuditLog;
+pub use engine::CapabilityChecker;

@@ -1,19 +1,18 @@
-//! Capability models.
-//! 
-//! This module defines the core capability types and traits.
+mod capability;
+mod composite;
+mod file;
+mod memory;
+mod message;
+mod network;
+mod plugin_call;
 
-pub mod capability;
-pub mod file;
-pub mod network;
-pub mod memory;
-pub mod plugin_call;
-pub mod message;
-pub mod composite;
-
-pub use capability::Capability;
-pub use file::FileCapability;
-pub use network::NetworkCapability;
-pub use memory::MemoryCapability;
-pub use plugin_call::PluginCallCapability;
-pub use message::MessageCapability;
+pub use capability::{
+    path_matches, AccessRequest, Capability, CapabilityBuilder, CapabilityError, CapabilityOwner,
+    Constraint,
+};
 pub use composite::CompositeCapability;
+pub use file::FileCapability;
+pub use memory::MemoryCapability;
+pub use message::MessageCapability;
+pub use network::NetworkCapability;
+pub use plugin_call::PluginCallCapability;
