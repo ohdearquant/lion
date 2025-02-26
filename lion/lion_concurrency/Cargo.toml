@@ -1,0 +1,29 @@
+[package]
+name = "lion_concurrency"
+version = "0.1.0"
+edition = "2021"
+authors = ["Lion Team"]
+description = "Concurrency primitives for the Lion microkernel"
+repository = "https://github.com/lion-micro/lion"
+license = "MIT OR Apache-2.0"
+keywords = ["kernel", "microkernel", "actor", "concurrency", "scheduling"]
+categories = ["os", "concurrency"]
+readme = "../README.md"
+
+[features]
+default = []
+debug = []
+
+[dependencies]
+lion_core = { path = "../lion_core", version = "0.1.0" }
+log = "0.4"
+num_cpus = "1.0"
+parking_lot = "0.12"
+thiserror = "1.0"
+crossbeam-channel = "0.5"
+futures = "0.3"
+dashmap = "5.4"
+
+[dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
+rand = "0.8"
