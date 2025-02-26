@@ -1,0 +1,26 @@
+[package]
+name = "lion_cli"
+version = "0.1.0"
+edition = "2021"
+description = "Command-line interface for the Lion microkernel system"
+license = "MIT OR Apache-2.0"
+authors = ["Lion Microkernel Team"]
+documentation = "https://docs.rs/lion_cli"
+repository = "https://github.com/lion/lion"
+
+[dependencies]
+lion_core = { path = "../lion_core" }
+clap = { version = "4.0", features = ["derive"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+uuid = { version = "1.0", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+log = "0.4"
+anyhow = "1.0"
+thiserror = "2.0"
+toml = "0.8"
+
+[dev-dependencies]
+assert_cmd = "2.0"
+predicates = "3.0"
+tempfile = "3.3"
