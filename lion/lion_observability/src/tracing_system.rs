@@ -22,11 +22,13 @@ use crate::Result;
 /// Create a tracer based on the configuration
 pub fn create_tracer(config: &TracingConfig) -> Result<Box<dyn TracerBase>> {
     if !config.enabled {
-        return Ok(Box::new(NoopTracer::new()));
+        let tracer: Box<dyn TracerBase> = Box::new(NoopTracer::new());
+        return Ok(tracer);
     }
 
     let tracer = OTelTracer::new(config)?;
-    Ok(Box::new(tracer))
+    let boxed_tracer: Box<dyn TracerBase> = Box::new(tracer);
+    Ok(boxed_tracer)
 }
 
 /// A tracing event
@@ -246,7 +248,7 @@ pub trait Tracer: TracerBase {
 }
 
 // Blanket implementation for all types that implement TracerBase
-impl<T: TracerBase> Tracer for T {}
+impl<T: ?Sized + TracerBase> Tracer for T {}
 
 /// Tracer implementation using OpenTelemetry
 pub struct OTelTracer {
@@ -254,7 +256,7 @@ pub struct OTelTracer {
     initialized: AtomicBool,
     config: TracingConfig,
     #[allow(dead_code)]
-    tracer: Option<opentelemetry::trace::Tracer>,
+    tracer: Option<opentelemetry_sdk::trace::Tracer>,
 }
 
 impl OTelTracer {
@@ -270,7 +272,7 @@ impl OTelTracer {
 
     /// Initialize the OpenTelemetry tracer
     #[allow(unused_variables)]
-    fn initialize(&self) -> Result<opentelemetry::trace::Tracer> {
+    fn initialize(&self) -> Result<opentelemetry_sdk::trace::Tracer> {
         // This is a simplified implementation for the fix
         // In a real implementation, we would properly initialize OpenTelemetry
         Err(ObservabilityError::TracingError(
@@ -279,7 +281,7 @@ impl OTelTracer {
     }
 
     /// Get the OpenTelemetry tracer instance
-    fn get_tracer(&self) -> Result<opentelemetry::trace::Tracer> {
+    fn get_tracer(&self) -> Result<opentelemetry_sdk::trace::Tracer> {
         if !self.initialized.load(Ordering::SeqCst) {
             // Initialize on first use
             let tracer = self.initialize()?;
@@ -297,8 +299,6 @@ impl OTelTracer {
     /// Convert SpanContext to OpenTelemetry SpanContext
     #[allow(unused_variables)]
     fn to_otel_context(context: &SpanContext) -> opentelemetry::trace::SpanContext {
-        // This is a simplified implementation for the fix
-        // In a real implementation, we would properly convert between contexts
         opentelemetry::trace::SpanContext::empty_context()
     }
 
@@ -308,7 +308,6 @@ impl OTelTracer {
         context: &opentelemetry::trace::SpanContext,
         name: impl Into<String>,
     ) -> SpanContext {
-        // This is a simplified implementation for the fix
         SpanContext::new_root(name)
     }
 }
@@ -377,7 +376,11 @@ impl TracerBase for OTelTracer {
     }
 
     fn current_span_context(&self) -> Option<SpanContext> {
-        Context::current()?.span_context
+        if let Some(ctx) = Context::current() {
+            ctx.span_context
+        } else {
+            None
+        }
     }
 
     fn shutdown(&self) -> Result<()> {
@@ -438,7 +441,11 @@ impl TracerBase for NoopTracer {
     }
 
     fn current_span_context(&self) -> Option<SpanContext> {
-        Context::current()?.span_context
+        if let Some(ctx) = Context::current() {
+            ctx.span_context
+        } else {
+            None
+        }
     }
 
     fn shutdown(&self) -> Result<()> {
@@ -559,6 +566,7 @@ impl fmt::Debug for CapabilityTracer {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("CapabilityTracer")
             .field("name", &self.name)
+            .field("checker", &"<capability_checker>")
             .finish()
     }
 }
@@ -586,8 +594,8 @@ mod tests {
         assert_eq!(child.name, "child");
         assert_eq!(child.context.trace_id, parent.context.trace_id);
         assert_eq!(
-            child.context.parent_span_id.as_deref(),
-            Some(&parent.context.span_id)
+            child.context.parent_span_id.as_ref().map(|s| s.as_str()),
+            Some(parent.context.span_id.as_str())
         );
     }
 

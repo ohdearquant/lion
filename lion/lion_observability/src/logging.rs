@@ -246,12 +246,14 @@ impl<T: Logger> LoggerExt for T {}
 /// Create a logger based on the configuration
 pub fn create_logger(config: &LoggingConfig) -> Result<Box<dyn LoggerBase>> {
     if !config.enabled {
-        return Ok(Box::new(NoopLogger::new()));
+        let logger: Box<dyn LoggerBase> = Box::new(NoopLogger::new());
+        return Ok(logger);
     }
 
     // For simplicity, we're using a simplified logger implementation
     let logger = SimpleLogger::new(config);
-    Ok(Box::new(logger))
+    let boxed_logger: Box<dyn LoggerBase> = Box::new(logger);
+    Ok(boxed_logger)
 }
 
 /// Logger implementation that discards all logs
@@ -332,7 +334,15 @@ impl LoggerBase for SimpleLogger {
 
         // Use tracing if available
         let level = Self::to_tracing_level(event.level);
-        tracing::event!(level, "{}", event.message);
+        // Use a string format instead of passing the level directly
+        let message = event.message.clone();
+        match event.level {
+            LogLevel::Trace => tracing::event!(Level::TRACE, "{}", message),
+            LogLevel::Debug => tracing::event!(Level::DEBUG, "{}", message),
+            LogLevel::Info => tracing::event!(Level::INFO, "{}", message),
+            LogLevel::Warn => tracing::event!(Level::WARN, "{}", message),
+            LogLevel::Error => tracing::event!(Level::ERROR, "{}", message),
+        }
 
         Ok(())
     }

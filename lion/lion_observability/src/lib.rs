@@ -66,15 +66,32 @@ pub struct Observability {
 impl Observability {
     /// Create a new Observability instance with the provided configuration
     pub fn new(config: ObservabilityConfig) -> Result<Self> {
-        let logger = logging::create_logger(&config.logging)?;
-        let tracer = tracing_system::create_tracer(&config.tracing)?;
-        let metrics_registry = metrics::create_registry(&config.metrics)?;
+        // Create concrete instances directly instead of using the factory functions
+        let logger: Arc<dyn LoggerBase> = if !config.logging.enabled {
+            Arc::new(logging::NoopLogger::new())
+        } else {
+            Arc::new(logging::SimpleLogger::new(&config.logging))
+        };
+
+        let tracer: Arc<dyn TracerBase> = if !config.tracing.enabled {
+            Arc::new(tracing_system::NoopTracer::new())
+        } else {
+            let otel_tracer = tracing_system::OTelTracer::new(&config.tracing)?;
+            Arc::new(otel_tracer)
+        };
+
+        let metrics_registry: Arc<dyn MetricsRegistry> = if !config.metrics.enabled {
+            Arc::new(metrics::NoopMetricsRegistry::new())
+        } else {
+            let prometheus_registry = metrics::PrometheusMetricsRegistry::new(&config.metrics)?;
+            Arc::new(prometheus_registry)
+        };
 
         Ok(Self {
             config: Arc::new(config),
-            logger: Arc::new(logger),
-            tracer: Arc::new(tracer),
-            metrics_registry: Arc::new(metrics_registry),
+            logger,
+            tracer,
+            metrics_registry,
             capability_checker: None,
         })
     }

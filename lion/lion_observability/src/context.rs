@@ -225,11 +225,11 @@ impl Context {
     /// Set the current context in thread-local storage
     pub fn set_current(context: Option<Self>) {
         if let Some(local) = CURRENT_CONTEXT.get() {
-            let mut guard = local.write();
-            *guard = context;
+            *local.write() = context;
         } else {
-            let local = RwLock::new(context);
-            CURRENT_CONTEXT.set(local);
+            // Initialize with a new RwLock and then get it to set the value
+            let local = CURRENT_CONTEXT.get_or(|| RwLock::new(None));
+            *local.write() = context;
         }
     }
 

@@ -32,10 +32,11 @@ lion_capability = { version = "0.1.0", optional = true, path = "../lion_capabili
 lion_core = { version = "0.1.0", optional = true, path = "../lion_core" }
 
 [features]
-default = ["metrics", "tracing", "logging"]
+default = ["metrics", "tracing", "logging", "serde"]
 metrics = []
 tracing = []
 logging = []
+serde = []
 capability-integration = ["dep:lion_capability", "dep:lion_core"]
 async = ["dep:tokio"]
 

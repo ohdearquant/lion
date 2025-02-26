@@ -11,7 +11,7 @@ use crate::context::{Context, SpanContext};
 use crate::error::ObservabilityError;
 use crate::logging::{LogEvent, LoggerBase};
 use crate::metrics::{Counter, Gauge, Histogram, MetricsRegistry};
-use crate::tracing_system::{Span, SpanStatus, Tracer, TracerBase, TracingEvent};
+use crate::tracing_system::{Span, SpanStatus, TracerBase, TracingEvent};
 use crate::Result;
 
 /// Observability for a specific plugin
@@ -54,7 +54,8 @@ impl PluginObservability {
     /// Start a span with the plugin context
     pub fn start_span(&self, name: impl Into<String>) -> Result<Span> {
         // Create the span
-        let mut span = self.tracer.create_span(name)?;
+        let name_str = name.into();
+        let mut span = self.tracer.create_span_with_name(&name_str)?;
 
         // Add plugin ID as an attribute
         span = span.with_attribute("plugin_id", self.plugin_id.clone())?;
@@ -67,11 +68,25 @@ impl PluginObservability {
     where
         F: FnOnce() -> R,
     {
+        let name_str = name.into();
+
         // Create a context with the plugin ID
         let ctx = Context::new().with_plugin_id(self.plugin_id.clone());
 
-        // Run with this context
-        ctx.with_current(|| self.tracer.with_span(name, f))
+        // Run with this context - implement with_span manually since we can't use the Tracer trait directly
+        ctx.with_current(|| {
+            // Create a new span
+            let mut span = self.tracer.create_span_with_name(&name_str)?;
+
+            // Execute the function
+            let result = f();
+
+            // End the span
+            span.end();
+            self.tracer.record_span(span)?;
+
+            Ok(result)
+        })
     }
 
     /// Create or get a counter
