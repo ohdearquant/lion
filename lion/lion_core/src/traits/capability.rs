@@ -389,6 +389,7 @@ pub enum Constraint {
 }
 
 /// Wraps a capability reference for cloning.
+#[allow(dead_code)]
 struct CapabilityWrapper<'a>(&'a dyn Capability);
 
 impl<'a> Capability for CapabilityWrapper<'a> {
@@ -402,6 +403,7 @@ impl<'a> Capability for CapabilityWrapper<'a> {
 }
 
 /// A helper to implement the default split() without cloning.
+#[allow(dead_code)]
 struct ClonedCapability(Arc<dyn Capability>);
 
 impl Capability for ClonedCapability {
@@ -447,6 +449,7 @@ mod tests {
             Self::new(path, true, false, false)
         }
 
+        #[allow(dead_code)]
         fn write_only(path: impl Into<PathBuf>) -> Self {
             Self::new(path, false, true, false)
         }

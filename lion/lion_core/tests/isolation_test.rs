@@ -34,17 +34,25 @@ impl TestIsolationBackend {
     }
 
     fn set_fail_next(&self, operation: Option<String>) {
-        *self.fail_next_operation.lock().unwrap() = operation;
+        let operation_clone = operation.clone();
+        // Acquire the lock in a separate scope to ensure it's released
+        {
+            let mut fail_op = self.fail_next_operation.lock().unwrap();
+            *fail_op = operation;
+        }
+        println!("Set fail_next_operation to {:?}", operation_clone);
     }
 
     fn should_fail(&self, operation: &str) -> bool {
-        if let Some(fail_op) = &*self.fail_next_operation.lock().unwrap() {
-            if fail_op == operation {
-                *self.fail_next_operation.lock().unwrap() = None;
-                return true;
-            }
+        println!("Checking if operation '{}' should fail", operation);
+        // Acquire the lock and check if the operation should fail
+        let mut fail_op = self.fail_next_operation.lock().unwrap();
+        let should_fail = fail_op.as_ref().map_or(false, |op| op == operation);
+        if should_fail {
+            println!("Operation '{}' set to fail, resetting fail flag", operation);
+            *fail_op = None;
         }
-        false
+        should_fail
     }
 }
 
@@ -467,6 +475,7 @@ fn test_available_functions() {
 
 #[test]
 fn test_isolation_failures() {
+    println!("Starting test_isolation_failures");
     let backend = TestIsolationBackend::new();
     let plugin_id = PluginId::new();
     let module_bytes = vec![1, 2, 3, 4];
@@ -474,6 +483,7 @@ fn test_isolation_failures() {
 
     // Test failure during load
     backend.set_fail_next(Some("load".to_string()));
+    println!("Testing load failure");
     let result = backend.load_plugin(plugin_id, &module_bytes, &config);
     assert!(result.is_err());
     match result {
@@ -482,12 +492,14 @@ fn test_isolation_failures() {
     }
 
     // Successfully load for subsequent tests
+    println!("Loading plugin for subsequent tests");
     backend
         .load_plugin(plugin_id, &module_bytes, &config)
         .unwrap();
 
     // Test failure during call
     backend.set_fail_next(Some("call".to_string()));
+    println!("Testing call failure");
     let result = backend.call_function(&plugin_id, "test", &[]);
     assert!(result.is_err());
     match result {
@@ -497,6 +509,7 @@ fn test_isolation_failures() {
 
     // Test failure during memory region creation
     backend.set_fail_next(Some("create_memory".to_string()));
+    println!("Testing memory region creation failure");
     let result = backend.create_memory_region(1024);
     assert!(result.is_err());
     match result {
@@ -506,10 +519,12 @@ fn test_isolation_failures() {
 
     // Test failure during unload
     backend.set_fail_next(Some("unload".to_string()));
+    println!("Testing unload failure");
     let result = backend.unload_plugin(&plugin_id);
     assert!(result.is_err());
     match result {
         Err(Error::Isolation(IsolationError::LoadFailed(_))) => {}
         _ => panic!("Expected LoadFailed error"),
     }
+    println!("Completed test_isolation_failures");
 }
