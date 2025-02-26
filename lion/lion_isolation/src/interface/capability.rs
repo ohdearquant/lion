@@ -710,7 +710,7 @@ mod tests {
             .memory
             .as_ref()
             .unwrap()
-            .write_string(&mut store, 0, path)
+            .write_string::<HostCallContext>(&mut store, 0, path)
             .unwrap();
 
         // Should succeed for read_file

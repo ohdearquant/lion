@@ -170,9 +170,8 @@ impl WasmMemory {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use crate::wasm::engine::WasmEngine;
-    use crate::wasm::hostcall::HostCallContext;
+    use crate::{wasm::hostcall::HostCallContext, wasm::memory::WasmMemory};
 
     #[test]
     fn test_read_write_memory() {
@@ -189,11 +188,15 @@ mod tests {
         let memory = engine.create_memory(&mut store, 1, None).unwrap();
 
         // Write to memory
-        memory.write(&mut store, 0, b"hello").unwrap();
+        memory
+            .write::<HostCallContext>(&mut store, 0, b"hello")
+            .unwrap();
 
         // Read from memory
         let mut data = [0; 5];
-        memory.read(&store, 0, &mut data).unwrap();
+        memory
+            .read::<HostCallContext>(&store, 0, &mut data)
+            .unwrap();
 
         // Check the data
         assert_eq!(data, *b"hello");
@@ -214,10 +217,12 @@ mod tests {
         let memory = engine.create_memory(&mut store, 1, None).unwrap();
 
         // Write a string to memory
-        memory.write_string(&mut store, 0, "hello").unwrap();
+        memory
+            .write_string::<HostCallContext>(&mut store, 0, "hello")
+            .unwrap();
 
         // Read the string from memory
-        let string = memory.read_string(&store, 0, 5).unwrap();
+        let string = memory.read_string::<HostCallContext>(&store, 0, 5).unwrap();
 
         // Check the string
         assert_eq!(string, "hello");
@@ -239,10 +244,14 @@ mod tests {
 
         // Write a null-terminated string to memory
         let data = b"hello\0world";
-        memory.write(&mut store, 0, data).unwrap();
+        memory
+            .write::<HostCallContext>(&mut store, 0, data)
+            .unwrap();
 
         // Read the null-terminated string from memory
-        let string = memory.read_null_terminated_string(&store, 0).unwrap();
+        let string = memory
+            .read_null_terminated_string::<HostCallContext>(&store, 0)
+            .unwrap();
 
         // Check the string
         assert_eq!(string, "hello");
