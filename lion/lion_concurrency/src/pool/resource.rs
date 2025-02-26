@@ -91,6 +91,7 @@ pub struct ResourceHandle<R: Resource> {
 
 impl<R: Resource> ResourceHandle<R> {
     /// Create a new resource handle
+    #[allow(dead_code)]
     fn new(resource: R, pool: Arc<ResourcePool<R>>) -> Self {
         Self {
             resource: Some(resource),
@@ -253,17 +254,16 @@ impl<R: Resource> ResourcePool<R> {
     }
 
     /// Acquire a resource from the pool with the default timeout
-    pub fn acquire(&self) -> Result<ResourceHandle<R>, ResourcePoolError> {
+    pub fn acquire(self: &Arc<Self>) -> Result<ResourceHandle<R>, ResourcePoolError> {
         self.acquire_with_timeout(self.config.acquire_timeout)
     }
 
     /// Acquire a resource with a specified timeout
     pub fn acquire_with_timeout(
-        &self,
+        self: &Arc<Self>,
         timeout: Duration,
     ) -> Result<ResourceHandle<R>, ResourcePoolError> {
         let start_time = Instant::now();
-        let self_arc = Arc::new(self);
 
         // Check if the pool is shut down
         if *self.shutdown.lock().unwrap() {
@@ -275,7 +275,7 @@ impl<R: Resource> ResourcePool<R> {
             if let Some(resource) = self.get_resource() {
                 return Ok(ResourceHandle {
                     resource: Some(resource),
-                    pool: Arc::downgrade(&self_arc),
+                    pool: Arc::downgrade(&self),
                     acquired_at: Instant::now(),
                 });
             }
@@ -289,7 +289,7 @@ impl<R: Resource> ResourcePool<R> {
                         *self.size.lock().unwrap() += 1;
                         return Ok(ResourceHandle {
                             resource: Some(resource),
-                            pool: Arc::downgrade(&self_arc),
+                            pool: Arc::downgrade(&self),
                             acquired_at: Instant::now(),
                         });
                     }
@@ -308,19 +308,17 @@ impl<R: Resource> ResourcePool<R> {
     }
 
     /// Try to acquire a resource without waiting
-    pub fn try_acquire(&self) -> Result<ResourceHandle<R>, ResourcePoolError> {
+    pub fn try_acquire(self: &Arc<Self>) -> Result<ResourceHandle<R>, ResourcePoolError> {
         // Check if the pool is shut down
         if *self.shutdown.lock().unwrap() {
             return Err(ResourcePoolError::PoolShutdown);
         }
 
-        let self_arc = Arc::new(self);
-
         // Try to get a resource
         if let Some(resource) = self.get_resource() {
             return Ok(ResourceHandle {
                 resource: Some(resource),
-                pool: Arc::downgrade(&self_arc),
+                pool: Arc::downgrade(&self),
                 acquired_at: Instant::now(),
             });
         }
@@ -334,7 +332,7 @@ impl<R: Resource> ResourcePool<R> {
                     *self.size.lock().unwrap() += 1;
                     return Ok(ResourceHandle {
                         resource: Some(resource),
-                        pool: Arc::downgrade(&self_arc),
+                        pool: Arc::downgrade(&self),
                         acquired_at: Instant::now(),
                     });
                 }
@@ -350,6 +348,12 @@ impl<R: Resource> ResourcePool<R> {
 
     /// Get a resource from the pool, performing cleanup as needed
     fn get_resource(&self) -> Option<R> {
+        // Check if the pool is shut down first, before acquiring any locks
+        if *self.shutdown.lock().unwrap() {
+            trace!("Pool is shut down, no resources available");
+            return None;
+        }
+
         let mut resources = self.resources.lock().unwrap();
 
         while let Some(mut pooled) = resources.pop_front() {
@@ -389,45 +393,54 @@ impl<R: Resource> ResourcePool<R> {
     /// Return a resource to the pool
     fn return_resource(&self, resource: R) {
         if *self.shutdown.lock().unwrap() {
-            // Pool is shut down, close the resource
+            // Pool is shut down, close the resource immediately
+            // without trying to acquire any other locks
             let mut res = resource;
             res.close();
             return;
         }
 
-        let mut resources = self.resources.lock().unwrap();
+        // Use a block to ensure locks are released in the right order
+        {
+            let mut resources = self.resources.lock().unwrap();
 
-        // Check if the resource is valid
-        if !resource.is_valid() {
-            trace!("Returned resource is invalid, discarding");
-            let mut res = resource;
-            res.close();
-            *self.size.lock().unwrap() -= 1;
-            return;
+            // Check if the resource is valid
+            if !resource.is_valid() {
+                trace!("Returned resource is invalid, discarding");
+                let mut res = resource;
+                res.close();
+                *self.size.lock().unwrap() -= 1;
+                return;
+            }
+
+            // Add the resource back to the pool
+            resources.push_back(PooledResource::new(resource));
         }
-
-        // Add the resource back to the pool
-        resources.push_back(PooledResource::new(resource));
     }
 
     /// Shut down the pool, closing all resources
     pub fn shutdown(&self) {
-        info!("Shutting down resource pool");
+        info!("Shutting down resource pool...");
 
-        // Wait a bit to ensure all resources are returned
-        std::thread::sleep(Duration::from_millis(50));
-
-        // Mark the pool as shut down
+        // First mark the pool as shut down to prevent new acquisitions
+        // and to signal to ResourceHandle::drop that they should close resources
         *self.shutdown.lock().unwrap() = true;
 
-        // Close all resources
-        let mut resources = self.resources.lock().unwrap();
-        while let Some(mut pooled) = resources.pop_front() {
-            pooled.resource.close();
-            *self.size.lock().unwrap() -= 1;
+        // Wait a bit to ensure in-flight resource returns complete
+        std::thread::sleep(Duration::from_millis(50));
+
+        // Now close all resources that are in the pool
+        {
+            let mut resources = self.resources.lock().unwrap();
+            let mut size = self.size.lock().unwrap();
+
+            while let Some(mut pooled) = resources.pop_front() {
+                pooled.resource.close();
+                *size -= 1;
+            }
         }
 
-        info!("Resource pool shutdown complete");
+        info!("Resource pool shutdown complete.");
     }
 
     /// Get the current number of available resources
@@ -633,6 +646,7 @@ mod tests {
 
     #[test]
     fn test_resource_pool_shutdown() {
+        println!("Starting test_resource_pool_shutdown");
         let config = ResourcePoolConfig::default();
         let pool = ResourcePool::<TestResource>::new(config);
 
@@ -640,22 +654,31 @@ mod tests {
         std::thread::sleep(Duration::from_millis(50));
 
         // Get some resources
-        let handle1 = pool.acquire().unwrap();
-        let handle2 = pool.acquire().unwrap();
+        {
+            println!("Acquiring resources");
+            let handle1 = pool.acquire().unwrap();
+            let handle2 = pool.acquire().unwrap();
 
+            println!("Resources acquired, dropping handles");
+            // Explicitly drop handles in this scope
+            drop(handle1);
+            drop(handle2);
+
+            // Add a longer delay to ensure resources are properly processed
+            println!("Waiting for resources to be returned to pool");
+            std::thread::sleep(Duration::from_millis(100));
+        }
+
+        println!("Calling pool.shutdown()");
         // Shutdown the pool
         pool.shutdown();
 
+        println!("Testing acquire after shutdown");
         // Try to acquire after shutdown
         let result = pool.acquire();
         assert!(matches!(result, Err(ResourcePoolError::PoolShutdown)));
 
-        // Return resources after shutdown
-        drop(handle1);
-        drop(handle2);
-
-        // Add a small delay to ensure resources are properly processed
-        std::thread::sleep(Duration::from_millis(50));
+        println!("Checking final pool state");
 
         // All resources should be closed
         assert_eq!(pool.total_count(), 0);
