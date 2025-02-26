@@ -10,12 +10,12 @@ use std::str::FromStr;
 
 use lion_core::error::{CapabilityError, Error, Result};
 use lion_core::id::{CapabilityId, NodeId, PluginId, WorkflowId};
-use lion_core::traits::Capability;
+use lion_core::traits::{capability::Constraint, Capability};
 use lion_core::types::{
     AccessRequest, ErrorPolicy, ExecutionOptions, MemoryRegion, MemoryRegionType, NodeType,
     PluginConfig, PluginMetadata, PluginState, ResourceUsage, Workflow, WorkflowNode,
 };
-use lion_core::utils::{Config, ConfigValue, LogLevel, Version};
+use lion_core::utils::{config::Config, ConfigValue, LogLevel, Version};
 use lion_core::{check_capability, log_event, with_capability};
 
 /// A test file capability implementation.
@@ -54,7 +54,7 @@ impl Capability for FileCapability {
         "file"
     }
 
-    fn permits(&self, request: &AccessRequest) -> Result<(), CapabilityError> {
+    fn permits(&self, request: &AccessRequest) -> Result<()> {
         match request {
             AccessRequest::File {
                 path,
@@ -64,44 +64,43 @@ impl Capability for FileCapability {
             } => {
                 // Check if the path is within our capability's path
                 if !path.starts_with(&self.path) {
-                    return Err(CapabilityError::PermissionDenied(format!(
-                        "Path {} is not within allowed path {}",
-                        path.display(),
-                        self.path.display()
+                    return Err(Error::Capability(CapabilityError::PermissionDenied(
+                        format!(
+                            "Path {} is not within allowed path {}",
+                            path.display(),
+                            self.path.display()
+                        ),
                     )));
                 }
 
                 // Check if the requested operations are allowed
                 if *read && !self.read {
-                    return Err(CapabilityError::PermissionDenied("Read not allowed".into()));
+                    return Err(Error::Capability(CapabilityError::PermissionDenied(
+                        "Read not allowed".into(),
+                    )));
                 }
 
                 if *write && !self.write {
-                    return Err(CapabilityError::PermissionDenied(
+                    return Err(Error::Capability(CapabilityError::PermissionDenied(
                         "Write not allowed".into(),
-                    ));
+                    )));
                 }
 
                 if *execute && !self.execute {
-                    return Err(CapabilityError::PermissionDenied(
+                    return Err(Error::Capability(CapabilityError::PermissionDenied(
                         "Execute not allowed".into(),
-                    ));
+                    )));
                 }
 
                 Ok(())
             }
-            _ => Err(CapabilityError::PermissionDenied(
+            _ => Err(Error::Capability(CapabilityError::PermissionDenied(
                 "File capability only permits file access".into(),
-            )),
+            ))),
         }
     }
 
-    fn constrain(
-        &self,
-        constraints: &[lion_core::traits::Constraint],
-    ) -> Result<Box<dyn Capability>, CapabilityError> {
-        use lion_core::traits::Constraint;
-
+    fn constrain(&self, constraints: &[Constraint]) -> Result<Box<dyn Capability>> {
         let mut new_cap = FileCapability {
             path: self.path.clone(),
             read: self.read,
@@ -115,10 +114,12 @@ impl Capability for FileCapability {
                     let new_path = PathBuf::from(path);
                     // Ensure new path is within the original path
                     if !new_path.starts_with(&self.path) {
-                        return Err(CapabilityError::ConstraintError(format!(
-                            "New path {} is not within original path {}",
-                            new_path.display(),
-                            self.path.display()
+                        return Err(Error::Capability(CapabilityError::ConstraintError(
+                            format!(
+                                "New path {} is not within original path {}",
+                                new_path.display(),
+                                self.path.display()
+                            ),
                         )));
                     }
                     new_cap.path = new_path;
@@ -134,9 +135,9 @@ impl Capability for FileCapability {
                     new_cap.execute = self.execute && *execute;
                 }
                 _ => {
-                    return Err(CapabilityError::ConstraintError(
+                    return Err(Error::Capability(CapabilityError::ConstraintError(
                         "Unsupported constraint for file capability".into(),
-                    ))
+                    )))
                 }
             }
         }
@@ -177,7 +178,7 @@ impl Capability for NetworkCapability {
         "network"
     }
 
-    fn permits(&self, request: &AccessRequest) -> Result<(), CapabilityError> {
+    fn permits(&self, request: &AccessRequest) -> Result<()> {
         match request {
             AccessRequest::Network {
                 host,
@@ -187,38 +188,39 @@ impl Capability for NetworkCapability {
             } => {
                 // Check if the host is allowed
                 if self.host != "*" && self.host != *host {
-                    return Err(CapabilityError::PermissionDenied(format!(
-                        "Host {} is not allowed",
-                        host
+                    return Err(Error::Capability(CapabilityError::PermissionDenied(
+                        format!("Host {} is not allowed", host),
                     )));
                 }
 
                 // Check if the port is in range
                 if *port < self.port_range.0 || *port > self.port_range.1 {
-                    return Err(CapabilityError::PermissionDenied(format!(
-                        "Port {} is not in allowed range {}-{}",
-                        port, self.port_range.0, self.port_range.1
+                    return Err(Error::Capability(CapabilityError::PermissionDenied(
+                        format!(
+                            "Port {} is not in allowed range {}-{}",
+                            port, self.port_range.0, self.port_range.1
+                        ),
                     )));
                 }
 
                 // Check if the operation is allowed
                 if *connect && !self.connect {
-                    return Err(CapabilityError::PermissionDenied(
+                    return Err(Error::Capability(CapabilityError::PermissionDenied(
                         "Connect not allowed".into(),
-                    ));
+                    )));
                 }
 
                 if *listen && !self.listen {
-                    return Err(CapabilityError::PermissionDenied(
+                    return Err(Error::Capability(CapabilityError::PermissionDenied(
                         "Listen not allowed".into(),
-                    ));
+                    )));
                 }
 
                 Ok(())
             }
-            _ => Err(CapabilityError::PermissionDenied(
+            _ => Err(Error::Capability(CapabilityError::PermissionDenied(
                 "Network capability only permits network access".into(),
-            )),
+            ))),
         }
     }
 }
@@ -262,10 +264,10 @@ fn test_capability_integration() {
     assert!(result.is_err());
 
     // Test the with_capability macro
-    let result = with_capability!(read_cap, &read_request, { Ok(42) });
+    let result: Result<i32> = with_capability!(read_cap, &read_request, { Ok(42) });
     assert_eq!(result.unwrap(), 42);
 
-    let result = with_capability!(read_cap, &write_request, { Ok(42) });
+    let result: Result<i32> = with_capability!(read_cap, &write_request, { Ok(42) });
     assert!(result.is_err());
 
     // Test network capabilities
@@ -282,8 +284,6 @@ fn test_capability_integration() {
     assert!(inbound_cap.permits(&inbound_request).is_ok());
 
     // Test capability constraints
-    use lion_core::traits::Constraint;
-
     let tmp_cap = FileCapability::read_write("/tmp");
     let constraints = [
         Constraint::FilePath("/tmp/specific".into()),
@@ -328,8 +328,9 @@ fn test_workflow_integration() {
 
     let mut node3 =
         WorkflowNode::new_plugin_call("Visualize Results", "visualizer", "create_chart");
+    let node3_id = node3.id;
     node3.add_dependency(node2_id);
-    workflow.add_node(node3);
+    workflow.add_node(node3.clone());
 
     // Validate the workflow
     assert!(workflow.validate().is_ok());
@@ -343,15 +344,15 @@ fn test_workflow_integration() {
     // Test node dependencies
     let dependents = workflow.get_dependents(&node2_id);
     assert_eq!(dependents.len(), 1);
-    assert_eq!(dependents[0].id, node3.id);
+    assert_eq!(dependents[0].id, node3_id);
 
     // Add a cyclic dependency to create an invalid workflow
     let mut invalid_workflow = workflow.clone();
-    let node3 = invalid_workflow.get_node_mut(&node3.id).unwrap();
+    let node3_id = node3.id;
 
     // Make node2 depend on node3, creating a cycle: node2 -> node3 -> node2
     let mut node2 = invalid_workflow.get_node_mut(&node2_id).unwrap();
-    node2.add_dependency(node3.id);
+    node2.add_dependency(node3_id);
 
     // Validate should fail due to the cycle
     assert!(invalid_workflow.validate().is_err());
@@ -509,9 +510,9 @@ fn test_utils_integration() {
 
     // Test config utils
     let mut config_value = ConfigValue::Map(HashMap::new());
-    config_value.set("name", "Lion").unwrap();
-    config_value.set("version", "1.0.0").unwrap();
-    config_value.set("debug", true).unwrap();
+    config_value.set("name", "Lion");
+    config_value.set("version", "1.0.0");
+    config_value.set("debug", true);
 
     assert_eq!(config_value.get("name").unwrap().as_str(), Some("Lion"));
     assert_eq!(config_value.get("version").unwrap().as_str(), Some("1.0.0"));
@@ -524,7 +525,7 @@ fn test_error_hierarchy() {
     let capability_error = CapabilityError::PermissionDenied("Access denied".to_string());
     let error: Error = capability_error.into();
 
-    match error {
+    match &error {
         Error::Capability(e) => match e {
             CapabilityError::PermissionDenied(msg) => assert_eq!(msg, "Access denied"),
             _ => panic!("Expected PermissionDenied error"),

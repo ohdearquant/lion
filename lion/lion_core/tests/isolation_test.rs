@@ -8,7 +8,8 @@ use std::sync::{Arc, Mutex};
 
 use lion_core::error::{Error, IsolationError, Result};
 use lion_core::id::{PluginId, RegionId};
-use lion_core::traits::{IsolationBackend, ResourceLimitType};
+use lion_core::traits::isolation::ResourceLimitType;
+use lion_core::traits::IsolationBackend;
 use lion_core::types::{MemoryRegion, MemoryRegionType, PluginConfig, PluginState};
 
 /// A test implementation of IsolationBackend that tracks operations and
