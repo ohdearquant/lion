@@ -1,19 +1,19 @@
 //! Version utilities.
-//! 
+//!
 //! This module provides utilities for working with version numbers.
 //! It defines a version type that follows semantic versioning.
 
+use serde::{Deserialize, Serialize};
+use std::cmp::Ordering;
 use std::fmt;
 use std::str::FromStr;
-use std::cmp::Ordering;
-use serde::{Serialize, Deserialize};
 
 /// Error parsing a version string.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct VersionParseError {
     /// The invalid version string.
     pub version: String,
-    
+
     /// The reason for the error.
     pub reason: String,
 }
@@ -34,16 +34,16 @@ impl std::error::Error for VersionParseError {}
 pub struct Version {
     /// Major version number.
     pub major: u32,
-    
+
     /// Minor version number.
     pub minor: u32,
-    
+
     /// Patch version number.
     pub patch: u32,
-    
+
     /// Prerelease identifiers.
     pub prerelease: Option<String>,
-    
+
     /// Build metadata.
     pub build: Option<String>,
 }
@@ -69,7 +69,7 @@ impl Version {
             build: None,
         }
     }
-    
+
     /// Add prerelease identifiers to this version.
     ///
     /// # Arguments
@@ -83,7 +83,7 @@ impl Version {
         self.prerelease = Some(prerelease.into());
         self
     }
-    
+
     /// Add build metadata to this version.
     ///
     /// # Arguments
@@ -97,7 +97,7 @@ impl Version {
         self.build = Some(build.into());
         self
     }
-    
+
     /// Check if this version is a prerelease version.
     ///
     /// # Returns
@@ -106,7 +106,7 @@ impl Version {
     pub fn is_prerelease(&self) -> bool {
         self.prerelease.is_some()
     }
-    
+
     /// Check if this version is compatible with the given version
     /// (according to semantic versioning).
     ///
@@ -131,7 +131,7 @@ impl Version {
             self.major == other.major && self <= other
         }
     }
-    
+
     /// Create a new compatible version by incrementing the minor version.
     ///
     /// # Returns
@@ -146,7 +146,7 @@ impl Version {
             build: None,
         }
     }
-    
+
     /// Create a new compatible version by incrementing the patch version.
     ///
     /// # Returns
@@ -161,7 +161,7 @@ impl Version {
             build: None,
         }
     }
-    
+
     /// Create a new incompatible version by incrementing the major version.
     ///
     /// # Returns
@@ -191,17 +191,17 @@ impl Ord for Version {
             Ordering::Equal => {}
             ordering => return ordering,
         }
-        
+
         match self.minor.cmp(&other.minor) {
             Ordering::Equal => {}
             ordering => return ordering,
         }
-        
+
         match self.patch.cmp(&other.patch) {
             Ordering::Equal => {}
             ordering => return ordering,
         }
-        
+
         // Compare prerelease
         match (&self.prerelease, &other.prerelease) {
             (None, Some(_)) => return Ordering::Greater,
@@ -211,12 +211,12 @@ impl Ord for Version {
                 // Compare prerelease identifiers
                 let a_parts: Vec<&str> = a.split('.').collect();
                 let b_parts: Vec<&str> = b.split('.').collect();
-                
+
                 for (a_part, b_part) in a_parts.iter().zip(b_parts.iter()) {
                     // Numeric identifiers always have lower precedence than non-numeric identifiers
                     let a_is_numeric = a_part.chars().all(char::is_numeric);
                     let b_is_numeric = b_part.chars().all(char::is_numeric);
-                    
+
                     match (a_is_numeric, b_is_numeric) {
                         (true, true) => {
                             // Both are numeric, compare as numbers
@@ -238,7 +238,7 @@ impl Ord for Version {
                         }
                     }
                 }
-                
+
                 // If we get here, the common parts are equal, so the longer one is greater
                 return a_parts.len().cmp(&b_parts.len());
             }
@@ -249,88 +249,91 @@ impl Ord for Version {
 impl fmt::Display for Version {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}.{}.{}", self.major, self.minor, self.patch)?;
-        
+
         if let Some(prerelease) = &self.prerelease {
             write!(f, "-{}", prerelease)?;
         }
-        
+
         if let Some(build) = &self.build {
             write!(f, "+{}", build)?;
         }
-        
+
         Ok(())
     }
 }
 
 impl FromStr for Version {
     type Err = VersionParseError;
-    
+
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let error = |reason: &str| VersionParseError {
             version: s.to_string(),
             reason: reason.to_string(),
         };
-        
+
         // Split into version, prerelease, and build parts
         let mut parts = s.splitn(2, '+');
         let version_and_prerelease = parts.next().unwrap();
         let build = parts.next().map(|s| s.to_string());
-        
+
         let mut parts = version_and_prerelease.splitn(2, '-');
         let version = parts.next().unwrap();
         let prerelease = parts.next().map(|s| s.to_string());
-        
+
         // Parse version parts
         let mut parts = version.splitn(3, '.');
-        
-        let major = parts.next()
+
+        let major = parts
+            .next()
             .ok_or_else(|| error("Missing major version"))?
             .parse()
             .map_err(|_| error("Invalid major version"))?;
-        
-        let minor = parts.next()
+
+        let minor = parts
+            .next()
             .ok_or_else(|| error("Missing minor version"))?
             .parse()
             .map_err(|_| error("Invalid minor version"))?;
-        
-        let patch = parts.next()
+
+        let patch = parts
+            .next()
             .ok_or_else(|| error("Missing patch version"))?
             .parse()
             .map_err(|_| error("Invalid patch version"))?;
-        
+
         // Validate prerelease and build metadata
         if let Some(prerelease) = &prerelease {
             if prerelease.is_empty() {
                 return Err(error("Empty prerelease identifier"));
             }
-            
+
             for part in prerelease.split('.') {
                 if part.is_empty() {
                     return Err(error("Empty prerelease identifier"));
                 }
-                
+
                 if !part.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
                     return Err(error("Invalid prerelease identifier"));
                 }
             }
         }
-        
+
         if let Some(build) = &build {
             if build.is_empty() {
                 return Err(error("Empty build metadata"));
             }
-            
+
             for part in build.split('.') {
                 if part.is_empty() {
                     return Err(error("Empty build metadata"));
                 }
-                
+
                 if !part.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
                     return Err(error("Invalid build metadata"));
                 }
             }
         }
-        
+
         Ok(Self {
             major,
             minor,
@@ -344,7 +347,7 @@ impl FromStr for Version {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_version_parsing() {
         // Test basic version
@@ -354,7 +357,7 @@ mod tests {
         assert_eq!(version.patch, 3);
         assert_eq!(version.prerelease, None);
         assert_eq!(version.build, None);
-        
+
         // Test version with prerelease
         let version = Version::from_str("1.2.3-alpha.1").unwrap();
         assert_eq!(version.major, 1);
@@ -362,7 +365,7 @@ mod tests {
         assert_eq!(version.patch, 3);
         assert_eq!(version.prerelease, Some("alpha.1".to_string()));
         assert_eq!(version.build, None);
-        
+
         // Test version with build metadata
         let version = Version::from_str("1.2.3+build.456").unwrap();
         assert_eq!(version.major, 1);
@@ -370,7 +373,7 @@ mod tests {
         assert_eq!(version.patch, 3);
         assert_eq!(version.prerelease, None);
         assert_eq!(version.build, Some("build.456".to_string()));
-        
+
         // Test version with prerelease and build metadata
         let version = Version::from_str("1.2.3-alpha.1+build.456").unwrap();
         assert_eq!(version.major, 1);
@@ -378,7 +381,7 @@ mod tests {
         assert_eq!(version.patch, 3);
         assert_eq!(version.prerelease, Some("alpha.1".to_string()));
         assert_eq!(version.build, Some("build.456".to_string()));
-        
+
         // Test invalid versions
         assert!(Version::from_str("").is_err());
         assert!(Version::from_str("1").is_err());
@@ -388,12 +391,18 @@ mod tests {
         assert!(Version::from_str("1.2.3-").is_err());
         assert!(Version::from_str("1.2.3+").is_err());
     }
-    
+
     #[test]
     fn test_version_display() {
         assert_eq!(Version::new(1, 2, 3).to_string(), "1.2.3");
-        assert_eq!(Version::new(1, 2, 3).with_prerelease("alpha.1").to_string(), "1.2.3-alpha.1");
-        assert_eq!(Version::new(1, 2, 3).with_build("build.456").to_string(), "1.2.3+build.456");
+        assert_eq!(
+            Version::new(1, 2, 3).with_prerelease("alpha.1").to_string(),
+            "1.2.3-alpha.1"
+        );
+        assert_eq!(
+            Version::new(1, 2, 3).with_build("build.456").to_string(),
+            "1.2.3+build.456"
+        );
         assert_eq!(
             Version::new(1, 2, 3)
                 .with_prerelease("alpha.1")
@@ -402,56 +411,56 @@ mod tests {
             "1.2.3-alpha.1+build.456"
         );
     }
-    
+
     #[test]
     fn test_version_comparison() {
         // Basic version comparison
         assert!(Version::new(1, 2, 3) < Version::new(1, 2, 4));
         assert!(Version::new(1, 2, 3) < Version::new(1, 3, 0));
         assert!(Version::new(1, 2, 3) < Version::new(2, 0, 0));
-        
+
         // Prerelease is less than non-prerelease
         assert!(Version::new(1, 2, 3).with_prerelease("alpha") < Version::new(1, 2, 3));
-        
+
         // Prerelease comparison
         assert!(
             Version::new(1, 2, 3).with_prerelease("alpha")
                 < Version::new(1, 2, 3).with_prerelease("beta")
         );
-        
+
         assert!(
             Version::new(1, 2, 3).with_prerelease("alpha.1")
                 < Version::new(1, 2, 3).with_prerelease("alpha.2")
         );
-        
+
         assert!(
             Version::new(1, 2, 3).with_prerelease("alpha.1")
                 < Version::new(1, 2, 3).with_prerelease("alpha.1.1")
         );
-        
+
         // Numeric vs non-numeric prerelease identifiers
         assert!(
             Version::new(1, 2, 3).with_prerelease("1")
                 < Version::new(1, 2, 3).with_prerelease("alpha")
         );
-        
+
         assert!(
             Version::new(1, 2, 3).with_prerelease("alpha.1")
                 < Version::new(1, 2, 3).with_prerelease("alpha.beta")
         );
-        
+
         // Build metadata is ignored in comparison
         assert_eq!(
             Version::new(1, 2, 3),
             Version::new(1, 2, 3).with_build("build.1")
         );
-        
+
         assert_eq!(
             Version::new(1, 2, 3).with_build("build.1"),
             Version::new(1, 2, 3).with_build("build.2")
         );
     }
-    
+
     #[test]
     fn test_version_compatibility() {
         // 1.2.3 is compatible with 1.2.3, 1.2.4, 1.3.0, but not 2.0.0 or 1.1.0
@@ -461,7 +470,7 @@ mod tests {
         assert!(v1_2_3.is_compatible_with(&Version::new(1, 3, 0)));
         assert!(!v1_2_3.is_compatible_with(&Version::new(2, 0, 0)));
         assert!(!v1_2_3.is_compatible_with(&Version::new(1, 1, 0)));
-        
+
         // 0.1.2 is compatible with 0.1.2, 0.1.3, but not 0.2.0 or 1.0.0
         let v0_1_2 = Version::new(0, 1, 2);
         assert!(v0_1_2.is_compatible_with(&Version::new(0, 1, 2)));
@@ -469,38 +478,38 @@ mod tests {
         assert!(!v0_1_2.is_compatible_with(&Version::new(0, 2, 0)));
         assert!(!v0_1_2.is_compatible_with(&Version::new(1, 0, 0)));
     }
-    
+
     #[test]
     fn test_version_increment() {
         // Increment patch
         let v1_2_3 = Version::new(1, 2, 3);
         let v1_2_4 = v1_2_3.increment_patch();
         assert_eq!(v1_2_4, Version::new(1, 2, 4));
-        
+
         // Increment minor
         let v1_3_0 = v1_2_3.increment_minor();
         assert_eq!(v1_3_0, Version::new(1, 3, 0));
-        
+
         // Increment major
         let v2_0_0 = v1_2_3.increment_major();
         assert_eq!(v2_0_0, Version::new(2, 0, 0));
-        
+
         // Prerelease and build metadata are dropped
         let v1_2_3_alpha = v1_2_3.with_prerelease("alpha").with_build("build.1");
         assert_eq!(v1_2_3_alpha.increment_patch(), Version::new(1, 2, 4));
         assert_eq!(v1_2_3_alpha.increment_minor(), Version::new(1, 3, 0));
         assert_eq!(v1_2_3_alpha.increment_major(), Version::new(2, 0, 0));
     }
-    
+
     #[test]
     fn test_version_serialization() {
         let version = Version::new(1, 2, 3)
             .with_prerelease("alpha.1")
             .with_build("build.456");
-        
+
         let serialized = serde_json::to_string(&version).unwrap();
         let deserialized: Version = serde_json::from_str(&serialized).unwrap();
-        
+
         assert_eq!(version, deserialized);
     }
 }

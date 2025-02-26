@@ -1,16 +1,16 @@
 //! Plugin-related data types.
-//! 
+//!
 //! This module defines data structures for plugin configuration, metadata,
 //! state, and resource usage. These types are used throughout the system
 //! to manage plugins, their lifecycle, and their resources.
-//! 
+//!
 //! The plugin lifecycle is based on the "Concurrent Plugin Lifecycle Management
 //! in Capability-Secured Microkernels" research.
 
-use std::fmt;
-use std::collections::HashMap;
-use serde::{Serialize, Deserialize};
 use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::fmt;
 
 use crate::id::PluginId;
 
@@ -22,13 +22,13 @@ use crate::id::PluginId;
 pub enum PluginType {
     /// WebAssembly plugin, run in a WebAssembly VM.
     Wasm,
-    
+
     /// Native plugin (shared library), run in the host process.
     Native,
-    
+
     /// JavaScript plugin, run in a JavaScript VM.
     JavaScript,
-    
+
     /// Remote plugin (in another process or node).
     Remote,
 }
@@ -52,22 +52,22 @@ impl fmt::Display for PluginType {
 pub enum PluginState {
     /// Plugin is created but not yet initialized.
     Created,
-    
+
     /// Plugin is initialized and ready to run.
     Ready,
-    
+
     /// Plugin is actively running.
     Running,
-    
+
     /// Plugin is paused.
     Paused,
-    
+
     /// Plugin has failed.
     Failed,
-    
+
     /// Plugin has been terminated.
     Terminated,
-    
+
     /// Plugin is upgrading (hot reload).
     Upgrading,
 }
@@ -93,9 +93,12 @@ impl PluginState {
     ///
     /// `true` if the plugin is active, `false` otherwise.
     pub fn is_active(&self) -> bool {
-        matches!(self, Self::Ready | Self::Running | Self::Paused | Self::Upgrading)
+        matches!(
+            self,
+            Self::Ready | Self::Running | Self::Paused | Self::Upgrading
+        )
     }
-    
+
     /// Check if this state allows function calls.
     ///
     /// # Returns
@@ -104,7 +107,7 @@ impl PluginState {
     pub fn allows_calls(&self) -> bool {
         matches!(self, Self::Running)
     }
-    
+
     /// Check if this state allows state transitions.
     ///
     /// # Returns
@@ -113,7 +116,7 @@ impl PluginState {
     pub fn allows_transitions(&self) -> bool {
         !matches!(self, Self::Terminated | Self::Failed)
     }
-    
+
     /// Get the valid next states from this state.
     ///
     /// # Returns
@@ -123,14 +126,20 @@ impl PluginState {
         match self {
             Self::Created => vec![Self::Ready, Self::Failed, Self::Terminated],
             Self::Ready => vec![Self::Running, Self::Failed, Self::Terminated],
-            Self::Running => vec![Self::Paused, Self::Ready, Self::Failed, Self::Terminated, Self::Upgrading],
+            Self::Running => vec![
+                Self::Paused,
+                Self::Ready,
+                Self::Failed,
+                Self::Terminated,
+                Self::Upgrading,
+            ],
             Self::Paused => vec![Self::Running, Self::Ready, Self::Failed, Self::Terminated],
             Self::Failed => vec![Self::Terminated],
             Self::Terminated => vec![],
             Self::Upgrading => vec![Self::Ready, Self::Failed, Self::Terminated],
         }
     }
-    
+
     /// Check if a transition to the given state is valid.
     ///
     /// # Arguments
@@ -153,25 +162,25 @@ impl PluginState {
 pub struct PluginConfig {
     /// Maximum memory usage in bytes.
     pub max_memory_bytes: Option<usize>,
-    
+
     /// Maximum CPU time in microseconds.
     pub max_cpu_time_us: Option<u64>,
-    
+
     /// Function call timeout in milliseconds.
     pub function_timeout_ms: Option<u64>,
-    
+
     /// Maximum number of instances to keep ready.
     pub max_instances: Option<usize>,
-    
+
     /// Minimum number of instances to keep ready.
     pub min_instances: Option<usize>,
-    
+
     /// Whether to enable hot reloading.
     pub enable_hot_reload: Option<bool>,
-    
+
     /// Whether to enable debug features.
     pub enable_debug: Option<bool>,
-    
+
     /// Additional configuration options as a JSON object.
     pub options: serde_json::Value,
 }
@@ -200,7 +209,7 @@ impl PluginConfig {
     pub fn new() -> Self {
         Self::default()
     }
-    
+
     /// Create a new minimal plugin configuration.
     ///
     /// This configuration has lower resource limits than the default,
@@ -221,7 +230,7 @@ impl PluginConfig {
             options: serde_json::Value::Object(serde_json::Map::new()),
         }
     }
-    
+
     /// Get an option from the options object.
     ///
     /// # Arguments
@@ -239,7 +248,7 @@ impl PluginConfig {
         }
         None
     }
-    
+
     /// Set an option in the options object.
     ///
     /// # Arguments
@@ -256,7 +265,7 @@ impl PluginConfig {
                 Ok(json_value) => {
                     map.insert(key.to_string(), json_value);
                     true
-                },
+                }
                 Err(_) => false,
             }
         } else {
@@ -273,28 +282,28 @@ impl PluginConfig {
 pub struct PluginMetadata {
     /// Plugin ID.
     pub id: PluginId,
-    
+
     /// Human-readable name.
     pub name: String,
-    
+
     /// Version string.
     pub version: String,
-    
+
     /// Description of the plugin.
     pub description: String,
-    
+
     /// Plugin type.
     pub plugin_type: PluginType,
-    
+
     /// Current state.
     pub state: PluginState,
-    
+
     /// When the plugin was created.
     pub created_at: DateTime<Utc>,
-    
+
     /// When the plugin was last updated.
     pub updated_at: DateTime<Utc>,
-    
+
     /// Available functions.
     pub functions: Vec<String>,
 }
@@ -331,7 +340,7 @@ impl PluginMetadata {
             functions: Vec::new(),
         }
     }
-    
+
     /// Update the plugin state.
     ///
     /// # Arguments
@@ -350,7 +359,7 @@ impl PluginMetadata {
             false
         }
     }
-    
+
     /// Add a function to the list of available functions.
     ///
     /// # Arguments
@@ -360,7 +369,7 @@ impl PluginMetadata {
         self.functions.push(function.into());
         self.updated_at = Utc::now();
     }
-    
+
     /// Set the list of available functions.
     ///
     /// # Arguments
@@ -380,28 +389,28 @@ impl PluginMetadata {
 pub struct ResourceUsage {
     /// Memory usage in bytes.
     pub memory_bytes: usize,
-    
+
     /// CPU time used in microseconds.
     pub cpu_time_us: u64,
-    
+
     /// Number of function calls executed.
     pub function_calls: u64,
-    
+
     /// Number of instances currently active.
     pub active_instances: usize,
-    
+
     /// Peak memory usage in bytes.
     pub peak_memory_bytes: usize,
-    
+
     /// Peak CPU time in microseconds.
     pub peak_cpu_time_us: u64,
-    
+
     /// Average function call duration in microseconds.
     pub avg_function_call_us: u64,
-    
+
     /// Custom metrics.
     pub custom_metrics: HashMap<String, f64>,
-    
+
     /// When resource usage was last updated.
     pub last_updated: DateTime<Utc>,
 }
@@ -418,7 +427,7 @@ impl ResourceUsage {
             ..Default::default()
         }
     }
-    
+
     /// Update memory usage.
     ///
     /// # Arguments
@@ -429,7 +438,7 @@ impl ResourceUsage {
         self.peak_memory_bytes = self.peak_memory_bytes.max(memory_bytes);
         self.last_updated = Utc::now();
     }
-    
+
     /// Update CPU time.
     ///
     /// # Arguments
@@ -440,7 +449,7 @@ impl ResourceUsage {
         self.peak_cpu_time_us = self.peak_cpu_time_us.max(cpu_time_us);
         self.last_updated = Utc::now();
     }
-    
+
     /// Record a function call.
     ///
     /// # Arguments
@@ -448,19 +457,20 @@ impl ResourceUsage {
     /// * `duration_us` - Duration of the function call in microseconds.
     pub fn record_function_call(&mut self, duration_us: u64) {
         self.function_calls += 1;
-        
+
         // Update average function call duration
         if self.function_calls == 1 {
             self.avg_function_call_us = duration_us;
         } else {
             // Rolling average
-            self.avg_function_call_us = (self.avg_function_call_us * (self.function_calls - 1) + duration_us)
+            self.avg_function_call_us = (self.avg_function_call_us * (self.function_calls - 1)
+                + duration_us)
                 / self.function_calls;
         }
-        
+
         self.last_updated = Utc::now();
     }
-    
+
     /// Set the number of active instances.
     ///
     /// # Arguments
@@ -470,7 +480,7 @@ impl ResourceUsage {
         self.active_instances = active_instances;
         self.last_updated = Utc::now();
     }
-    
+
     /// Set a custom metric.
     ///
     /// # Arguments
@@ -481,7 +491,7 @@ impl ResourceUsage {
         self.custom_metrics.insert(name.into(), value);
         self.last_updated = Utc::now();
     }
-    
+
     /// Get a custom metric.
     ///
     /// # Arguments
@@ -494,7 +504,7 @@ impl ResourceUsage {
     pub fn get_custom_metric(&self, name: &str) -> Option<f64> {
         self.custom_metrics.get(name).cloned()
     }
-    
+
     /// Reset all metrics to zero.
     pub fn reset(&mut self) {
         self.memory_bytes = 0;
@@ -512,7 +522,7 @@ impl ResourceUsage {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_plugin_type_display() {
         assert_eq!(PluginType::Wasm.to_string(), "WebAssembly");
@@ -520,7 +530,7 @@ mod tests {
         assert_eq!(PluginType::JavaScript.to_string(), "JavaScript");
         assert_eq!(PluginType::Remote.to_string(), "Remote");
     }
-    
+
     #[test]
     fn test_plugin_state_display() {
         assert_eq!(PluginState::Created.to_string(), "Created");
@@ -531,7 +541,7 @@ mod tests {
         assert_eq!(PluginState::Terminated.to_string(), "Terminated");
         assert_eq!(PluginState::Upgrading.to_string(), "Upgrading");
     }
-    
+
     #[test]
     fn test_plugin_state_methods() {
         // Test is_active
@@ -542,7 +552,7 @@ mod tests {
         assert!(!PluginState::Failed.is_active());
         assert!(!PluginState::Terminated.is_active());
         assert!(PluginState::Upgrading.is_active());
-        
+
         // Test allows_calls
         assert!(!PluginState::Created.allows_calls());
         assert!(!PluginState::Ready.allows_calls());
@@ -551,7 +561,7 @@ mod tests {
         assert!(!PluginState::Failed.allows_calls());
         assert!(!PluginState::Terminated.allows_calls());
         assert!(!PluginState::Upgrading.allows_calls());
-        
+
         // Test allows_transitions
         assert!(PluginState::Created.allows_transitions());
         assert!(PluginState::Ready.allows_transitions());
@@ -560,27 +570,37 @@ mod tests {
         assert!(!PluginState::Failed.allows_transitions());
         assert!(!PluginState::Terminated.allows_transitions());
         assert!(PluginState::Upgrading.allows_transitions());
-        
+
         // Test valid_next_states
-        assert!(PluginState::Created.valid_next_states().contains(&PluginState::Ready));
-        assert!(PluginState::Ready.valid_next_states().contains(&PluginState::Running));
-        assert!(PluginState::Running.valid_next_states().contains(&PluginState::Paused));
-        assert!(PluginState::Paused.valid_next_states().contains(&PluginState::Running));
-        assert!(PluginState::Failed.valid_next_states().contains(&PluginState::Terminated));
+        assert!(PluginState::Created
+            .valid_next_states()
+            .contains(&PluginState::Ready));
+        assert!(PluginState::Ready
+            .valid_next_states()
+            .contains(&PluginState::Running));
+        assert!(PluginState::Running
+            .valid_next_states()
+            .contains(&PluginState::Paused));
+        assert!(PluginState::Paused
+            .valid_next_states()
+            .contains(&PluginState::Running));
+        assert!(PluginState::Failed
+            .valid_next_states()
+            .contains(&PluginState::Terminated));
         assert!(PluginState::Terminated.valid_next_states().is_empty());
-        
+
         // Test can_transition_to
         assert!(PluginState::Created.can_transition_to(PluginState::Ready));
         assert!(PluginState::Ready.can_transition_to(PluginState::Running));
         assert!(PluginState::Running.can_transition_to(PluginState::Paused));
         assert!(PluginState::Paused.can_transition_to(PluginState::Running));
         assert!(PluginState::Failed.can_transition_to(PluginState::Terminated));
-        
+
         assert!(!PluginState::Created.can_transition_to(PluginState::Running));
         assert!(!PluginState::Ready.can_transition_to(PluginState::Paused));
         assert!(!PluginState::Terminated.can_transition_to(PluginState::Ready));
     }
-    
+
     #[test]
     fn test_plugin_config() {
         // Test default configuration
@@ -588,59 +608,58 @@ mod tests {
         assert_eq!(config.max_memory_bytes, Some(100 * 1024 * 1024));
         assert_eq!(config.max_cpu_time_us, Some(10 * 1000 * 1000));
         assert_eq!(config.function_timeout_ms, Some(5000));
-        
+
         // Test minimal configuration
         let minimal = PluginConfig::minimal();
         assert_eq!(minimal.max_memory_bytes, Some(10 * 1024 * 1024));
         assert_eq!(minimal.max_cpu_time_us, Some(1 * 1000 * 1000));
         assert_eq!(minimal.function_timeout_ms, Some(1000));
-        
+
         // Test options
         let mut config = PluginConfig::default();
         assert!(config.set_option("test_key", "test_value"));
-        assert_eq!(config.get_option::<String>("test_key").unwrap(), "test_value");
-        
+        assert_eq!(
+            config.get_option::<String>("test_key").unwrap(),
+            "test_value"
+        );
+
         assert!(config.set_option("test_number", 42));
         assert_eq!(config.get_option::<i32>("test_number").unwrap(), 42);
-        
+
         assert_eq!(config.get_option::<String>("nonexistent"), None);
     }
-    
+
     #[test]
     fn test_plugin_metadata() {
         // Test constructor
-        let metadata = PluginMetadata::new(
-            "Test Plugin",
-            "1.0.0",
-            "A test plugin",
-            PluginType::Wasm,
-        );
-        
+        let metadata =
+            PluginMetadata::new("Test Plugin", "1.0.0", "A test plugin", PluginType::Wasm);
+
         assert_eq!(metadata.name, "Test Plugin");
         assert_eq!(metadata.version, "1.0.0");
         assert_eq!(metadata.description, "A test plugin");
         assert_eq!(metadata.plugin_type, PluginType::Wasm);
         assert_eq!(metadata.state, PluginState::Created);
         assert!(metadata.functions.is_empty());
-        
+
         // Test update_state
         let mut metadata = metadata.clone();
         assert!(metadata.update_state(PluginState::Ready));
         assert_eq!(metadata.state, PluginState::Ready);
-        
+
         // Test invalid state transition
         assert!(!metadata.update_state(PluginState::Paused));
         assert_eq!(metadata.state, PluginState::Ready);
-        
+
         // Test add_function and set_functions
         let mut metadata = metadata.clone();
         metadata.add_function("test_function");
         assert_eq!(metadata.functions, vec!["test_function"]);
-        
+
         metadata.set_functions(vec!["function1".to_string(), "function2".to_string()]);
         assert_eq!(metadata.functions, vec!["function1", "function2"]);
     }
-    
+
     #[test]
     fn test_resource_usage() {
         // Test constructor
@@ -648,52 +667,52 @@ mod tests {
         assert_eq!(usage.memory_bytes, 0);
         assert_eq!(usage.cpu_time_us, 0);
         assert_eq!(usage.function_calls, 0);
-        
+
         // Test update_memory
         let mut usage = usage.clone();
         usage.update_memory(1024);
         assert_eq!(usage.memory_bytes, 1024);
         assert_eq!(usage.peak_memory_bytes, 1024);
-        
+
         usage.update_memory(2048);
         assert_eq!(usage.memory_bytes, 2048);
         assert_eq!(usage.peak_memory_bytes, 2048);
-        
+
         usage.update_memory(1024);
         assert_eq!(usage.memory_bytes, 1024);
         assert_eq!(usage.peak_memory_bytes, 2048);
-        
+
         // Test update_cpu_time
         let mut usage = usage.clone();
         usage.update_cpu_time(1000);
         assert_eq!(usage.cpu_time_us, 1000);
         assert_eq!(usage.peak_cpu_time_us, 1000);
-        
+
         usage.update_cpu_time(2000);
         assert_eq!(usage.cpu_time_us, 2000);
         assert_eq!(usage.peak_cpu_time_us, 2000);
-        
+
         // Test record_function_call
         let mut usage = usage.clone();
         usage.record_function_call(1000);
         assert_eq!(usage.function_calls, 1);
         assert_eq!(usage.avg_function_call_us, 1000);
-        
+
         usage.record_function_call(3000);
         assert_eq!(usage.function_calls, 2);
         assert_eq!(usage.avg_function_call_us, 2000);
-        
+
         // Test set_active_instances
         let mut usage = usage.clone();
         usage.set_active_instances(5);
         assert_eq!(usage.active_instances, 5);
-        
+
         // Test custom metrics
         let mut usage = usage.clone();
         usage.set_custom_metric("test_metric", 42.0);
         assert_eq!(usage.get_custom_metric("test_metric"), Some(42.0));
         assert_eq!(usage.get_custom_metric("nonexistent"), None);
-        
+
         // Test reset
         let mut usage = usage.clone();
         usage.update_memory(1024);
@@ -701,7 +720,7 @@ mod tests {
         usage.record_function_call(1000);
         usage.set_active_instances(5);
         usage.set_custom_metric("test_metric", 42.0);
-        
+
         usage.reset();
         assert_eq!(usage.memory_bytes, 0);
         assert_eq!(usage.cpu_time_us, 0);
@@ -712,7 +731,7 @@ mod tests {
         assert_eq!(usage.avg_function_call_us, 0);
         assert!(usage.custom_metrics.is_empty());
     }
-    
+
     #[test]
     fn test_serialization() {
         // Test PluginType serialization
@@ -720,13 +739,13 @@ mod tests {
         let serialized = serde_json::to_string(&plugin_type).unwrap();
         let deserialized: PluginType = serde_json::from_str(&serialized).unwrap();
         assert_eq!(plugin_type, deserialized);
-        
+
         // Test PluginState serialization
         let plugin_state = PluginState::Running;
         let serialized = serde_json::to_string(&plugin_state).unwrap();
         let deserialized: PluginState = serde_json::from_str(&serialized).unwrap();
         assert_eq!(plugin_state, deserialized);
-        
+
         // Test PluginConfig serialization
         let config = PluginConfig::default();
         let serialized = serde_json::to_string(&config).unwrap();
@@ -734,14 +753,10 @@ mod tests {
         assert_eq!(config.max_memory_bytes, deserialized.max_memory_bytes);
         assert_eq!(config.max_cpu_time_us, deserialized.max_cpu_time_us);
         assert_eq!(config.function_timeout_ms, deserialized.function_timeout_ms);
-        
+
         // Test PluginMetadata serialization
-        let metadata = PluginMetadata::new(
-            "Test Plugin",
-            "1.0.0",
-            "A test plugin",
-            PluginType::Wasm,
-        );
+        let metadata =
+            PluginMetadata::new("Test Plugin", "1.0.0", "A test plugin", PluginType::Wasm);
         let serialized = serde_json::to_string(&metadata).unwrap();
         let deserialized: PluginMetadata = serde_json::from_str(&serialized).unwrap();
         assert_eq!(metadata.id, deserialized.id);
@@ -750,7 +765,7 @@ mod tests {
         assert_eq!(metadata.description, deserialized.description);
         assert_eq!(metadata.plugin_type, deserialized.plugin_type);
         assert_eq!(metadata.state, deserialized.state);
-        
+
         // Test ResourceUsage serialization
         let mut usage = ResourceUsage::new();
         usage.update_memory(1024);
@@ -758,7 +773,7 @@ mod tests {
         usage.record_function_call(1000);
         usage.set_active_instances(5);
         usage.set_custom_metric("test_metric", 42.0);
-        
+
         let serialized = serde_json::to_string(&usage).unwrap();
         let deserialized: ResourceUsage = serde_json::from_str(&serialized).unwrap();
         assert_eq!(usage.memory_bytes, deserialized.memory_bytes);
@@ -767,7 +782,13 @@ mod tests {
         assert_eq!(usage.active_instances, deserialized.active_instances);
         assert_eq!(usage.peak_memory_bytes, deserialized.peak_memory_bytes);
         assert_eq!(usage.peak_cpu_time_us, deserialized.peak_cpu_time_us);
-        assert_eq!(usage.avg_function_call_us, deserialized.avg_function_call_us);
-        assert_eq!(usage.get_custom_metric("test_metric"), deserialized.get_custom_metric("test_metric"));
+        assert_eq!(
+            usage.avg_function_call_us,
+            deserialized.avg_function_call_us
+        );
+        assert_eq!(
+            usage.get_custom_metric("test_metric"),
+            deserialized.get_custom_metric("test_metric")
+        );
     }
 }

@@ -1,10 +1,10 @@
 //! Logging utilities.
-//! 
+//!
 //! This module provides utilities for logging throughout the system.
 //! It defines log levels and provides helpers for structured logging.
 
+use serde::{Deserialize, Serialize};
 use std::fmt;
-use serde::{Serialize, Deserialize};
 
 /// Log level.
 ///
@@ -14,16 +14,16 @@ use serde::{Serialize, Deserialize};
 pub enum LogLevel {
     /// Verbose debug information.
     Trace,
-    
+
     /// Debug information.
     Debug,
-    
+
     /// Informational messages.
     Info,
-    
+
     /// Warning messages.
     Warning,
-    
+
     /// Error messages.
     Error,
 }
@@ -48,7 +48,7 @@ impl LogLevel {
             _ => None,
         }
     }
-    
+
     /// Get the name of this log level.
     ///
     /// # Returns
@@ -63,7 +63,7 @@ impl LogLevel {
             Self::Error => "ERROR",
         }
     }
-    
+
     /// Get the numeric value of this log level.
     ///
     /// # Returns
@@ -79,7 +79,7 @@ impl LogLevel {
             Self::Error => 4,
         }
     }
-    
+
     /// Check if this log level is at least as severe as the given level.
     ///
     /// # Arguments
@@ -109,22 +109,22 @@ impl fmt::Display for LogLevel {
 pub struct LogRecord {
     /// The log level.
     pub level: LogLevel,
-    
+
     /// The log message.
     pub message: String,
-    
+
     /// The module path where the log was recorded.
     pub module_path: String,
-    
+
     /// The file where the log was recorded.
     pub file: String,
-    
+
     /// The line number where the log was recorded.
     pub line: u32,
-    
+
     /// The timestamp when the log was recorded.
     pub timestamp: chrono::DateTime<chrono::Utc>,
-    
+
     /// Additional metadata.
     pub metadata: std::collections::HashMap<String, String>,
 }
@@ -160,7 +160,7 @@ impl LogRecord {
             metadata: std::collections::HashMap::new(),
         }
     }
-    
+
     /// Add metadata to this log record.
     ///
     /// # Arguments
@@ -175,7 +175,7 @@ impl LogRecord {
         self.metadata.insert(key.into(), value.into());
         self
     }
-    
+
     /// Format this log record for display.
     ///
     /// # Returns
@@ -190,7 +190,7 @@ impl LogRecord {
             self.file,
             self.line
         );
-        
+
         if !self.metadata.is_empty() {
             let metadata_str = self
                 .metadata
@@ -200,7 +200,7 @@ impl LogRecord {
                 .join(" ");
             result = format!("{} - {}", result, metadata_str);
         }
-        
+
         result
     }
 }
@@ -208,7 +208,7 @@ impl LogRecord {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_log_level_ordering() {
         assert!(LogLevel::Error > LogLevel::Warning);
@@ -216,7 +216,7 @@ mod tests {
         assert!(LogLevel::Info > LogLevel::Debug);
         assert!(LogLevel::Debug > LogLevel::Trace);
     }
-    
+
     #[test]
     fn test_log_level_from_str() {
         assert_eq!(LogLevel::from_str("trace"), Some(LogLevel::Trace));
@@ -233,7 +233,7 @@ mod tests {
         assert_eq!(LogLevel::from_str("ERROR"), Some(LogLevel::Error));
         assert_eq!(LogLevel::from_str("invalid"), None);
     }
-    
+
     #[test]
     fn test_log_level_as_str() {
         assert_eq!(LogLevel::Trace.as_str(), "TRACE");
@@ -242,7 +242,7 @@ mod tests {
         assert_eq!(LogLevel::Warning.as_str(), "WARNING");
         assert_eq!(LogLevel::Error.as_str(), "ERROR");
     }
-    
+
     #[test]
     fn test_log_level_as_number() {
         assert_eq!(LogLevel::Trace.as_number(), 0);
@@ -251,7 +251,7 @@ mod tests {
         assert_eq!(LogLevel::Warning.as_number(), 3);
         assert_eq!(LogLevel::Error.as_number(), 4);
     }
-    
+
     #[test]
     fn test_log_level_is_at_least() {
         assert!(LogLevel::Error.is_at_least(LogLevel::Error));
@@ -259,13 +259,13 @@ mod tests {
         assert!(LogLevel::Error.is_at_least(LogLevel::Info));
         assert!(LogLevel::Error.is_at_least(LogLevel::Debug));
         assert!(LogLevel::Error.is_at_least(LogLevel::Trace));
-        
+
         assert!(!LogLevel::Trace.is_at_least(LogLevel::Debug));
         assert!(!LogLevel::Debug.is_at_least(LogLevel::Info));
         assert!(!LogLevel::Info.is_at_least(LogLevel::Warning));
         assert!(!LogLevel::Warning.is_at_least(LogLevel::Error));
     }
-    
+
     #[test]
     fn test_log_level_display() {
         assert_eq!(LogLevel::Trace.to_string(), "TRACE");
@@ -274,7 +274,7 @@ mod tests {
         assert_eq!(LogLevel::Warning.to_string(), "WARNING");
         assert_eq!(LogLevel::Error.to_string(), "ERROR");
     }
-    
+
     #[test]
     fn test_log_record() {
         let record = LogRecord::new(
@@ -284,18 +284,20 @@ mod tests {
             "test_file.rs",
             42,
         );
-        
+
         assert_eq!(record.level, LogLevel::Info);
         assert_eq!(record.message, "Test message");
         assert_eq!(record.module_path, "test_module");
         assert_eq!(record.file, "test_file.rs");
         assert_eq!(record.line, 42);
-        
+
         // Add metadata
-        let record = record.with_metadata("key1", "value1").with_metadata("key2", "value2");
+        let record = record
+            .with_metadata("key1", "value1")
+            .with_metadata("key2", "value2");
         assert_eq!(record.metadata.get("key1").unwrap(), "value1");
         assert_eq!(record.metadata.get("key2").unwrap(), "value2");
-        
+
         // Format
         let formatted = record.format();
         assert!(formatted.contains("[INFO]"));
@@ -304,7 +306,7 @@ mod tests {
         assert!(formatted.contains("key1=value1"));
         assert!(formatted.contains("key2=value2"));
     }
-    
+
     #[test]
     fn test_log_level_serialization() {
         let level = LogLevel::Info;
@@ -312,7 +314,7 @@ mod tests {
         let deserialized: LogLevel = serde_json::from_str(&serialized).unwrap();
         assert_eq!(level, deserialized);
     }
-    
+
     #[test]
     fn test_log_record_serialization() {
         let record = LogRecord::new(
@@ -321,16 +323,20 @@ mod tests {
             "test_module",
             "test_file.rs",
             42,
-        ).with_metadata("key1", "value1");
-        
+        )
+        .with_metadata("key1", "value1");
+
         let serialized = serde_json::to_string(&record).unwrap();
         let deserialized: LogRecord = serde_json::from_str(&serialized).unwrap();
-        
+
         assert_eq!(record.level, deserialized.level);
         assert_eq!(record.message, deserialized.message);
         assert_eq!(record.module_path, deserialized.module_path);
         assert_eq!(record.file, deserialized.file);
         assert_eq!(record.line, deserialized.line);
-        assert_eq!(record.metadata.get("key1"), deserialized.metadata.get("key1"));
+        assert_eq!(
+            record.metadata.get("key1"),
+            deserialized.metadata.get("key1")
+        );
     }
 }

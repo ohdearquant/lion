@@ -1,11 +1,11 @@
 //! Access request data types.
-//! 
+//!
 //! This module defines data structures for access requests used in
 //! capability checks. Access requests represent operations on resources
 //! that are governed by the capability-based security system.
 
+use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
-use serde::{Serialize, Deserialize};
 
 /// A request to access a resource.
 ///
@@ -20,70 +20,70 @@ pub enum AccessRequest {
     File {
         /// Path to the file.
         path: PathBuf,
-        
+
         /// Whether this is a read operation.
         read: bool,
-        
+
         /// Whether this is a write operation.
         write: bool,
-        
+
         /// Whether this is an execute operation.
         execute: bool,
     },
-    
+
     /// Network access.
     ///
     /// This represents a request to access the network.
     Network {
         /// Host to connect to or listen on.
         host: String,
-        
+
         /// Port to connect to or listen on.
         port: u16,
-        
+
         /// Whether this is an outbound connection.
         connect: bool,
-        
+
         /// Whether this is an inbound connection.
         listen: bool,
     },
-    
+
     /// Plugin call.
     ///
     /// This represents a request to call a function in another plugin.
     PluginCall {
         /// Plugin ID to call.
         plugin_id: String,
-        
+
         /// Function to call.
         function: String,
     },
-    
+
     /// Memory access.
     ///
     /// This represents a request to access a memory region.
     Memory {
         /// Region ID.
         region_id: String,
-        
+
         /// Whether this is a read operation.
         read: bool,
-        
+
         /// Whether this is a write operation.
         write: bool,
     },
-    
+
     /// Message sending.
     ///
     /// This represents a request to send a message to another plugin.
     Message {
         /// Recipient plugin ID.
         recipient: String,
-        
+
         /// Topic.
         topic: String,
     },
-    
+
     /// Custom access type.
     ///
     /// This represents a custom access request type that doesn't
@@ -91,10 +91,10 @@ pub enum AccessRequest {
     Custom {
         /// Resource type.
         resource_type: String,
-        
+
         /// Operation.
         operation: String,
-        
+
         /// Additional parameters.
         params: serde_json::Value,
     },
@@ -116,7 +116,7 @@ impl AccessRequest {
             Self::Custom { resource_type, .. } => AccessRequestType::Custom(resource_type.clone()),
         }
     }
-    
+
     /// Create a file read access request.
     ///
     /// # Arguments
@@ -134,7 +134,7 @@ impl AccessRequest {
             execute: false,
         }
     }
-    
+
     /// Create a file write access request.
     ///
     /// # Arguments
@@ -152,7 +152,7 @@ impl AccessRequest {
             execute: false,
         }
     }
-    
+
     /// Create a file execute access request.
     ///
     /// # Arguments
@@ -170,7 +170,7 @@ impl AccessRequest {
             execute: true,
         }
     }
-    
+
     /// Create a file read/write access request.
     ///
     /// # Arguments
@@ -188,7 +188,7 @@ impl AccessRequest {
             execute: false,
         }
     }
-    
+
     /// Create a network connect access request.
     ///
     /// # Arguments
@@ -207,7 +207,7 @@ impl AccessRequest {
             listen: false,
         }
     }
-    
+
     /// Create a network listen access request.
     ///
     /// # Arguments
@@ -226,7 +226,7 @@ impl AccessRequest {
             listen: true,
         }
     }
-    
+
     /// Create a plugin call access request.
     ///
     /// # Arguments
@@ -243,7 +243,7 @@ impl AccessRequest {
             function: function.into(),
         }
     }
-    
+
     /// Create a memory read access request.
     ///
     /// # Arguments
@@ -260,7 +260,7 @@ impl AccessRequest {
             write: false,
         }
     }
-    
+
     /// Create a memory write access request.
     ///
     /// # Arguments
@@ -277,7 +277,7 @@ impl AccessRequest {
             write: true,
         }
     }
-    
+
     /// Create a message sending access request.
     ///
     /// # Arguments
@@ -303,19 +303,19 @@ impl AccessRequest {
 pub enum AccessRequestType {
     /// File access.
     File,
-    
+
     /// Network access.
     Network,
-    
+
     /// Plugin call.
     PluginCall,
-    
+
     /// Memory access.
     Memory,
-    
+
     /// Message sending.
     Message,
-    
+
     /// Custom access type.
     Custom(String),
 }
@@ -323,29 +323,29 @@ pub enum AccessRequestType {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_access_type() {
         // Test file access request
         let request = AccessRequest::file_read("/tmp/test.txt");
         assert_eq!(request.access_type(), AccessRequestType::File);
-        
+
         // Test network access request
         let request = AccessRequest::network_connect("example.com", 80);
         assert_eq!(request.access_type(), AccessRequestType::Network);
-        
+
         // Test plugin call access request
         let request = AccessRequest::plugin_call("plugin1", "function1");
         assert_eq!(request.access_type(), AccessRequestType::PluginCall);
-        
+
         // Test memory access request
         let request = AccessRequest::memory_read("region1");
         assert_eq!(request.access_type(), AccessRequestType::Memory);
-        
+
         // Test message access request
         let request = AccessRequest::message_send("plugin1", "topic1");
         assert_eq!(request.access_type(), AccessRequestType::Message);
-        
+
         // Test custom access request
         let request = AccessRequest::Custom {
             resource_type: "custom".to_string(),
@@ -357,122 +357,163 @@ mod tests {
             _ => panic!("Expected AccessRequestType::Custom"),
         }
     }
-    
+
     #[test]
     fn test_file_access_constructors() {
         // Test file_read
         let request = AccessRequest::file_read("/tmp/test.txt");
         match request {
-            AccessRequest::File { path, read, write, execute } => {
+            AccessRequest::File {
+                path,
+                read,
+                write,
+                execute,
+            } => {
                 assert_eq!(path, PathBuf::from("/tmp/test.txt"));
                 assert!(read);
                 assert!(!write);
                 assert!(!execute);
-            },
+            }
             _ => panic!("Expected AccessRequest::File"),
         }
-        
+
         // Test file_write
         let request = AccessRequest::file_write("/tmp/test.txt");
         match request {
-            AccessRequest::File { path, read, write, execute } => {
+            AccessRequest::File {
+                path,
+                read,
+                write,
+                execute,
+            } => {
                 assert_eq!(path, PathBuf::from("/tmp/test.txt"));
                 assert!(!read);
                 assert!(write);
                 assert!(!execute);
-            },
+            }
             _ => panic!("Expected AccessRequest::File"),
         }
-        
+
         // Test file_execute
         let request = AccessRequest::file_execute("/tmp/test.txt");
         match request {
-            AccessRequest::File { path, read, write, execute } => {
+            AccessRequest::File {
+                path,
+                read,
+                write,
+                execute,
+            } => {
                 assert_eq!(path, PathBuf::from("/tmp/test.txt"));
                 assert!(!read);
                 assert!(!write);
                 assert!(execute);
-            },
+            }
             _ => panic!("Expected AccessRequest::File"),
         }
-        
+
         // Test file_read_write
         let request = AccessRequest::file_read_write("/tmp/test.txt");
         match request {
-            AccessRequest::File { path, read, write, execute } => {
+            AccessRequest::File {
+                path,
+                read,
+                write,
+                execute,
+            } => {
                 assert_eq!(path, PathBuf::from("/tmp/test.txt"));
                 assert!(read);
                 assert!(write);
                 assert!(!execute);
-            },
+            }
             _ => panic!("Expected AccessRequest::File"),
         }
     }
-    
+
     #[test]
     fn test_network_access_constructors() {
         // Test network_connect
         let request = AccessRequest::network_connect("example.com", 80);
         match request {
-            AccessRequest::Network { host, port, connect, listen } => {
+            AccessRequest::Network {
+                host,
+                port,
+                connect,
+                listen,
+            } => {
                 assert_eq!(host, "example.com");
                 assert_eq!(port, 80);
                 assert!(connect);
                 assert!(!listen);
-            },
+            }
             _ => panic!("Expected AccessRequest::Network"),
         }
-        
+
         // Test network_listen
         let request = AccessRequest::network_listen("0.0.0.0", 8080);
         match request {
-            AccessRequest::Network { host, port, connect, listen } => {
+            AccessRequest::Network {
+                host,
+                port,
+                connect,
+                listen,
+            } => {
                 assert_eq!(host, "0.0.0.0");
                 assert_eq!(port, 8080);
                 assert!(!connect);
                 assert!(listen);
-            },
+            }
             _ => panic!("Expected AccessRequest::Network"),
         }
     }
-    
+
     #[test]
     fn test_plugin_call_constructor() {
         let request = AccessRequest::plugin_call("plugin1", "function1");
         match request {
-            AccessRequest::PluginCall { plugin_id, function } => {
+            AccessRequest::PluginCall {
+                plugin_id,
+                function,
+            } => {
                 assert_eq!(plugin_id, "plugin1");
                 assert_eq!(function, "function1");
-            },
+            }
             _ => panic!("Expected AccessRequest::PluginCall"),
         }
     }
-    
+
     #[test]
     fn test_memory_access_constructors() {
         // Test memory_read
         let request = AccessRequest::memory_read("region1");
         match request {
-            AccessRequest::Memory { region_id, read, write } => {
+            AccessRequest::Memory {
+                region_id,
+                read,
+                write,
+            } => {
                 assert_eq!(region_id, "region1");
                 assert!(read);
                 assert!(!write);
-            },
+            }
             _ => panic!("Expected AccessRequest::Memory"),
         }
-        
+
         // Test memory_write
         let request = AccessRequest::memory_write("region1");
         match request {
-            AccessRequest::Memory { region_id, read, write } => {
+            AccessRequest::Memory {
+                region_id,
+                read,
+                write,
+            } => {
                 assert_eq!(region_id, "region1");
                 assert!(!read);
                 assert!(write);
-            },
+            }
             _ => panic!("Expected AccessRequest::Memory"),
         }
     }
-    
+
     #[test]
     fn test_message_send_constructor() {
         let request = AccessRequest::message_send("plugin1", "topic1");
@@ -480,11 +521,11 @@ mod tests {
             AccessRequest::Message { recipient, topic } => {
                 assert_eq!(recipient, "plugin1");
                 assert_eq!(topic, "topic1");
-            },
+            }
             _ => panic!("Expected AccessRequest::Message"),
         }
     }
-    
+
     #[test]
     fn test_serialization() {
         // Test file access serialization
@@ -492,7 +533,7 @@ mod tests {
         let serialized = serde_json::to_string(&request).unwrap();
         let deserialized: AccessRequest = serde_json::from_str(&serialized).unwrap();
         assert_eq!(request, deserialized);
-        
+
         // Test network access serialization
         let request = AccessRequest::network_connect("example.com", 80);
         let serialized = serde_json::to_string(&request).unwrap();

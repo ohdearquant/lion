@@ -1,11 +1,11 @@
 //! Configuration utilities.
-//! 
+//!
 //! This module provides utilities for configuration management.
 //! It defines a configuration value type that can represent various types of values.
 
-use std::fmt;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use serde::{Serialize, Deserialize};
+use std::fmt;
 
 /// A configuration value.
 ///
@@ -16,22 +16,22 @@ use serde::{Serialize, Deserialize};
 pub enum ConfigValue {
     /// Null value.
     Null,
-    
+
     /// Boolean value.
     Bool(bool),
-    
+
     /// Integer value.
     Integer(i64),
-    
+
     /// Floating-point value.
     Float(f64),
-    
+
     /// String value.
     String(String),
-    
+
     /// Array of values.
     Array(Vec<ConfigValue>),
-    
+
     /// Map of values.
     Map(HashMap<String, ConfigValue>),
 }
@@ -45,7 +45,7 @@ impl ConfigValue {
     pub fn is_null(&self) -> bool {
         matches!(self, Self::Null)
     }
-    
+
     /// Check if this value is a boolean.
     ///
     /// # Returns
@@ -54,7 +54,7 @@ impl ConfigValue {
     pub fn is_bool(&self) -> bool {
         matches!(self, Self::Bool(_))
     }
-    
+
     /// Check if this value is an integer.
     ///
     /// # Returns
@@ -63,7 +63,7 @@ impl ConfigValue {
     pub fn is_integer(&self) -> bool {
         matches!(self, Self::Integer(_))
     }
-    
+
     /// Check if this value is a floating-point number.
     ///
     /// # Returns
@@ -72,7 +72,7 @@ impl ConfigValue {
     pub fn is_float(&self) -> bool {
         matches!(self, Self::Float(_))
     }
-    
+
     /// Check if this value is a number (integer or float).
     ///
     /// # Returns
@@ -81,7 +81,7 @@ impl ConfigValue {
     pub fn is_number(&self) -> bool {
         matches!(self, Self::Integer(_) | Self::Float(_))
     }
-    
+
     /// Check if this value is a string.
     ///
     /// # Returns
@@ -90,7 +90,7 @@ impl ConfigValue {
     pub fn is_string(&self) -> bool {
         matches!(self, Self::String(_))
     }
-    
+
     /// Check if this value is an array.
     ///
     /// # Returns
@@ -99,7 +99,7 @@ impl ConfigValue {
     pub fn is_array(&self) -> bool {
         matches!(self, Self::Array(_))
     }
-    
+
     /// Check if this value is a map.
     ///
     /// # Returns
@@ -108,7 +108,7 @@ impl ConfigValue {
     pub fn is_map(&self) -> bool {
         matches!(self, Self::Map(_))
     }
-    
+
     /// Get this value as a boolean.
     ///
     /// # Returns
@@ -120,7 +120,7 @@ impl ConfigValue {
             _ => None,
         }
     }
-    
+
     /// Get this value as an integer.
     ///
     /// # Returns
@@ -129,13 +129,15 @@ impl ConfigValue {
     pub fn as_integer(&self) -> Option<i64> {
         match self {
             Self::Integer(i) => Some(*i),
-            Self::Float(f) if f.fract() == 0.0 && *f >= i64::MIN as f64 && *f <= i64::MAX as f64 => {
+            Self::Float(f)
+                if f.fract() == 0.0 && *f >= i64::MIN as f64 && *f <= i64::MAX as f64 =>
+            {
                 Some(*f as i64)
             }
             _ => None,
         }
     }
-    
+
     /// Get this value as a floating-point number.
     ///
     /// # Returns
@@ -148,7 +150,7 @@ impl ConfigValue {
             _ => None,
         }
     }
-    
+
     /// Get this value as a string.
     ///
     /// # Returns
@@ -160,7 +162,7 @@ impl ConfigValue {
             _ => None,
         }
     }
-    
+
     /// Get this value as an array.
     ///
     /// # Returns
@@ -172,7 +174,7 @@ impl ConfigValue {
             _ => None,
         }
     }
-    
+
     /// Get this value as a map.
     ///
     /// # Returns
@@ -184,7 +186,7 @@ impl ConfigValue {
             _ => None,
         }
     }
-    
+
     /// Get a mutable reference to this value as an array.
     ///
     /// # Returns
@@ -196,7 +198,7 @@ impl ConfigValue {
             _ => None,
         }
     }
-    
+
     /// Get a mutable reference to this value as a map.
     ///
     /// # Returns
@@ -208,7 +210,7 @@ impl ConfigValue {
             _ => None,
         }
     }
-    
+
     /// Get a value from an array by index.
     ///
     /// # Arguments
@@ -225,7 +227,7 @@ impl ConfigValue {
             _ => None,
         }
     }
-    
+
     /// Get a value from a map by key.
     ///
     /// # Arguments
@@ -242,7 +244,7 @@ impl ConfigValue {
             _ => None,
         }
     }
-    
+
     /// Get a mutable reference to a value from an array by index.
     ///
     /// # Arguments
@@ -259,7 +261,7 @@ impl ConfigValue {
             _ => None,
         }
     }
-    
+
     /// Get a mutable reference to a value from a map by key.
     ///
     /// # Arguments
@@ -276,7 +278,7 @@ impl ConfigValue {
             _ => None,
         }
     }
-    
+
     /// Set a value in a map.
     ///
     /// # Arguments
@@ -296,7 +298,7 @@ impl ConfigValue {
             _ => false,
         }
     }
-    
+
     /// Push a value onto an array.
     ///
     /// # Arguments
@@ -315,7 +317,7 @@ impl ConfigValue {
             _ => false,
         }
     }
-    
+
     /// Remove a value from a map.
     ///
     /// # Arguments
@@ -331,7 +333,7 @@ impl ConfigValue {
             _ => None,
         }
     }
-    
+
     /// Remove a value from an array.
     ///
     /// # Arguments
@@ -347,7 +349,7 @@ impl ConfigValue {
             _ => None,
         }
     }
-    
+
     /// Get the length of this value as an array or map.
     ///
     /// # Returns
@@ -360,7 +362,7 @@ impl ConfigValue {
             _ => None,
         }
     }
-    
+
     /// Check if this value as an array or map is empty.
     ///
     /// # Returns
@@ -374,7 +376,7 @@ impl ConfigValue {
             _ => None,
         }
     }
-    
+
     /// Merge this value with another value.
     ///
     /// If both values are maps, the keys from the other map will be added to this map,
@@ -517,7 +519,7 @@ impl Config {
             root: ConfigValue::Null,
         }
     }
-    
+
     /// Create a new configuration with a map root value.
     ///
     /// # Returns
@@ -528,7 +530,7 @@ impl Config {
             root: ConfigValue::Map(HashMap::new()),
         }
     }
-    
+
     /// Create a new configuration from a root value.
     ///
     /// # Arguments
@@ -539,11 +541,9 @@ impl Config {
     ///
     /// A new configuration with the given root value.
     pub fn from_value(root: impl Into<ConfigValue>) -> Self {
-        Self {
-            root: root.into(),
-        }
+        Self { root: root.into() }
     }
-    
+
     /// Get a value by path.
     ///
     /// The path is a string of keys separated by dots.
@@ -561,12 +561,12 @@ impl Config {
     /// The value at the given path, or `None` if the path does not exist.
     pub fn get(&self, path: &str) -> Option<&ConfigValue> {
         let mut current = &self.root;
-        
+
         if path.is_empty() {
             return Some(current);
         }
-        
-        for part in self.parse_path(path) {
+
+        for part in Config::parse_path(path) {
             match part {
                 PathPart::Key(key) => {
                     current = current.get(key)?;
@@ -576,10 +576,10 @@ impl Config {
                 }
             }
         }
-        
+
         Some(current)
     }
-    
+
     /// Get a value by path as a specific type.
     ///
     /// # Arguments
@@ -608,7 +608,7 @@ impl Config {
     pub fn get_as<T: FromConfigValue>(&self, path: &str) -> Option<T> {
         self.get(path).and_then(T::from_config_value)
     }
-    
+
     /// Get a mutable reference to a value by path.
     ///
     /// # Arguments
@@ -620,28 +620,17 @@ impl Config {
     /// A mutable reference to the value at the given path, or `None` if the path does not exist.
     pub fn get_mut(&mut self, path: &str) -> Option<&mut ConfigValue> {
         let mut current = &mut self.root;
-        
+
         if path.is_empty() {
             return Some(current);
         }
-        
-        let parts = self.parse_path(path);
-        let last_index = parts.len() - 1;
-        
-        for (i, part) in parts.into_iter().enumerate() {
-            // We need to handle the last part differently to avoid borrowing issues
-            if i == last_index {
-                match part {
-                    PathPart::Key(key) => {
-                        return current.get_mut(key);
-                    }
-                    PathPart::Index(index) => {
-                        return current.get_index_mut(index);
-                    }
-                }
-            }
-            
-            match part {
+
+        // Parse the path first
+        let parts = Self::parse_path(path);
+
+        // Handle each part except the last one
+        for i in 0..parts.len() - 1 {
+            match parts[i] {
                 PathPart::Key(key) => {
                     current = current.get_mut(key)?;
                 }
@@ -650,10 +639,14 @@ impl Config {
                 }
             }
         }
-        
-        None
+
+        // Handle the last part
+        match parts.last().unwrap() {
+            PathPart::Key(key) => current.get_mut(key),
+            PathPart::Index(index) => current.get_index_mut(*index),
+        }
     }
-    
+
     /// Set a value by path.
     ///
     /// If the path does not exist, it will be created. This means that
@@ -673,13 +666,13 @@ impl Config {
             self.root = value.into();
             return Ok(());
         }
-        
-        let parts = self.parse_path(path);
+
+        let parts = Config::parse_path(path);
         let last_index = parts.len() - 1;
-        
+
         let mut current = &mut self.root;
-        
-        for (i, part) in parts.into_iter().enumerate() {
+
+        for (i, part) in parts.iter().enumerate() {
             if i == last_index {
                 // Last part, set the value
                 match part {
@@ -688,7 +681,7 @@ impl Config {
                             // Convert to map if not already
                             *current = ConfigValue::Map(HashMap::new());
                         }
-                        
+
                         if let Some(map) = current.as_map_mut() {
                             map.insert(key.to_string(), value.into());
                             return Ok(());
@@ -699,13 +692,13 @@ impl Config {
                             // Convert to array if not already
                             *current = ConfigValue::Array(Vec::new());
                         }
-                        
+
                         if let Some(array) = current.as_array_mut() {
                             // Ensure the array is large enough
                             while array.len() <= index {
                                 array.push(ConfigValue::Null);
                             }
-                            
+
                             array[index] = value.into();
                             return Ok(());
                         }
@@ -719,12 +712,12 @@ impl Config {
                             // Convert to map if not already
                             *current = ConfigValue::Map(HashMap::new());
                         }
-                        
+
                         let map = match current.as_map_mut() {
                             Some(map) => map,
                             None => return Err(format!("Failed to access map at key '{}'", key)),
                         };
-                        
+
                         // Create the key if it doesn't exist
                         if !map.contains_key(key) {
                             let next_part = &parts[i + 1];
@@ -732,9 +725,9 @@ impl Config {
                                 PathPart::Key(_) => ConfigValue::Map(HashMap::new()),
                                 PathPart::Index(_) => ConfigValue::Array(Vec::new()),
                             };
-                            map.insert(key.to_string(), new_value);
+                            map.insert(key.into(), new_value);
                         }
-                        
+
                         current = map.get_mut(key).unwrap();
                     }
                     PathPart::Index(index) => {
@@ -742,12 +735,14 @@ impl Config {
                             // Convert to array if not already
                             *current = ConfigValue::Array(Vec::new());
                         }
-                        
+
                         let array = match current.as_array_mut() {
                             Some(array) => array,
-                            None => return Err(format!("Failed to access array at index {}", index)),
+                            None => {
+                                return Err(format!("Failed to access array at index {}", index))
+                            }
                         };
-                        
+
                         // Ensure the array is large enough
                         while array.len() <= index {
                             let next_part = if i + 1 < parts.len() {
@@ -756,24 +751,24 @@ impl Config {
                                 // This shouldn't happen, but just in case
                                 return Err("Index out of bounds".to_string());
                             };
-                            
+
                             let new_value = match next_part {
                                 PathPart::Key(_) => ConfigValue::Map(HashMap::new()),
                                 PathPart::Index(_) => ConfigValue::Array(Vec::new()),
                             };
                             array.push(new_value);
                         }
-                        
+
                         current = array.get_mut(index).unwrap();
                     }
                 }
             }
         }
-        
+
         // If we get here, something went wrong
         Err("Failed to set value".to_string())
     }
-    
+
     /// Remove a value by path.
     ///
     /// # Arguments
@@ -788,13 +783,13 @@ impl Config {
             let old_root = std::mem::replace(&mut self.root, ConfigValue::Null);
             return Some(old_root);
         }
-        
-        let parts = self.parse_path(path);
+
+        let parts = Config::parse_path(path);
         let last_index = parts.len() - 1;
-        
+
         let mut current = &mut self.root;
-        
-        for (i, part) in parts.into_iter().enumerate() {
+
+        for (i, part) in parts.iter().enumerate() {
             if i == last_index {
                 // Last part, remove the value
                 return match part {
@@ -802,7 +797,7 @@ impl Config {
                     PathPart::Index(index) => current.remove_index(index),
                 };
             }
-            
+
             match part {
                 PathPart::Key(key) => {
                     if let Some(next) = current.get_mut(key) {
@@ -820,10 +815,10 @@ impl Config {
                 }
             }
         }
-        
+
         None
     }
-    
+
     /// Check if a path exists in the configuration.
     ///
     /// # Arguments
@@ -836,7 +831,7 @@ impl Config {
     pub fn contains(&self, path: &str) -> bool {
         self.get(path).is_some()
     }
-    
+
     /// Merge another configuration into this one.
     ///
     /// # Arguments
@@ -845,54 +840,52 @@ impl Config {
     pub fn merge(&mut self, other: Config) {
         self.root.merge(other.root);
     }
-    
+
     // Helper method to parse a path into parts
-    fn parse_path(&self, path: &str) -> Vec<PathPart> {
+    fn parse_path<'a>(path: &'a str) -> Vec<PathPart<'a>> {
         let mut parts = Vec::new();
-        let mut current_key = String::new();
-        let mut chars = path.chars().peekable();
-        
-        while let Some(c) = chars.next() {
+        let mut start = 0;
+        let mut in_bracket = false;
+
+        for (i, c) in path.char_indices() {
             match c {
-                '.' => {
-                    if !current_key.is_empty() {
-                        parts.push(PathPart::Key(current_key));
-                        current_key = String::new();
+                '.' if !in_bracket => {
+                    if i > start {
+                        parts.push(PathPart::Key(&path[start..i]));
                     }
+                    start = i + 1;
                 }
                 '[' => {
-                    if !current_key.is_empty() {
-                        parts.push(PathPart::Key(current_key));
-                        current_key = String::new();
+                    if i > start {
+                        parts.push(PathPart::Key(&path[start..i]));
                     }
-                    
-                    let mut index_str = String::new();
-                    while let Some(c) = chars.next() {
-                        if c == ']' {
-                            break;
+                    start = i + 1;
+                    in_bracket = true;
+                }
+                ']' if in_bracket => {
+                    if i > start {
+                        if let Ok(index) = path[start..i].parse::<usize>() {
+                            parts.push(PathPart::Index(index));
                         }
-                        index_str.push(c);
                     }
-                    
-                    if let Ok(index) = index_str.parse::<usize>() {
-                        parts.push(PathPart::Index(index));
-                    }
-                    
+
                     // Skip the next dot if it exists
-                    if chars.peek() == Some(&'.') {
-                        chars.next();
+                    if i + 1 < path.len() && path[i + 1..].starts_with('.') {
+                        start = i + 2;
+                    } else {
+                        start = i + 1;
                     }
+                    in_bracket = false;
                 }
-                _ => {
-                    current_key.push(c);
-                }
+                _ => {}
             }
         }
-        
-        if !current_key.is_empty() {
-            parts.push(PathPart::Key(current_key));
+
+        // Add the last part if there is one
+        if start < path.len() && !in_bracket {
+            parts.push(PathPart::Key(&path[start..]));
         }
-        
+
         parts
     }
 }
@@ -956,11 +949,9 @@ impl FromConfigValue for String {
 
 impl<T: FromConfigValue> FromConfigValue for Vec<T> {
     fn from_config_value(value: &ConfigValue) -> Option<Self> {
-        value.as_array().map(|a| {
-            a.iter()
-                .filter_map(T::from_config_value)
-                .collect()
-        })
+        value
+            .as_array()
+            .map(|a| a.iter().filter_map(T::from_config_value).collect())
     }
 }
 
@@ -968,9 +959,7 @@ impl<T: FromConfigValue> FromConfigValue for HashMap<String, T> {
     fn from_config_value(value: &ConfigValue) -> Option<Self> {
         value.as_map().map(|m| {
             m.iter()
-                .filter_map(|(k, v)| {
-                    T::from_config_value(v).map(|v| (k.clone(), v))
-                })
+                .filter_map(|(k, v)| T::from_config_value(v).map(|v| (k.clone(), v)))
                 .collect()
         })
     }
@@ -985,31 +974,31 @@ impl FromConfigValue for ConfigValue {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_config_value_types() {
         let null = ConfigValue::Null;
         assert!(null.is_null());
-        
+
         let boolean = ConfigValue::Bool(true);
         assert!(boolean.is_bool());
         assert_eq!(boolean.as_bool(), Some(true));
-        
+
         let integer = ConfigValue::Integer(42);
         assert!(integer.is_integer());
         assert!(integer.is_number());
         assert_eq!(integer.as_integer(), Some(42));
         assert_eq!(integer.as_float(), Some(42.0));
-        
+
         let float = ConfigValue::Float(3.14);
         assert!(float.is_float());
         assert!(float.is_number());
         assert_eq!(float.as_float(), Some(3.14));
-        
+
         let string = ConfigValue::String("hello".to_string());
         assert!(string.is_string());
         assert_eq!(string.as_str(), Some("hello"));
-        
+
         let array = ConfigValue::Array(vec![
             ConfigValue::Integer(1),
             ConfigValue::Integer(2),
@@ -1019,7 +1008,7 @@ mod tests {
         assert_eq!(array.len(), Some(3));
         assert_eq!(array.is_empty(), Some(false));
         assert_eq!(array.get_index(1).unwrap().as_integer(), Some(2));
-        
+
         let mut map = HashMap::new();
         map.insert("a".to_string(), ConfigValue::Integer(1));
         map.insert("b".to_string(), ConfigValue::String("hello".to_string()));
@@ -1030,21 +1019,21 @@ mod tests {
         assert_eq!(map_value.get("a").unwrap().as_integer(), Some(1));
         assert_eq!(map_value.get("b").unwrap().as_str(), Some("hello"));
     }
-    
+
     #[test]
     fn test_config_value_from_types() {
         let bool_value: ConfigValue = true.into();
         assert_eq!(bool_value, ConfigValue::Bool(true));
-        
+
         let int_value: ConfigValue = 42.into();
         assert_eq!(int_value, ConfigValue::Integer(42));
-        
+
         let float_value: ConfigValue = 3.14.into();
         assert_eq!(float_value, ConfigValue::Float(3.14));
-        
+
         let string_value: ConfigValue = "hello".into();
         assert_eq!(string_value, ConfigValue::String("hello".to_string()));
-        
+
         let vec_value: ConfigValue = vec![1, 2, 3].into();
         assert_eq!(
             vec_value,
@@ -1054,7 +1043,7 @@ mod tests {
                 ConfigValue::Integer(3),
             ])
         );
-        
+
         let mut map = HashMap::new();
         map.insert("a".to_string(), 1);
         map.insert("b".to_string(), 2);
@@ -1063,7 +1052,7 @@ mod tests {
         assert_eq!(map_value.get("a").unwrap().as_integer(), Some(1));
         assert_eq!(map_value.get("b").unwrap().as_integer(), Some(2));
     }
-    
+
     #[test]
     fn test_config_value_mutations() {
         // Test array mutations
@@ -1072,175 +1061,175 @@ mod tests {
             ConfigValue::Integer(2),
             ConfigValue::Integer(3),
         ]);
-        
+
         // Push
         assert!(array.push(ConfigValue::Integer(4)));
         assert_eq!(array.len(), Some(4));
         assert_eq!(array.get_index(3).unwrap().as_integer(), Some(4));
-        
+
         // Remove
         let removed = array.remove_index(1).unwrap();
         assert_eq!(removed.as_integer(), Some(2));
         assert_eq!(array.len(), Some(3));
         assert_eq!(array.get_index(1).unwrap().as_integer(), Some(3));
-        
+
         // Test map mutations
         let mut map = ConfigValue::Map(HashMap::new());
-        
+
         // Set
         assert!(map.set("a", ConfigValue::Integer(1)));
         assert!(map.set("b", ConfigValue::String("hello".to_string())));
         assert_eq!(map.len(), Some(2));
-        
+
         // Get
         assert_eq!(map.get("a").unwrap().as_integer(), Some(1));
         assert_eq!(map.get("b").unwrap().as_str(), Some("hello"));
-        
+
         // Get mut
         if let Some(value) = map.get_mut("a") {
             *value = ConfigValue::Integer(42);
         }
         assert_eq!(map.get("a").unwrap().as_integer(), Some(42));
-        
+
         // Remove
         let removed = map.remove("a").unwrap();
         assert_eq!(removed.as_integer(), Some(42));
         assert_eq!(map.len(), Some(1));
         assert!(map.get("a").is_none());
     }
-    
+
     #[test]
     fn test_config_value_merge() {
         // Test merging maps
         let mut map1 = ConfigValue::Map(HashMap::new());
-        map1.set("a", 1).unwrap();
-        map1.set("b", 2).unwrap();
-        
+        map1.set("a", 1);
+        map1.set("b", 2);
+
         let mut map2 = ConfigValue::Map(HashMap::new());
-        map2.set("b", 3).unwrap();
-        map2.set("c", 4).unwrap();
-        
+        map2.set("b", 3);
+        map2.set("c", 4);
+
         map1.merge(map2);
-        
+
         assert_eq!(map1.get("a").unwrap().as_integer(), Some(1));
         assert_eq!(map1.get("b").unwrap().as_integer(), Some(3)); // Overwritten
         assert_eq!(map1.get("c").unwrap().as_integer(), Some(4));
-        
+
         // Test merging arrays
-        let mut array1 = ConfigValue::Array(vec![
-            ConfigValue::Integer(1),
-            ConfigValue::Integer(2),
-        ]);
-        
-        let array2 = ConfigValue::Array(vec![
-            ConfigValue::Integer(3),
-            ConfigValue::Integer(4),
-        ]);
-        
+        let mut array1 = ConfigValue::Array(vec![ConfigValue::Integer(1), ConfigValue::Integer(2)]);
+
+        let array2 = ConfigValue::Array(vec![ConfigValue::Integer(3), ConfigValue::Integer(4)]);
+
         array1.merge(array2);
-        
+
         assert_eq!(array1.len(), Some(4));
         assert_eq!(array1.get_index(0).unwrap().as_integer(), Some(1));
         assert_eq!(array1.get_index(1).unwrap().as_integer(), Some(2));
         assert_eq!(array1.get_index(2).unwrap().as_integer(), Some(3));
         assert_eq!(array1.get_index(3).unwrap().as_integer(), Some(4));
-        
+
         // Test replacing
         let mut value = ConfigValue::Integer(1);
         value.merge(ConfigValue::String("hello".to_string()));
         assert_eq!(value.as_str(), Some("hello"));
     }
-    
+
     #[test]
     fn test_config_paths() {
         let mut config = Config::new_map();
-        
+
         // Set nested values
         config.set("a.b.c", 42).unwrap();
         config.set("a.d", "hello").unwrap();
         config.set("a.e[0]", 1).unwrap();
         config.set("a.e[1]", 2).unwrap();
         config.set("a.e[2]", 3).unwrap();
-        
+
         // Get values
         assert_eq!(config.get("a.b.c").unwrap().as_integer(), Some(42));
         assert_eq!(config.get("a.d").unwrap().as_str(), Some("hello"));
         assert_eq!(config.get("a.e[0]").unwrap().as_integer(), Some(1));
         assert_eq!(config.get("a.e[1]").unwrap().as_integer(), Some(2));
         assert_eq!(config.get("a.e[2]").unwrap().as_integer(), Some(3));
-        
+
         // Get non-existent values
         assert!(config.get("a.x").is_none());
         assert!(config.get("a.e[10]").is_none());
-        
+
         // Get as specific types
         assert_eq!(config.get_as::<i64>("a.b.c"), Some(42));
         assert_eq!(config.get_as::<String>("a.d"), Some("hello".to_string()));
         assert!(config.get_as::<bool>("a.b.c").is_none()); // Not a boolean
-        
+
         // Check if paths exist
         assert!(config.contains("a.b.c"));
         assert!(!config.contains("a.x"));
-        
+
         // Remove values
         let removed = config.remove("a.b.c").unwrap();
         assert_eq!(removed.as_integer(), Some(42));
         assert!(!config.contains("a.b.c"));
-        
+
         // Test path parsing with different formats
         let mut config = Config::new_map();
         config.set("a.b.c", 1).unwrap();
         config.set("a[0].b", 2).unwrap();
         config.set("a[1][0]", 3).unwrap();
-        
+
         assert_eq!(config.get("a.b.c").unwrap().as_integer(), Some(1));
         assert_eq!(config.get("a[0].b").unwrap().as_integer(), Some(2));
         assert_eq!(config.get("a[1][0]").unwrap().as_integer(), Some(3));
     }
-    
+
     #[test]
     fn test_config_merge() {
         let mut config1 = Config::new_map();
         config1.set("a.b.c", 1).unwrap();
         config1.set("a.d", 2).unwrap();
-        
+
         let mut config2 = Config::new_map();
         config2.set("a.b.c", 3).unwrap();
         config2.set("a.e", 4).unwrap();
-        
+
         config1.merge(config2);
-        
+
         assert_eq!(config1.get("a.b.c").unwrap().as_integer(), Some(3)); // Overwritten
         assert_eq!(config1.get("a.d").unwrap().as_integer(), Some(2));
         assert_eq!(config1.get("a.e").unwrap().as_integer(), Some(4));
     }
-    
+
     #[test]
     fn test_config_from_config_value() {
         // Test primitive types
-        assert_eq!(bool::from_config_value(&ConfigValue::Bool(true)), Some(true));
+        assert_eq!(
+            bool::from_config_value(&ConfigValue::Bool(true)),
+            Some(true)
+        );
         assert_eq!(i64::from_config_value(&ConfigValue::Integer(42)), Some(42));
-        assert_eq!(f64::from_config_value(&ConfigValue::Float(3.14)), Some(3.14));
+        assert_eq!(
+            f64::from_config_value(&ConfigValue::Float(3.14)),
+            Some(3.14)
+        );
         assert_eq!(
             String::from_config_value(&ConfigValue::String("hello".to_string())),
             Some("hello".to_string())
         );
-        
+
         // Test array
         let array = ConfigValue::Array(vec![
             ConfigValue::Integer(1),
             ConfigValue::Integer(2),
             ConfigValue::Integer(3),
         ]);
-        
+
         let vec: Option<Vec<i64>> = Vec::from_config_value(&array);
         assert_eq!(vec, Some(vec![1, 2, 3]));
-        
+
         // Test map
         let mut map_value = ConfigValue::Map(HashMap::new());
-        map_value.set("a", 1).unwrap();
-        map_value.set("b", 2).unwrap();
-        
+        map_value.set("a", 1);
+        map_value.set("b", 2);
+
         let map: Option<HashMap<String, i64>> = HashMap::from_config_value(&map_value);
         assert!(map.is_some());
         let map = map.unwrap();
@@ -1248,26 +1237,29 @@ mod tests {
         assert_eq!(map.get("a"), Some(&1));
         assert_eq!(map.get("b"), Some(&2));
     }
-    
+
     #[test]
     fn test_config_value_display() {
         assert_eq!(ConfigValue::Null.to_string(), "null");
         assert_eq!(ConfigValue::Bool(true).to_string(), "true");
         assert_eq!(ConfigValue::Integer(42).to_string(), "42");
         assert_eq!(ConfigValue::Float(3.14).to_string(), "3.14");
-        assert_eq!(ConfigValue::String("hello".to_string()).to_string(), "\"hello\"");
-        
+        assert_eq!(
+            ConfigValue::String("hello".to_string()).to_string(),
+            "\"hello\""
+        );
+
         let array = ConfigValue::Array(vec![
             ConfigValue::Integer(1),
             ConfigValue::Integer(2),
             ConfigValue::Integer(3),
         ]);
         assert_eq!(array.to_string(), "[1, 2, 3]");
-        
+
         let mut map = ConfigValue::Map(HashMap::new());
-        map.set("a", 1).unwrap();
-        map.set("b", "hello").unwrap();
-        
+        map.set("a", 1);
+        map.set("b", "hello");
+
         // The order of keys in the map is not guaranteed, so we need to check both possibilities
         let display = map.to_string();
         assert!(
@@ -1276,7 +1268,7 @@ mod tests {
             display
         );
     }
-    
+
     #[test]
     fn test_config_serialization() {
         let mut config = Config::new_map();
@@ -1284,13 +1276,25 @@ mod tests {
         config.set("a.d", "hello").unwrap();
         config.set("a.e[0]", 1).unwrap();
         config.set("a.e[1]", 2).unwrap();
-        
+
         let serialized = serde_json::to_string(&config).unwrap();
         let deserialized: Config = serde_json::from_str(&serialized).unwrap();
-        
-        assert_eq!(config.get("a.b.c").unwrap().as_integer(), deserialized.get("a.b.c").unwrap().as_integer());
-        assert_eq!(config.get("a.d").unwrap().as_str(), deserialized.get("a.d").unwrap().as_str());
-        assert_eq!(config.get("a.e[0]").unwrap().as_integer(), deserialized.get("a.e[0]").unwrap().as_integer());
-        assert_eq!(config.get("a.e[1]").unwrap().as_integer(), deserialized.get("a.e[1]").unwrap().as_integer());
+
+        assert_eq!(
+            config.get("a.b.c").unwrap().as_integer(),
+            deserialized.get("a.b.c").unwrap().as_integer()
+        );
+        assert_eq!(
+            config.get("a.d").unwrap().as_str(),
+            deserialized.get("a.d").unwrap().as_str()
+        );
+        assert_eq!(
+            config.get("a.e[0]").unwrap().as_integer(),
+            deserialized.get("a.e[0]").unwrap().as_integer()
+        );
+        assert_eq!(
+            config.get("a.e[1]").unwrap().as_integer(),
+            deserialized.get("a.e[1]").unwrap().as_integer()
+        );
     }
 }
