@@ -55,6 +55,11 @@ impl MemoryRange {
         self.base < other.end() && other.base < self.end()
     }
 
+    /// Returns true if this range overlaps with another range
+    pub fn overlaps_with(&self, other: &MemoryRange) -> bool {
+        self.base < other.end() && other.base < self.end()
+    }
+
     /// Returns the intersection of this range with another
     pub fn intersect(&self, other: &MemoryRange) -> Option<MemoryRange> {
         if !self.overlaps(other) {
@@ -314,12 +319,48 @@ impl Capability for MemoryCapability {
         if let Some(other_mem) = other.as_any().downcast_ref::<MemoryCapability>() {
             // Create a union of the ranges
             let mut ranges = Vec::new();
+            let mut merged_ranges = BTreeMap::new();
 
-            // Add all ranges from self
-            ranges.extend(self.ranges.values().cloned());
+            // Start with all ranges from self
+            for range in self.ranges.values() {
+                merged_ranges.insert(range.base, *range);
+            }
 
-            // Add all ranges from other
-            ranges.extend(other_mem.ranges.values().cloned());
+            // Add ranges from other, merging overlapping ones
+            for range in other_mem.ranges.values() {
+                let mut overlaps = false;
+                let mut overlapping_ranges = Vec::new();
+
+                // Check for overlaps with existing ranges
+                for (base, existing_range) in &merged_ranges {
+                    if existing_range.overlaps_with(range) {
+                        overlaps = true;
+                        overlapping_ranges.push(*base);
+                    }
+                }
+
+                if overlaps {
+                    // Remove overlapping ranges
+                    for base in overlapping_ranges {
+                        if let Some(existing_range) = merged_ranges.remove(&base) {
+                            // Create a new range that encompasses both
+                            let new_base = std::cmp::min(existing_range.base, range.base);
+                            let new_end = std::cmp::max(existing_range.end(), range.end());
+                            let operations = existing_range.operations | range.operations;
+                            merged_ranges.insert(
+                                new_base,
+                                MemoryRange::new(new_base, new_end - new_base, operations),
+                            );
+                        }
+                    }
+                } else {
+                    // Add non-overlapping range
+                    merged_ranges.insert(range.base, *range);
+                }
+            }
+
+            // Convert merged ranges back to a vector
+            ranges.extend(merged_ranges.values().cloned());
 
             Ok(Box::new(MemoryCapability::new(ranges)))
         } else {

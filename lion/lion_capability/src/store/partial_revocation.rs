@@ -1,4 +1,5 @@
 use crate::model::{AccessRequest, Capability, CapabilityError};
+use std::collections::HashSet;
 
 /// Apply partial revocation to a capability, removing specific access
 ///
@@ -49,35 +50,56 @@ pub fn apply_partial_revocation(
     // derived from the request to further constrain the capability
     match request {
         AccessRequest::File {
-            path: _path,
+            ref path,
             read,
             write,
             execute,
         } => {
-            // For file capabilities, we can apply constraints to remove specific paths
-            // or operations without removing everything
+            use crate::model::file::{FileCapability, FileOperations};
 
-            use crate::model::Constraint;
+            // Try to downcast to a FileCapability
+            if let Some(file_cap) = capability.as_any().downcast_ref::<FileCapability>() {
+                // Create a modified copy that preserves operations not being revoked
+                let mut operations = file_cap.operations();
 
-            // If it's a specific path request, create a constraint that excludes just that path
-            // by permitting only operations other than the requested ones
-            let constraints = vec![Constraint::FileOperation {
-                read: *read,
-                write: *write,
-                execute: *execute,
-            }];
+                // Selectively revoke only the requested operations
+                if *read {
+                    operations &= !FileOperations::READ;
+                }
+                if *write {
+                    operations &= !FileOperations::WRITE;
+                }
+                if *execute {
+                    operations &= !FileOperations::EXECUTE;
+                }
 
-            // Apply the constraints to get a reduced capability
-            let reduced = capability.constrain(&constraints)?;
+                // Check if operations would be empty
+                if operations.is_empty() {
+                    return Err(CapabilityError::InvalidState(
+                        "Partial revocation would remove all permissions".to_string(),
+                    ));
+                }
 
-            // Verify that the reduced capability no longer permits the request
-            if reduced.permits(request).is_ok() {
-                return Err(CapabilityError::InvalidState(
-                    "Failed to revoke specific access through constraints".to_string(),
-                ));
+                // Create a new capability that keeps all paths
+                let mut paths = HashSet::new();
+                for p in file_cap.paths() {
+                    paths.insert(p.clone());
+                }
+
+                return Ok(Box::new(FileCapability::new(paths, operations)));
             }
 
-            Ok(reduced)
+            // Fall back to traditional constraint approach
+            use crate::model::Constraint;
+
+            // Create an inverse constraint - only allow operations that aren't part of the request
+            let constraints = vec![Constraint::FileOperation {
+                read: !*read,
+                write: !*write,
+                execute: !*execute,
+            }];
+
+            capability.constrain(&constraints)
         }
         // Handle other request types similarly
         // For now we'll just return an error for other types

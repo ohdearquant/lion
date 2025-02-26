@@ -39,9 +39,17 @@ impl HostRule {
             HostRule::Any => true,
             HostRule::Domain(domain) => host == domain,
             HostRule::WildcardDomain(suffix) => {
-                host.ends_with(suffix)
-                    && host.len() > suffix.len()
-                    && host.as_bytes()[host.len() - suffix.len() - 1] == b'.'
+                // Fix wildcard matching to properly handle subdomain wildcards
+                // or ".example.com" matching "sub.example.com"
+                if suffix.starts_with('.') {
+                    // For ".example.com" format
+                    host.ends_with(suffix)
+                } else if suffix.starts_with("*.") {
+                    // For "*.example.com" format
+                    host.ends_with(suffix) || host.ends_with(&suffix[1..])
+                } else {
+                    host.ends_with(&format!(".{}", suffix)) || host == suffix
+                }
             }
             HostRule::ExactIp(ip) => {
                 if let Ok(host_ip) = host.parse::<IpAddr>() {
@@ -284,7 +292,10 @@ impl NetworkCapability {
     fn host_allowed(&self, host: &Option<String>) -> bool {
         match host {
             None => self.host_rules.contains(&HostRule::Any),
-            Some(host_str) => self.host_rules.iter().any(|rule| rule.matches(host_str)),
+            Some(host_str) => {
+                self.host_rules.iter().any(|rule| rule.matches(host_str))
+                    || self.host_rules.contains(&HostRule::Any)
+            }
         }
     }
 
@@ -410,18 +421,10 @@ impl Capability for NetworkCapability {
                 listen,
                 bind,
             } => {
-                // Check if the host is allowed
-                if !self.host_allowed(host) {
-                    return Err(CapabilityError::AccessDenied(format!(
-                        "Host '{:?}' is not allowed by this capability",
-                        host
-                    )));
-                }
-
                 // Get the operations allowed for this port
                 let allowed_ops = self.operations_for_port(port);
 
-                // Check if the requested operations are permitted
+                // Build the requested operations
                 let mut requested_ops = NetworkOperations::empty();
                 if *connect {
                     requested_ops |= NetworkOperations::CONNECT;
@@ -433,13 +436,23 @@ impl Capability for NetworkCapability {
                     requested_ops |= NetworkOperations::BIND;
                 }
 
+                // Check if operations are allowed
                 if !allowed_ops.contains(requested_ops) {
                     return Err(CapabilityError::AccessDenied(format!(
-                        "Operation not permitted on host '{:?}' port '{:?}'",
-                        host, port
+                        "Operation not permitted on port {:?}",
+                        port
                     )));
                 }
 
+                // Check if the host is allowed
+                if !self.host_allowed(host) {
+                    return Err(CapabilityError::AccessDenied(format!(
+                        "Host '{:?}' is not allowed by this capability",
+                        host
+                    )));
+                }
+
+                // All checks passed
                 Ok(())
             }
             _ => Err(CapabilityError::IncompatibleTypes(format!(

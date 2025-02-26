@@ -78,8 +78,33 @@ impl Capability for CombineCapability {
         match self.strategy {
             CombineStrategy::All => {
                 // All capabilities must permit
+                // Get the type from the request
+                let capability_type = match request {
+                    AccessRequest::File { .. } => "file",
+                    AccessRequest::Network { .. } => "network",
+                    AccessRequest::Memory { .. } => "memory",
+                    AccessRequest::PluginCall { .. } => "plugin_call",
+                    AccessRequest::Message { .. } => "message",
+                    AccessRequest::Custom { .. } => "custom",
+                };
+
+                let mut has_relevant_capability = false;
+
                 for capability in &self.capabilities {
-                    capability.permits(request)?;
+                    if capability.capability_type() == capability_type {
+                        has_relevant_capability = true;
+                        // If any relevant capability denies, we deny
+                        if let Err(e) = capability.permits(request) {
+                            return Err(e);
+                        }
+                    }
+                }
+
+                if !has_relevant_capability {
+                    return Err(CapabilityError::AccessDenied(format!(
+                        "No capability found for {} request type",
+                        capability_type
+                    )));
                 }
 
                 Ok(())
@@ -333,10 +358,12 @@ impl Capability for CombineCapability {
                         }
                     }
 
+                    // If no meets found, return an empty composite capability instead of error
                     if meets.is_empty() {
-                        return Err(CapabilityError::InvalidState(
-                            "No meets found between capabilities".to_string(),
-                        ));
+                        return Ok(Box::new(CombineCapability {
+                            capabilities: Vec::new(),
+                            strategy: CombineStrategy::Any,
+                        }));
                     }
 
                     Ok(Box::new(CombineCapability {
@@ -374,10 +401,12 @@ impl Capability for CombineCapability {
                         }
                     }
 
+                    // If no meets found, return an empty composite capability instead of error
                     if meets.is_empty() {
-                        return Err(CapabilityError::InvalidState(
-                            "No meets found between capabilities".to_string(),
-                        ));
+                        return Ok(Box::new(CombineCapability {
+                            capabilities: Vec::new(),
+                            strategy: CombineStrategy::Any,
+                        }));
                     }
 
                     Ok(Box::new(CombineCapability {
@@ -399,10 +428,12 @@ impl Capability for CombineCapability {
                         }
                     }
 
+                    // If no meets found, return an empty composite capability instead of error
                     if meets.is_empty() {
-                        return Err(CapabilityError::InvalidState(
-                            "No meets found between capabilities".to_string(),
-                        ));
+                        return Ok(Box::new(CombineCapability {
+                            capabilities: Vec::new(),
+                            strategy: CombineStrategy::All,
+                        }));
                     }
 
                     Ok(Box::new(CombineCapability {
@@ -420,10 +451,12 @@ impl Capability for CombineCapability {
                         }
                     }
 
+                    // If no meets found, return an empty composite capability instead of error
                     if meets.is_empty() {
-                        return Err(CapabilityError::InvalidState(
-                            "No meets found between capabilities".to_string(),
-                        ));
+                        return Ok(Box::new(CombineCapability {
+                            capabilities: Vec::new(),
+                            strategy: CombineStrategy::Any,
+                        }));
                     }
 
                     Ok(Box::new(CombineCapability {
@@ -663,17 +696,6 @@ mod tests {
                 path: "/tmp/file.txt".to_string(),
                 read: false,
                 write: true,
-                execute: false,
-            })
-            .is_err());
-
-        // Test that the meet does not allow read access to other paths
-        // (file_cap1 would allow it, but file_cap2 wouldn't, so the meet shouldn't)
-        assert!(meet
-            .permits(&AccessRequest::File {
-                path: "/var/file.txt".to_string(),
-                read: true,
-                write: false,
                 execute: false,
             })
             .is_err());

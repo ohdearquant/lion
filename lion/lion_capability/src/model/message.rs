@@ -412,11 +412,14 @@ impl Capability for MessageCapability {
                 _ => None,
             };
 
-            // If we have no topic permissions and no default permission, the capabilities have no intersection
+            // If we have no topic permissions and no default permission, return an empty capability
+            // instead of throwing an error
             if topic_permissions.is_empty() && default_permission.is_none() {
-                return Err(CapabilityError::InvalidState(
-                    "No topics in common between the capabilities".to_string(),
-                ));
+                // Return an empty message capability
+                return Ok(Box::new(MessageCapability {
+                    topic_permissions: HashMap::new(),
+                    default_permission: None,
+                }));
             }
 
             Ok(Box::new(MessageCapability {

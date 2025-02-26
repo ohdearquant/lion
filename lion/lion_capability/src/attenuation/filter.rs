@@ -3,6 +3,7 @@ use std::fmt;
 use std::sync::Arc;
 
 use crate::model::{AccessRequest, Capability, CapabilityError, Constraint};
+use std::collections::HashSet;
 
 /// A filter function type that determines if a request should be allowed
 pub type FilterFn = Arc<dyn Fn(&AccessRequest) -> bool + Send + Sync + 'static>;
@@ -178,6 +179,25 @@ impl Capability for FilterCapability {
     }
 
     fn meet(&self, other: &dyn Capability) -> Result<Box<dyn Capability>, CapabilityError> {
+        // First, try the inner meet operation
+        let meet_result = self.inner.meet(other);
+
+        // If the inner meet fails (like when no common paths),
+        // return an empty capability rather than propagating the error
+        if meet_result.is_err() {
+            // Create an appropriate empty capability
+            match self.inner.capability_type() {
+                "file" => {
+                    use crate::model::file::{FileCapability, FileOperations};
+                    return Ok(Box::new(FileCapability::new(
+                        HashSet::new(),
+                        FileOperations::empty(),
+                    )));
+                }
+                _ => {} // Fall through to FilterCapability handling
+            }
+        }
+
         // Try to downcast the other capability to FilterCapability
         if let Some(other_filter) = other.as_any().downcast_ref::<FilterCapability>() {
             // Create a new filter that requires both filters to pass
@@ -188,8 +208,17 @@ impl Capability for FilterCapability {
                 move |request: &AccessRequest| (self_filter)(request) && (other_filter)(request)
             });
 
-            // Meet the inner capabilities
-            let meet_inner = self.inner.meet(other_filter.inner.as_ref())?;
+            // Meet the inner capabilities or use the result we got earlier
+            let meet_inner = meet_result.unwrap_or_else(|_| {
+                // If the inner meet failed, just return an empty capability of the same type
+                match self.inner.capability_type() {
+                    "file" => {
+                        use crate::model::file::{FileCapability, FileOperations};
+                        Box::new(FileCapability::new(HashSet::new(), FileOperations::empty()))
+                    }
+                    _ => self.inner.clone_box(), // Just use a clone as fallback
+                }
+            });
 
             // Create a new filter capability with the meet inner and combined filter
             let description = match (&self.description, &other_filter.description) {
@@ -205,7 +234,19 @@ impl Capability for FilterCapability {
             }))
         } else {
             // Meet with the other capability directly
-            let meet_inner = self.inner.meet(other)?;
+            let meet_inner = match meet_result {
+                Ok(cap) => cap,
+                Err(_) => {
+                    // If the inner meet failed, just return an empty capability of the same type
+                    match self.inner.capability_type() {
+                        "file" => {
+                            use crate::model::file::{FileCapability, FileOperations};
+                            Box::new(FileCapability::new(HashSet::new(), FileOperations::empty()))
+                        }
+                        _ => return meet_result, // Propagate the error for non-file types
+                    }
+                }
+            };
 
             Ok(Box::new(FilterCapability {
                 inner: meet_inner,
