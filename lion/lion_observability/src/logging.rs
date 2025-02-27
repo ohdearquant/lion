@@ -558,13 +558,19 @@ mod tests {
         let inner_cap = CapabilityLogger::new(inner, checker);
         let logger = BufferedLogger::new(inner_cap, 10);
 
-        // These logs will be buffered due to capability denial
-        assert!(logger.info("Test message").is_ok());
-        assert!(logger.error("Error message").is_ok());
+        // Set up a context with a known plugin ID for the test
+        let ctx = Context::new().with_plugin_id("test_plugin");
 
-        // Check buffer state (implementation detail)
-        assert_eq!(logger.buffer.len(), 1);
-        let unknown_buffer = logger.buffer.get("unknown").unwrap();
-        assert_eq!(unknown_buffer.len(), 2);
+        // Run with this context so plugin ID is known
+        ctx.with_current(|| {
+            // These logs will be buffered due to capability denial
+            assert!(logger.info("Test message").is_ok());
+            assert!(logger.error("Error message").is_ok());
+
+            // Check buffer state (implementation detail)
+            assert_eq!(logger.buffer.len(), 1);
+            let buffer = logger.buffer.get("test_plugin").unwrap();
+            assert_eq!(buffer.len(), 2);
+        });
     }
 }

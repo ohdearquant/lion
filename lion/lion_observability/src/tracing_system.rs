@@ -227,12 +227,23 @@ pub trait Tracer: TracerBase {
     where
         F: FnOnce() -> R,
     {
-        // Create a new span
-        let mut span = self.create_span(name)?;
+        let name = name.into();
+        let mut span;
 
-        // Create a context with the span
-        let mut ctx = Context::current().unwrap_or_default();
-        ctx.span_context = Some(span.context.clone());
+        // Get current context to establish parent-child relationship
+        let current_ctx = Context::current().unwrap_or_default();
+
+        // Create a span based on whether we already have a span context
+        if let Some(current_span_ctx) = current_ctx.span_context.as_ref() {
+            // Create child span from parent context
+            span = self.create_child_span(name, current_span_ctx)?;
+        } else {
+            // Create a new root span
+            span = self.create_span(name)?;
+        }
+
+        // Create a context with the new span
+        let ctx = current_ctx.with_span_context(span.context.clone());
 
         // Execute the function in the context
         let result = ctx.with_current(f);
