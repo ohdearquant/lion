@@ -80,8 +80,8 @@ pub struct TaskExecutionResult {
 pub type NodeHandler = Arc<
     dyn Fn(
             ExecutionContext,
-        ) -> Box<
-            dyn std::future::Future<Output = Result<NodeResult, ExecutorError>> + Send + Unpin,
+        ) -> std::pin::Pin<
+            Box<dyn std::future::Future<Output = Result<NodeResult, ExecutorError>> + Send>,
         > + Send
         + Sync,
 >;
@@ -700,7 +700,7 @@ mod tests {
             .register_node_handler(
                 "start",
                 Arc::new(|ctx| {
-                    Box::new(async move {
+                    Box::pin(async move {
                         // Simple start node handler that returns success
                         Ok(NodeResult::success(
                             ctx.current_node_id.unwrap(),
@@ -715,7 +715,7 @@ mod tests {
             .register_node_handler(
                 "process",
                 Arc::new(|ctx| {
-                    Box::new(async move {
+                    Box::pin(async move {
                         // Process node that uses input from start node
                         let inputs = ctx.get_inputs()?;
 
@@ -736,7 +736,7 @@ mod tests {
             .register_node_handler(
                 "end",
                 Arc::new(|ctx| {
-                    Box::new(async move {
+                    Box::pin(async move {
                         // End node that just returns success
                         Ok(NodeResult::success(
                             ctx.current_node_id.unwrap(),
@@ -807,7 +807,7 @@ mod tests {
             .register_node_handler(
                 "start",
                 Arc::new(|ctx| {
-                    Box::new(async move {
+                    Box::pin(async move {
                         // Start node that succeeds
                         Ok(NodeResult::success(
                             ctx.current_node_id.unwrap(),
@@ -822,7 +822,7 @@ mod tests {
             .register_node_handler(
                 "process",
                 Arc::new(|_| {
-                    Box::new(async move {
+                    Box::pin(async move {
                         // Process node that deliberately fails
                         Err(ExecutorError::NodeError("Deliberate failure".to_string()))
                     })
@@ -834,7 +834,7 @@ mod tests {
             .register_node_handler(
                 "end",
                 Arc::new(|ctx| {
-                    Box::new(async move {
+                    Box::pin(async move {
                         // End node that won't be reached
                         Ok(NodeResult::success(
                             ctx.current_node_id.unwrap(),

@@ -368,7 +368,7 @@ impl<S: StorageBackend> StateMachineManager<S> {
         // Cache the definition
         {
             let mut defs = self.definitions.write().await;
-            defs.insert(definition.id, definition.clone());
+            defs.insert(definition.id.clone(), definition.clone());
         }
 
         // Create a new state
@@ -434,7 +434,7 @@ impl<S: StorageBackend> StateMachineManager<S> {
             // Cache it
             {
                 let mut defs = self.definitions.write().await;
-                defs.insert(*workflow_id, definition.clone());
+                defs.insert(workflow_id.clone(), definition.clone());
             }
 
             return Ok(definition);
@@ -462,7 +462,7 @@ impl<S: StorageBackend> StateMachineManager<S> {
         // Get the definition
         let workflow_id = {
             let state = state_lock.read().await;
-            state.workflow_id
+            state.workflow_id.clone()
         };
 
         let definition = self.load_definition(&workflow_id).await?;
@@ -494,7 +494,7 @@ impl<S: StorageBackend> StateMachineManager<S> {
         };
 
         let state = state_lock.read().await;
-        Ok(state.ready_nodes.iter().copied().collect())
+        Ok(state.ready_nodes.iter().cloned().collect())
     }
 
     /// Mark a node as running
@@ -602,10 +602,10 @@ mod tests {
 
         // Add edges
         workflow
-            .add_edge(Edge::new(EdgeId::new(), &node1_id, &node2_id))
+            .add_edge(Edge::new(EdgeId::new(), node1_id.clone(), node2_id.clone()))
             .unwrap();
         workflow
-            .add_edge(Edge::new(EdgeId::new(), &node2_id, &node3_id))
+            .add_edge(Edge::new(EdgeId::new(), node2_id.clone(), node3_id.clone()))
             .unwrap();
 
         Arc::new(workflow)
@@ -731,7 +731,7 @@ mod tests {
         let manager = StateMachineManager::with_checkpoint_manager(checkpoint_manager);
 
         let workflow = create_test_workflow();
-        let workflow_id = workflow.id;
+        let workflow_id = workflow.id.clone();
 
         // Create instance
         let instance = manager.create_instance(workflow).await.unwrap();

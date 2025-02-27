@@ -201,30 +201,32 @@ impl ExecutionContext {
     pub fn get_current_node(&self) -> Result<&crate::model::Node, ContextError> {
         let node_id = self
             .current_node_id
+            .as_ref()
             .ok_or_else(|| ContextError::InvalidState("No current node".to_string()))?;
 
         self.definition
-            .get_node(&node_id)
-            .ok_or_else(|| ContextError::NodeNotFound(node_id))
+            .get_node(node_id)
+            .ok_or_else(|| ContextError::NodeNotFound(node_id.clone()))
     }
 
     /// Get input data for the current node
     pub fn get_inputs(&self) -> Result<HashMap<NodeId, serde_json::Value>, ContextError> {
         let node_id = self
             .current_node_id
+            .as_ref()
             .ok_or_else(|| ContextError::InvalidState("No current node".to_string()))?;
 
         // Get parent nodes
         let parent_nodes = self
             .definition
-            .get_parent_nodes(&node_id)
+            .get_parent_nodes(node_id)
             .map_err(|e| ContextError::ExecutionError(e.to_string()))?;
 
         // Collect results from parent nodes
         let mut inputs = HashMap::new();
         for parent in parent_nodes {
             if let Some(result) = self.state.node_results.get(&parent.id) {
-                inputs.insert(parent.id, result.clone());
+                inputs.insert(parent.id.clone(), result.clone());
             }
         }
 
@@ -266,7 +268,7 @@ impl ExecutionContext {
         let edge = self
             .definition
             .get_edge(edge_id)
-            .ok_or_else(|| ContextError::EdgeNotFound(*edge_id))?;
+            .ok_or_else(|| ContextError::EdgeNotFound(edge_id.clone()))?;
 
         // Get source node result
         let source_result = self.state.node_results.get(&edge.source).ok_or_else(|| {
@@ -294,7 +296,10 @@ impl ExecutionContext {
                     Err(_) => Ok(ConditionResult::Error),
                 }
             }
-            crate::model::ConditionType::Custom { plugin_id, config } => {
+            crate::model::ConditionType::Custom {
+                plugin_id: _,
+                config: _,
+            } => {
                 // Custom condition, not implemented in this context
                 // Would require plugin system integration
                 Ok(ConditionResult::Pending)
@@ -377,13 +382,13 @@ mod tests {
 
         let node1 = Node::new(NodeId::new(), "Node 1".to_string());
         let node2 = Node::new(NodeId::new(), "Node 2".to_string());
-        let node1_id = node1.id;
-        let node2_id = node2.id;
+        let node1_id = node1.id.clone();
+        let node2_id = node2.id.clone();
 
         workflow.add_node(node1).unwrap();
         workflow.add_node(node2).unwrap();
         workflow
-            .add_edge(Edge::new(EdgeId::new(), node1_id, node2_id))
+            .add_edge(Edge::new(EdgeId::new(), node1_id.clone(), node2_id.clone()))
             .unwrap();
 
         let definition = Arc::new(workflow);
@@ -397,7 +402,7 @@ mod tests {
         let node_id = NodeId::new();
 
         // Test success
-        let success = NodeResult::success(node_id, serde_json::json!({"data": "test"}));
+        let success = NodeResult::success(node_id.clone(), serde_json::json!({"data": "test"}));
         assert!(success.is_success());
         assert!(!success.is_failure());
         assert_eq!(success.status, NodeStatus::Completed);
@@ -412,14 +417,14 @@ mod tests {
     #[test]
     fn test_execution_context() {
         let (definition, state) = create_test_workflow();
-        let node_id = *definition.nodes.keys().next().unwrap();
+        let node_id = definition.nodes.keys().next().unwrap().clone();
 
         let context = ExecutionContext::new(definition, state)
-            .with_node(node_id)
+            .with_node(node_id.clone())
             .with_priority(2)
             .with_attempt(3);
 
-        assert_eq!(context.current_node_id, Some(node_id));
+        assert_eq!(context.current_node_id, Some(node_id.clone()));
         assert_eq!(context.priority, 2);
         assert_eq!(context.attempt, 3);
 

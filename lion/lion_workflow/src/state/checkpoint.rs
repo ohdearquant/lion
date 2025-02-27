@@ -86,7 +86,9 @@ impl<S: StorageBackend> CheckpointManager<S> {
             locks: Arc::new(Mutex::new(std::collections::HashMap::new())),
         }
     }
+}
 
+impl CheckpointManager<crate::state::storage::FileStorage> {
     /// Create a new file-based checkpoint manager
     pub fn with_file_storage(
         base_dir: PathBuf,
@@ -105,7 +107,9 @@ impl<S: StorageBackend> CheckpointManager<S> {
 
         Ok(manager)
     }
+}
 
+impl<S: StorageBackend> CheckpointManager<S> {
     /// Save a workflow state to a checkpoint
     pub async fn save_checkpoint(
         &self,
@@ -114,7 +118,7 @@ impl<S: StorageBackend> CheckpointManager<S> {
         // Get or create a lock for this workflow
         let mut locks = self.locks.lock().await;
         let lock = locks
-            .entry(workflow.id)
+            .entry(workflow.id.clone())
             .or_insert_with(|| Arc::new(Mutex::new(())))
             .clone();
 
@@ -130,7 +134,7 @@ impl<S: StorageBackend> CheckpointManager<S> {
         // Generate a unique checkpoint ID
         let checkpoint_id = format!(
             "{}-{}-{}",
-            workflow.id,
+            workflow.id.clone(),
             chrono::Utc::now().timestamp_millis(),
             uuid::Uuid::new_v4().as_simple()
         );
@@ -145,7 +149,7 @@ impl<S: StorageBackend> CheckpointManager<S> {
         // Create metadata
         let metadata = CheckpointMetadata {
             id: checkpoint_id.clone(),
-            workflow_id: workflow.id,
+            workflow_id: workflow.id.clone(),
             version: self.schema_version.clone(),
             created_at: chrono::Utc::now(),
             size: checkpoint_data.len(),
@@ -346,8 +350,8 @@ mod tests {
 
         let node1 = Node::new(NodeId::new(), "Node 1".to_string());
         let node2 = Node::new(NodeId::new(), "Node 2".to_string());
-        let node1_id = node1.id;
-        let node2_id = node2.id;
+        let node1_id = node1.id.clone();
+        let node2_id = node2.id.clone();
 
         workflow.add_node(node1).unwrap();
         workflow.add_node(node2).unwrap();
@@ -362,12 +366,12 @@ mod tests {
     async fn test_checkpoint_save_load() {
         // Create a temporary directory for checkpoints
         let temp_dir = TempDir::new().unwrap();
-        let manager =
+        let manager: CheckpointManager<crate::state::storage::FileStorage> =
             CheckpointManager::with_file_storage(temp_dir.path().to_path_buf(), "1.0.0").unwrap();
 
         // Create a test workflow
         let workflow = create_test_workflow();
-        let workflow_id = workflow.id;
+        let workflow_id = workflow.id.clone();
 
         // Save a checkpoint
         let checkpoint_id = manager.save_checkpoint(&workflow).await.unwrap();
@@ -386,12 +390,12 @@ mod tests {
     async fn test_list_checkpoints() {
         // Create a temporary directory for checkpoints
         let temp_dir = TempDir::new().unwrap();
-        let manager =
+        let manager: CheckpointManager<crate::state::storage::FileStorage> =
             CheckpointManager::with_file_storage(temp_dir.path().to_path_buf(), "1.0.0").unwrap();
 
         // Create a test workflow
         let workflow = create_test_workflow();
-        let workflow_id = workflow.id;
+        let workflow_id = workflow.id.clone();
 
         // Save multiple checkpoints
         let _checkpoint1 = manager.save_checkpoint(&workflow).await.unwrap();
@@ -400,7 +404,8 @@ mod tests {
         let _checkpoint2 = manager.save_checkpoint(&workflow).await.unwrap();
 
         // List checkpoints
-        let checkpoints = manager.list_checkpoints(&workflow_id).await.unwrap();
+        let checkpoints: Vec<CheckpointMetadata> =
+            manager.list_checkpoints(&workflow_id).await.unwrap();
 
         // Verify we have two checkpoints
         assert_eq!(checkpoints.len(), 2);
@@ -410,12 +415,12 @@ mod tests {
     async fn test_load_latest_checkpoint() {
         // Create a temporary directory for checkpoints
         let temp_dir = TempDir::new().unwrap();
-        let manager =
+        let manager: CheckpointManager<crate::state::storage::FileStorage> =
             CheckpointManager::with_file_storage(temp_dir.path().to_path_buf(), "1.0.0").unwrap();
 
         // Create a test workflow
         let mut workflow = create_test_workflow();
-        let workflow_id = workflow.id;
+        let workflow_id = workflow.id.clone();
 
         // Save first checkpoint
         let _checkpoint1 = manager.save_checkpoint(&workflow).await.unwrap();
@@ -440,12 +445,12 @@ mod tests {
     async fn test_prune_checkpoints() {
         // Create a temporary directory for checkpoints
         let temp_dir = TempDir::new().unwrap();
-        let manager =
+        let manager: CheckpointManager<crate::state::storage::FileStorage> =
             CheckpointManager::with_file_storage(temp_dir.path().to_path_buf(), "1.0.0").unwrap();
 
         // Create a test workflow
         let workflow = create_test_workflow();
-        let workflow_id = workflow.id;
+        let workflow_id = workflow.id.clone();
 
         // Save multiple checkpoints
         let _checkpoint1 = manager.save_checkpoint(&workflow).await.unwrap();
@@ -455,7 +460,8 @@ mod tests {
         let _checkpoint3 = manager.save_checkpoint(&workflow).await.unwrap();
 
         // Verify we have 3 checkpoints
-        let checkpoints = manager.list_checkpoints(&workflow_id).await.unwrap();
+        let checkpoints: Vec<CheckpointMetadata> =
+            manager.list_checkpoints(&workflow_id).await.unwrap();
         assert_eq!(checkpoints.len(), 3);
 
         // Prune to keep only 1 checkpoint
@@ -463,7 +469,8 @@ mod tests {
         assert_eq!(deleted, 2);
 
         // Verify we now have 1 checkpoint
-        let checkpoints = manager.list_checkpoints(&workflow_id).await.unwrap();
+        let checkpoints: Vec<CheckpointMetadata> =
+            manager.list_checkpoints(&workflow_id).await.unwrap();
         assert_eq!(checkpoints.len(), 1);
     }
 }

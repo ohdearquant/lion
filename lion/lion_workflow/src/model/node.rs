@@ -9,7 +9,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 pub type NodeId = Id<Node>;
 
 /// Status of a workflow node
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Hash)]
 pub enum NodeStatus {
     /// Node is waiting for dependencies to complete
     Pending,
@@ -27,8 +27,28 @@ pub enum NodeStatus {
     Cancelled,
 }
 
+impl Default for NodeStatus {
+    fn default() -> Self {
+        NodeStatus::Pending
+    }
+}
+
+impl std::fmt::Display for NodeStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            NodeStatus::Pending => write!(f, "Pending"),
+            NodeStatus::Ready => write!(f, "Ready"),
+            NodeStatus::Running => write!(f, "Running"),
+            NodeStatus::Completed => write!(f, "Completed"),
+            NodeStatus::Failed => write!(f, "Failed"),
+            NodeStatus::Skipped => write!(f, "Skipped"),
+            NodeStatus::Cancelled => write!(f, "Cancelled"),
+        }
+    }
+}
+
 /// Priority level for node execution
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, PartialOrd, Ord, Hash)]
 pub enum Priority {
     Low = 0,
     Normal = 1,
@@ -43,7 +63,7 @@ impl Default for Priority {
 }
 
 /// A node in the workflow graph
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Node {
     /// Unique identifier for this node
     pub id: NodeId,
@@ -76,6 +96,21 @@ pub struct Node {
 
     /// Type-specific configuration for this node
     pub config: serde_json::Value,
+}
+
+impl std::hash::Hash for Node {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        // Only hash fields that implement Hash
+        // Skip HashSet fields (outgoing_edges and incoming_edges)
+        self.id.hash(state);
+        self.name.hash(state);
+        self.status.hash(state);
+        self.in_degree.hash(state);
+        self.required_capability.hash(state);
+        self.priority.hash(state);
+        // Skip deadline as chrono::DateTime doesn't implement Hash
+        // Skip config as serde_json::Value doesn't implement Hash
+    }
 }
 
 impl Node {

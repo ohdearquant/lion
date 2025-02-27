@@ -49,7 +49,7 @@ pub enum WorkflowError {
 }
 
 /// Version information for workflows
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct Version {
     /// Major version (incremented for breaking changes)
     pub major: u32,
@@ -76,7 +76,7 @@ impl std::fmt::Display for Version {
 }
 
 /// Definition of a workflow
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct WorkflowDefinition {
     /// Unique identifier for this workflow
     pub id: WorkflowId,
@@ -110,6 +110,13 @@ pub struct WorkflowDefinition {
 
     /// Capability required to execute this workflow
     pub required_capability: Option<CapabilityId>,
+}
+
+// Implement Hash for WorkflowDefinition to only hash the ID field
+impl std::hash::Hash for WorkflowDefinition {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.id.hash(state);
+    }
 }
 
 impl WorkflowDefinition {
@@ -182,6 +189,9 @@ impl WorkflowDefinition {
             self.start_nodes.remove(&edge.target);
         }
 
+        // Store edge ID for potential removal
+        let edge_id_clone = edge.id.clone();
+
         // Add the edge to our map
         let edge_id = edge.id.clone();
         self.edges.insert(edge_id, edge);
@@ -190,7 +200,7 @@ impl WorkflowDefinition {
         // Check if the new edge creates a cycle
         if self.has_cycle() {
             // If it does, revert our changes
-            self.remove_edge(&edge.id)?;
+            self.remove_edge(&edge_id_clone)?;
             return Err(WorkflowError::CycleDetected);
         }
 
@@ -773,9 +783,9 @@ mod tests {
             .description("A test workflow")
             .version(1, 2, 3)
             .capability(cap)
-            .add_node(Node::new(node1_id, "Node 1".to_string()))
+            .add_node(Node::new(node1_id.clone(), "Node 1".to_string()))
             .unwrap()
-            .add_node(Node::new(node2_id, "Node 2".to_string()))
+            .add_node(Node::new(node2_id.clone(), "Node 2".to_string()))
             .unwrap()
             .add_edge(Edge::new(EdgeId::new(), node1_id.clone(), node2_id.clone()))
             .unwrap()
