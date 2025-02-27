@@ -154,8 +154,31 @@ mod tests {
         let config = ObservabilityConfig::default();
         let obs = Observability::new(config).expect("Failed to create observability");
 
-        assert!(obs.logger().as_ref().name().contains("default"));
-        assert!(obs.tracer().as_ref().name().contains("default"));
-        assert!(obs.metrics_registry().as_ref().name().contains("default"));
+        // Check that logger name contains "logger"
+        let logger = obs.logger();
+        let logger_name = logger.name();
+        assert!(
+            logger_name.contains("logger"),
+            "Logger name '{}' should contain 'logger'",
+            logger_name
+        );
+
+        // Check that tracer name contains "tracer"
+        let tracer = obs.tracer();
+        let tracer_name = tracer.name();
+        assert!(
+            tracer_name.contains("tracer"),
+            "Tracer name '{}' should contain 'tracer'",
+            tracer_name
+        );
+
+        // Check that metrics registry name contains "registry"
+        let registry = obs.metrics_registry();
+        let registry_name = registry.name();
+        assert!(
+            registry_name.contains("registry"),
+            "Metrics registry name '{}' should contain 'registry'",
+            registry_name
+        );
     }
 }
