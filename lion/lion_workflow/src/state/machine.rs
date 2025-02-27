@@ -110,7 +110,7 @@ impl WorkflowState {
             
             // Add start nodes to ready nodes
             if node.in_degree == 0 {
-                ready_nodes.insert(*id);
+                ready_nodes.insert(id.clone());
             }
         }
         
@@ -156,17 +156,17 @@ impl WorkflowState {
     pub fn set_node_running(&mut self, node_id: &NodeId) -> Result<(), StateMachineError> {
         // Check if node exists
         if !self.node_status.contains_key(node_id) {
-            return Err(StateMachineError::NodeNotFound(*node_id));
+            return Err(StateMachineError::NodeNotFound(node_id.clone()));
         }
         
         // Check if node is ready
         if !self.ready_nodes.contains(node_id) {
-            return Err(StateMachineError::NodeNotReady(*node_id));
+            return Err(StateMachineError::NodeNotReady(node_id.clone()));
         }
         
         // Update status
-        self.node_status.insert(*node_id, NodeStatus::Running);
-        self.ready_nodes.remove(node_id);
+        self.node_status.insert(node_id.clone(), NodeStatus::Running);
+        self.ready_nodes.remove(&node_id);
         self.updated_at = chrono::Utc::now();
         
         Ok(())
@@ -180,7 +180,7 @@ impl WorkflowState {
     ) -> Result<Vec<NodeId>, StateMachineError> {
         // Check if node exists
         if !self.node_status.contains_key(node_id) {
-            return Err(StateMachineError::NodeNotFound(*node_id));
+            return Err(StateMachineError::NodeNotFound(node_id.clone()));
         }
         
         // Check if node is in a valid state to complete
@@ -193,8 +193,8 @@ impl WorkflowState {
         }
         
         // Update status and store result
-        self.node_status.insert(*node_id, NodeStatus::Completed);
-        self.node_results.insert(*node_id, result);
+        self.node_status.insert(node_id.clone(), NodeStatus::Completed);
+        self.node_results.insert(node_id.clone(), result);
         self.updated_at = chrono::Utc::now();
         
         // Find outgoing edges to activate next nodes
@@ -213,8 +213,8 @@ impl WorkflowState {
                                 if *in_degree == 0 {
                                     if let Some(status) = self.node_status.get(&edge.target) {
                                         if *status == NodeStatus::Pending {
-                                            self.ready_nodes.insert(edge.target);
-                                            newly_ready.push(edge.target);
+                                            self.ready_nodes.insert(edge.target.clone());
+                                            newly_ready.push(edge.target.clone());
                                         }
                                     }
                                 }
@@ -239,7 +239,7 @@ impl WorkflowState {
     ) -> Result<(), StateMachineError> {
         // Check if node exists
         if !self.node_status.contains_key(node_id) {
-            return Err(StateMachineError::NodeNotFound(*node_id));
+            return Err(StateMachineError::NodeNotFound(node_id.clone()));
         }
         
         // Check if node is in a valid state to fail
@@ -252,9 +252,9 @@ impl WorkflowState {
         }
         
         // Update status and store error
-        self.node_status.insert(*node_id, NodeStatus::Failed);
-        self.node_results.insert(*node_id, error);
-        self.ready_nodes.remove(node_id);
+        self.node_status.insert(node_id.clone(), NodeStatus::Failed);
+        self.node_results.insert(node_id.clone(), error);
+        self.ready_nodes.remove(&node_id);
         self.has_failed = true;
         self.updated_at = chrono::Utc::now();
         
@@ -273,12 +273,12 @@ impl WorkflowState {
         // Check if edge exists
         if let Some(definition) = &self.definition {
             if !definition.edges.contains_key(edge_id) {
-                return Err(StateMachineError::EdgeNotFound(*edge_id));
+                return Err(StateMachineError::EdgeNotFound(edge_id.clone()));
             }
         }
         
         // Update condition result
-        self.edge_conditions.insert(*edge_id, result);
+        self.edge_conditions.insert(edge_id.clone(), result);
         self.updated_at = chrono::Utc::now();
         
         Ok(())
@@ -312,12 +312,12 @@ impl WorkflowState {
         // Reset node status and in-degree
         if let Some(definition) = &self.definition {
             for (id, node) in &definition.nodes {
-                self.node_status.insert(*id, NodeStatus::Pending);
-                self.node_in_degree.insert(*id, node.in_degree);
+                self.node_status.insert(id.clone(), NodeStatus::Pending);
+                self.node_in_degree.insert(id.clone(), node.in_degree);
                 
                 // Add start nodes to ready nodes
                 if node.in_degree == 0 {
-                    self.ready_nodes.insert(*id);
+                    self.ready_nodes.insert(id.clone());
                 }
             }
         }
@@ -435,7 +435,7 @@ impl<S: StorageBackend> StateMachineManager<S> {
             return Ok(definition);
         }
         
-        Err(StateMachineError::WorkflowNotFound(*workflow_id))
+        Err(StateMachineError::WorkflowNotFound(workflow_id.clone()))
     }
     
     /// Checkpoint a workflow instance
@@ -549,9 +549,9 @@ mod tests {
         let node2 = Node::new(NodeId::new(), "Middle".to_string());
         let node3 = Node::new(NodeId::new(), "End".to_string());
         
-        let node1_id = node1.id;
-        let node2_id = node2.id;
-        let node3_id = node3.id;
+        let node1_id = node1.id.clone();
+        let node2_id = node2.id.clone();
+        let node3_id = node3.id.clone();
         
         // Add nodes
         workflow.add_node(node1).unwrap();
@@ -559,8 +559,8 @@ mod tests {
         workflow.add_node(node3).unwrap();
         
         // Add edges
-        workflow.add_edge(Edge::new(EdgeId::new(), node1_id, node2_id)).unwrap();
-        workflow.add_edge(Edge::new(EdgeId::new(), node2_id, node3_id)).unwrap();
+        workflow.add_edge(Edge::new(EdgeId::new(), &node1_id, &node2_id)).unwrap();
+        workflow.add_edge(Edge::new(EdgeId::new(), &node2_id, &node3_id)).unwrap();
         
         Arc::new(workflow)
     }

@@ -36,8 +36,8 @@
 //!     .add_node(node1).unwrap()
 //!     .add_node(node2).unwrap()
 //!     .add_node(node3).unwrap()
-//!     .add_edge(Edge::new(EdgeId::new(), node1_id, node2_id)).unwrap()
-//!     .add_edge(Edge::new(EdgeId::new(), node2_id, node3_id)).unwrap()
+//!     .add_edge(Edge::new(EdgeId::new(), &node1_id, &node2_id)).unwrap()
+//!     .add_edge(Edge::new(EdgeId::new(), &node2_id, &node3_id)).unwrap()
 //!     .build();
 //!
 //! // Create execution components
@@ -98,13 +98,13 @@ mod tests {
         let node1 = Node::new(NodeId::new(), "Node 1".to_string());
         let node2 = Node::new(NodeId::new(), "Node 2".to_string());
         
-        let node1_id = node1.id;
-        let node2_id = node2.id;
+        let node1_id = node1.id.clone();
+        let node2_id = node2.id.clone();
         
         let workflow = builder
             .add_node(node1).unwrap()
             .add_node(node2).unwrap()
-            .add_edge(Edge::new(EdgeId::new(), node1_id, node2_id)).unwrap()
+            .add_edge(Edge::new(EdgeId::new(), &node1_id, &node2_id)).unwrap()
             .build();
         
         assert_eq!(workflow.name, "Test Workflow");

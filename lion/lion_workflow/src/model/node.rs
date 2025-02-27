@@ -43,7 +43,7 @@ impl Default for Priority {
 }
 
 /// A node in the workflow graph
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct Node {
     /// Unique identifier for this node
     pub id: NodeId,
@@ -218,7 +218,7 @@ impl AtomicNode {
         };
         
         AtomicNode {
-            id: node.id,
+            id: node.id.clone(),
             in_degree: AtomicUsize::new(node.in_degree),
             status: std::sync::atomic::AtomicU8::new(status_value),
         }

@@ -25,7 +25,7 @@ pub enum ConditionType {
 }
 
 /// An edge in the workflow graph, connecting two nodes
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct Edge {
     /// Unique identifier for this edge
     pub id: EdgeId,
@@ -48,11 +48,11 @@ pub struct Edge {
 
 impl Edge {
     /// Create a new edge connecting source to target
-    pub fn new(id: EdgeId, source: NodeId, target: NodeId) -> Self {
+    pub fn new(id: EdgeId, source: &NodeId, target: &NodeId) -> Self {
         Edge {
             id,
-            source,
-            target,
+            source: source.clone(),
+            target: target.clone(),
             condition: ConditionType::None,
             required_capability: None,
             metadata: serde_json::Value::Null,
@@ -117,7 +117,7 @@ mod tests {
     fn test_edge_creation() {
         let source = NodeId::new();
         let target = NodeId::new();
-        let edge = Edge::new(EdgeId::new(), source, target);
+        let edge = Edge::new(EdgeId::new(), &source, &target);
         
         assert_eq!(edge.source, source);
         assert_eq!(edge.target, target);
@@ -129,7 +129,7 @@ mod tests {
     fn test_edge_with_json_path_condition() {
         let source = NodeId::new();
         let target = NodeId::new();
-        let edge = Edge::new(EdgeId::new(), source, target)
+        let edge = Edge::new(EdgeId::new(), &source, &target)
             .with_json_path("$.result.success");
         
         assert_eq!(edge.condition, ConditionType::JsonPath("$.result.success".to_string()));
@@ -141,7 +141,7 @@ mod tests {
         let source = NodeId::new();
         let target = NodeId::new();
         let capability = CapabilityId::new();
-        let edge = Edge::new(EdgeId::new(), source, target)
+        let edge = Edge::new(EdgeId::new(), &source, &target)
             .with_capability(capability);
         
         assert_eq!(edge.required_capability, Some(capability));

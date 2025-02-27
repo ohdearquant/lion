@@ -102,7 +102,7 @@ pub enum StepStatus {
 }
 
 /// Saga coordination strategy
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SagaStrategy {
     /// Orchestration: central coordinator issues commands
     Orchestration,
@@ -936,7 +936,7 @@ impl SagaOrchestrator {
     /// Start the timeout monitor
     async fn start_timeout_monitor(&self) -> Result<(), SagaError> {
         let orch = self.clone();
-        let mut cancel_rx = self.cancel_rx.lock().await.clone();
+        let mut cancel_rx = mpsc::Receiver::clone(&*self.cancel_rx.lock().await);
         
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(tokio::time::Duration::from_millis(
@@ -961,7 +961,7 @@ impl SagaOrchestrator {
     /// Start the cleanup task
     async fn start_cleanup_task(&self) -> Result<(), SagaError> {
         let orch = self.clone();
-        let mut cancel_rx = self.cancel_rx.lock().await.clone();
+        let mut cancel_rx = mpsc::Receiver::clone(&*self.cancel_rx.lock().await);
         
         tokio::spawn(async move {
             let interval_ms = orch.config.read().await.check_interval_ms * 10; // Less frequent
@@ -1463,10 +1463,22 @@ impl Clone for SagaOrchestrator {
         let (tx, rx) = mpsc::channel(1);
         
         SagaOrchestrator {
-            config: self.config.clone(),
-            sagas: self.sagas.clone(),
-            step_handlers: self.step_handlers.clone(),
-            compensation_handlers: self.compensation_handlers.clone(),
+            config: RwLock::new(
+                // We need to acquire a read lock and clone the inner data
+                self.config.blocking_read().clone()
+            ),
+            sagas: RwLock::new(
+                // Clone the inner HashMap
+                self.sagas.blocking_read().clone()
+            ),
+            step_handlers: RwLock::new(
+                // Clone the inner HashMap
+                self.step_handlers.blocking_read().clone()
+            ),
+            compensation_handlers: RwLock::new(
+                // Clone the inner HashMap
+                self.compensation_handlers.blocking_read().clone()
+            ),
             event_broker: self.event_broker.clone(),
             is_running: self.is_running.clone(),
             cancel_tx: tx,

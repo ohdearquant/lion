@@ -581,8 +581,8 @@ mod tests {
         // Add two nodes
         let node1 = Node::new(NodeId::new(), "Node 1".to_string());
         let node2 = Node::new(NodeId::new(), "Node 2".to_string());
-        let node1_id = node1.id;
-        let node2_id = node2.id;
+        let node1_id = node1.id.clone();
+        let node2_id = node2.id.clone();
         
         workflow.add_node(node1).unwrap();
         workflow.add_node(node2).unwrap();
@@ -592,7 +592,7 @@ mod tests {
         assert_eq!(workflow.end_nodes.len(), 2);
         
         // Add an edge
-        let edge = Edge::new(EdgeId::new(), node1_id, node2_id);
+        let edge = Edge::new(EdgeId::new(), &node1_id, &node2_id);
         let edge_id = edge.id;
         
         workflow.add_edge(edge).unwrap();
@@ -620,20 +620,20 @@ mod tests {
         let node2 = Node::new(NodeId::new(), "Node 2".to_string());
         let node3 = Node::new(NodeId::new(), "Node 3".to_string());
         
-        let node1_id = node1.id;
-        let node2_id = node2.id;
-        let node3_id = node3.id;
+        let node1_id = node1.id.clone();
+        let node2_id = node2.id.clone();
+        let node3_id = node3.id.clone();
         
         workflow.add_node(node1).unwrap();
         workflow.add_node(node2).unwrap();
         workflow.add_node(node3).unwrap();
         
         // Add edges to form a cycle: 1 -> 2 -> 3 -> 1
-        workflow.add_edge(Edge::new(EdgeId::new(), node1_id, node2_id)).unwrap();
-        workflow.add_edge(Edge::new(EdgeId::new(), node2_id, node3_id)).unwrap();
+        workflow.add_edge(Edge::new(EdgeId::new(), &node1_id, &node2_id)).unwrap();
+        workflow.add_edge(Edge::new(EdgeId::new(), &node2_id, &node3_id)).unwrap();
         
         // This edge creates a cycle and should fail
-        let result = workflow.add_edge(Edge::new(EdgeId::new(), node3_id, node1_id));
+        let result = workflow.add_edge(Edge::new(EdgeId::new(), &node3_id, &node1_id));
         
         assert!(result.is_err());
         match result {
@@ -652,10 +652,10 @@ mod tests {
         let node3 = Node::new(NodeId::new(), "Node 3".to_string());
         let node4 = Node::new(NodeId::new(), "Node 4".to_string());
         
-        let node1_id = node1.id;
-        let node2_id = node2.id;
-        let node3_id = node3.id;
-        let node4_id = node4.id;
+        let node1_id = node1.id.clone();
+        let node2_id = node2.id.clone();
+        let node3_id = node3.id.clone();
+        let node4_id = node4.id.clone();
         
         workflow.add_node(node1).unwrap();
         workflow.add_node(node2).unwrap();
@@ -665,10 +665,10 @@ mod tests {
         // Add edges to form a DAG
         // 1 -> 2 -> 4
         //  \-> 3 -/
-        workflow.add_edge(Edge::new(EdgeId::new(), node1_id, node2_id)).unwrap();
-        workflow.add_edge(Edge::new(EdgeId::new(), node1_id, node3_id)).unwrap();
-        workflow.add_edge(Edge::new(EdgeId::new(), node2_id, node4_id)).unwrap();
-        workflow.add_edge(Edge::new(EdgeId::new(), node3_id, node4_id)).unwrap();
+        workflow.add_edge(Edge::new(EdgeId::new(), &node1_id, &node2_id)).unwrap();
+        workflow.add_edge(Edge::new(EdgeId::new(), &node1_id, &node3_id)).unwrap();
+        workflow.add_edge(Edge::new(EdgeId::new(), &node2_id, &node4_id)).unwrap();
+        workflow.add_edge(Edge::new(EdgeId::new(), &node3_id, &node4_id)).unwrap();
         
         let order = workflow.get_topological_order().unwrap();
         
@@ -681,8 +681,8 @@ mod tests {
         assert_eq!(order[3], node4_id); // Node 4 must be last
         
         // Node 2 and 3 can be in either order, but before 4
-        let idx2 = order.iter().position(|&id| id == node2_id).unwrap();
-        let idx3 = order.iter().position(|&id| id == node3_id).unwrap();
+        let idx2 = order.iter().position(|id| *id == node2_id).unwrap();
+        let idx3 = order.iter().position(|id| *id == node3_id).unwrap();
         assert!(idx2 > 0 && idx2 < 3);
         assert!(idx3 > 0 && idx3 < 3);
     }
@@ -701,14 +701,14 @@ mod tests {
         node1.required_capability = Some(cap1);
         node2.required_capability = Some(cap2);
         
-        let node1_id = node1.id;
-        let node2_id = node2.id;
+        let node1_id = node1.id.clone();
+        let node2_id = node2.id.clone();
         
         workflow.add_node(node1).unwrap();
         workflow.add_node(node2).unwrap();
         
         // Create an edge without a capability (should fail)
-        let edge_without_cap = Edge::new(EdgeId::new(), node1_id, node2_id);
+        let edge_without_cap = Edge::new(EdgeId::new(), &node1_id, &node2_id);
         let result = workflow.add_edge(edge_without_cap);
         
         assert!(result.is_err());
@@ -718,7 +718,7 @@ mod tests {
         }
         
         // Create an edge with a capability (should succeed)
-        let edge_with_cap = Edge::new(EdgeId::new(), node1_id, node2_id)
+        let edge_with_cap = Edge::new(EdgeId::new(), &node1_id, &node2_id)
             .with_capability(CapabilityId::new());
         
         let result = workflow.add_edge(edge_with_cap);
@@ -737,7 +737,7 @@ mod tests {
             .capability(cap)
             .add_node(Node::new(node1_id, "Node 1".to_string())).unwrap()
             .add_node(Node::new(node2_id, "Node 2".to_string())).unwrap()
-            .add_edge(Edge::new(EdgeId::new(), node1_id, node2_id)).unwrap()
+            .add_edge(Edge::new(EdgeId::new(), &node1_id, &node2_id)).unwrap()
             .build();
         
         assert_eq!(workflow.name, "Test Workflow");

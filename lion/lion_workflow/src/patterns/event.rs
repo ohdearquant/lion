@@ -60,7 +60,7 @@ impl Default for DeliverySemantic {
 }
 
 /// Event priority levels
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum EventPriority {
     Low = 0,
     Normal = 1,
@@ -722,10 +722,23 @@ impl EventBroker {
 impl Clone for EventBroker {
     fn clone(&self) -> Self {
         EventBroker {
-            config: self.config.clone(),
-            subscriptions: self.subscriptions.clone(),
-            in_flight: self.in_flight.clone(),
-            processed_events: self.processed_events.clone(),
+            config: RwLock::new(
+                // We need to acquire a read lock and clone the inner data
+                // This is a blocking operation, but it's only used during cloning
+                self.config.blocking_read().clone()
+            ),
+            subscriptions: RwLock::new(
+                // Clone the inner HashMap
+                self.subscriptions.blocking_read().clone()
+            ),
+            in_flight: RwLock::new(
+                // Clone the inner HashMap
+                self.in_flight.blocking_read().clone()
+            ),
+            processed_events: RwLock::new(
+                // Clone the inner HashSet
+                self.processed_events.blocking_read().clone()
+            ),
             event_store: self.event_store.clone(),
         }
     }
