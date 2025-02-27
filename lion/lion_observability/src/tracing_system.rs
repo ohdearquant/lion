@@ -249,6 +249,7 @@ pub trait Tracer: TracerBase {
 impl<T: ?Sized + TracerBase> Tracer for T {}
 
 /// Tracer implementation using OpenTelemetry
+#[allow(dead_code)]
 pub struct OTelTracer {
     /// Tracer name
     name: String,
@@ -262,6 +263,7 @@ pub struct OTelTracer {
     tracer: Option<opentelemetry_sdk::trace::Tracer>,
 }
 
+#[allow(dead_code)]
 impl OTelTracer {
     /// Create a new OpenTelemetry tracer
     pub fn new(config: &TracingConfig) -> Result<Self> {

@@ -98,12 +98,10 @@ fn create_capability_checker() -> impl lion_observability::capability::Observabi
         // Auth plugin can log at all levels and use metrics
         .allow("auth_plugin", ObservabilityCapability::Log(LogLevel::Trace))
         .allow("auth_plugin", ObservabilityCapability::Metrics)
-        
         // Data plugin can log at info and above, use metrics and tracing
         .allow("data_plugin", ObservabilityCapability::Log(LogLevel::Info))
         .allow("data_plugin", ObservabilityCapability::Metrics)
         .allow("data_plugin", ObservabilityCapability::Tracing)
-        
         // UI plugin can only log at warn and above
         .allow("ui_plugin", ObservabilityCapability::Log(LogLevel::Warn))
 }
