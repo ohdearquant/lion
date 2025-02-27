@@ -17,9 +17,7 @@ use lion_observability::capability::{
 use lion_observability::config::{
     LoggingConfig, MetricsConfig, ObservabilityConfig, TracingConfig,
 };
-use lion_observability::context::Context;
 use lion_observability::error::ObservabilityError;
-use lion_observability::logging::Logger;
 use lion_observability::tracing_system::SpanStatus;
 use lion_observability::tracing_system::Tracer;
 use lion_observability::{Observability, Result};
@@ -111,6 +109,7 @@ fn create_capability_checker() -> impl lion_observability::capability::Observabi
 }
 
 /// Example plugin trait
+#[allow(dead_code)]
 trait Plugin: Send + Sync {
     /// Get the plugin ID
     fn id(&self) -> &str;

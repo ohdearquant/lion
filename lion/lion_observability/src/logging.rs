@@ -4,8 +4,6 @@
 //! context propagation and capability-based access control.
 
 use std::fmt;
-use std::path::Path;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 

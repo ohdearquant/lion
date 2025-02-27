@@ -3,11 +3,9 @@
 //! This module defines the capabilities required for observability operations
 //! and provides integration with Lion's capability system.
 
-use crate::error::ObservabilityError;
 use crate::Result;
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use serde::{Deserialize, Serialize};
 use std::fmt;
-use std::sync::Arc;
 
 /// Represents specific observability capabilities
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

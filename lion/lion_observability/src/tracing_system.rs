@@ -9,12 +9,10 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
-use opentelemetry::trace::TraceContextExt;
-use opentelemetry::KeyValue;
 use serde::{Deserialize, Serialize};
 
 use crate::capability::{ObservabilityCapability, ObservabilityCapabilityChecker};
-use crate::config::{TracePropagation, TracingConfig};
+use crate::config::TracingConfig;
 use crate::context::{Context, SpanContext};
 use crate::error::ObservabilityError;
 use crate::Result;

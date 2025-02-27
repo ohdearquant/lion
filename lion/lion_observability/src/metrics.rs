@@ -9,9 +9,8 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use metrics::{counter, gauge, histogram, SharedString};
-use metrics::{describe_counter, describe_gauge, describe_histogram, KeyName, Unit};
-use metrics::{Counter as MetricsCounter, Gauge as MetricsGauge, Histogram as MetricsHistogram};
+use metrics::{counter, gauge, histogram};
+use metrics::{describe_counter, describe_gauge, describe_histogram};
 use metrics_exporter_prometheus::PrometheusBuilder;
 use parking_lot::RwLock;
 
