@@ -479,8 +479,7 @@ impl Plugin for UiPlugin {
 
         // Unwrap the nested Result
         match result {
-            Ok(Ok(s)) => Ok(s),
-            Ok(Err(e)) => Err(e),
+            Ok(s) => Ok(s),
             Err(e) => Err(e),
         }
     }
