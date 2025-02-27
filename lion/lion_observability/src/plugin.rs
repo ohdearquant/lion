@@ -9,8 +9,10 @@ use std::sync::Arc;
 use crate::capability::{LogLevel, ObservabilityCapabilityChecker};
 use crate::context::{Context, SpanContext};
 use crate::error::ObservabilityError;
+use crate::logging::SimpleLogger;
 use crate::logging::{LogEvent, LoggerBase};
 use crate::metrics::{Counter, Gauge, Histogram, MetricsRegistry};
+use crate::tracing_system::NoopTracer;
 use crate::tracing_system::{Span, SpanStatus, TracerBase, TracingEvent};
 use crate::Result;
 
@@ -21,15 +23,16 @@ pub struct PluginObservability {
     plugin_id: String,
 
     /// Logger
-    logger: Arc<dyn LoggerBase>,
+    logger: Arc<SimpleLogger>,
 
     /// Tracer
-    tracer: Arc<dyn TracerBase>,
+    tracer: Arc<NoopTracer>,
 
     /// Metrics registry
     metrics_registry: Arc<dyn MetricsRegistry>,
 
     /// Capability checker (optional)
+    #[allow(dead_code)]
     capability_checker: Option<Arc<dyn ObservabilityCapabilityChecker>>,
 }
 
@@ -37,8 +40,8 @@ impl PluginObservability {
     /// Create a new plugin observability instance
     pub fn new(
         plugin_id: String,
-        logger: Arc<dyn LoggerBase>,
-        tracer: Arc<dyn TracerBase>,
+        logger: Arc<SimpleLogger>,
+        tracer: Arc<NoopTracer>,
         metrics_registry: Arc<dyn MetricsRegistry>,
         capability_checker: Option<Arc<dyn ObservabilityCapabilityChecker>>,
     ) -> Self {
@@ -212,10 +215,10 @@ impl PluginObservability {
 /// Manager for plugin observability
 pub struct PluginObservabilityManager {
     /// Logger
-    logger: Arc<dyn LoggerBase>,
+    logger: Arc<SimpleLogger>,
 
     /// Tracer
-    tracer: Arc<dyn TracerBase>,
+    tracer: Arc<NoopTracer>,
 
     /// Metrics registry
     metrics_registry: Arc<dyn MetricsRegistry>,
@@ -230,8 +233,8 @@ pub struct PluginObservabilityManager {
 impl PluginObservabilityManager {
     /// Create a new plugin observability manager
     pub fn new(
-        logger: Arc<dyn LoggerBase>,
-        tracer: Arc<dyn TracerBase>,
+        logger: Arc<SimpleLogger>,
+        tracer: Arc<NoopTracer>,
         metrics_registry: Arc<dyn MetricsRegistry>,
         capability_checker: Option<Arc<dyn ObservabilityCapabilityChecker>>,
     ) -> Self {
@@ -296,13 +299,12 @@ impl PluginObservabilityManager {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::logging::NoopLogger;
+    use crate::config::LoggingConfig;
     use crate::metrics::NoopMetricsRegistry;
-    use crate::tracing_system::NoopTracer;
 
     #[test]
     fn test_plugin_observability() {
-        let logger = Arc::new(NoopLogger::new());
+        let logger = Arc::new(SimpleLogger::new(&LoggingConfig::default()));
         let tracer = Arc::new(NoopTracer::new());
         let metrics = Arc::new(NoopMetricsRegistry::new());
 
@@ -335,7 +337,7 @@ mod tests {
 
     #[test]
     fn test_plugin_manager() {
-        let logger = Arc::new(NoopLogger::new());
+        let logger = Arc::new(SimpleLogger::new(&LoggingConfig::default()));
         let tracer = Arc::new(NoopTracer::new());
         let metrics = Arc::new(NoopMetricsRegistry::new());
 

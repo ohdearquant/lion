@@ -1,16 +1,14 @@
 use std::collections::HashMap;
-use std::sync::Arc;
 use std::time::Duration;
 
 use lion_observability::capability::{
-    LogLevel, ObservabilityCapability, ObservabilityCapabilityChecker, SelectiveCapabilityChecker,
+    LogLevel, ObservabilityCapability, SelectiveCapabilityChecker,
 };
-use lion_observability::config::{
-    LoggingConfig, MetricsConfig, ObservabilityConfig, TracingConfig,
-};
+use lion_observability::config::ObservabilityConfig;
 use lion_observability::context::Context;
-use lion_observability::logging::LogEvent;
+use lion_observability::logging::Logger;
 use lion_observability::tracing_system::SpanStatus;
+use lion_observability::tracing_system::{Tracer, TracerBase};
 use lion_observability::{Observability, Result};
 
 #[test]
@@ -28,8 +26,9 @@ fn test_observability_lifecycle() -> Result<()> {
 
     // Test tracer
     let tracer = obs.tracer();
-    let span = tracer.create_span("test_span")?;
-    tracer.record_span(span)?;
+    let mut span = tracer.create_span("test_span")?;
+    span.end(); // End the span before recording it
+    TracerBase::record_span(&*tracer, span)?; // Use the TracerBase trait method
 
     // Test metrics
     let metrics = obs.metrics_registry();
@@ -212,7 +211,7 @@ fn test_context_propagation() -> Result<()> {
                         // The parent span ID should be set
                         assert_eq!(
                             inner_span_ctx.parent_span_id.as_deref(),
-                            Some(&outer_span_ctx.span_id)
+                            Some(&outer_span_ctx.span_id).map(|s| s.as_str())
                         );
                     })
                     .unwrap();
@@ -237,11 +236,10 @@ async fn test_async_context_propagation() -> Result<()> {
     // Create plugin observability
     let plugin_obs = obs.create_plugin_observability("async_plugin");
 
-    // Create a context with plugin ID
+    // Create a context with plugin ID and clone for async use
     let context = plugin_obs.create_context();
-
-    // Capture context for async
     let cloned_context = context.clone();
+    let plugin_obs_clone = plugin_obs.clone();
 
     // Start with context
     context.with_current(|| {
@@ -254,17 +252,17 @@ async fn test_async_context_propagation() -> Result<()> {
                 // Spawn async task
                 tokio::spawn(async move {
                     // Restore context in async task
-                    let ctx = cloned_context.clone().with_span_context(span_ctx);
+                    let ctx = cloned_context.with_span_context(span_ctx);
 
                     ctx.with_current(|| {
                         // Log in async context
-                        plugin_obs.info("Inside async task").unwrap();
+                        plugin_obs_clone.info("Inside async task").unwrap();
 
                         // Create a new span in the async context
-                        plugin_obs
+                        plugin_obs_clone
                             .with_span("async_operation", || {
                                 // Log inside the async span
-                                plugin_obs.info("Inside async span").unwrap();
+                                plugin_obs_clone.info("Inside async span").unwrap();
 
                                 // Check that the context is properly propagated
                                 let current_ctx = Context::current().unwrap();

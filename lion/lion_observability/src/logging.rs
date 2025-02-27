@@ -333,7 +333,7 @@ impl LoggerBase for SimpleLogger {
         // but for simplicity, we're skipping that
 
         // Use tracing if available
-        let level = Self::to_tracing_level(event.level);
+        let _level = Self::to_tracing_level(event.level);
         // Use a string format instead of passing the level directly
         let message = event.message.clone();
         match event.level {

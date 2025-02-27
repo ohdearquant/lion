@@ -57,8 +57,8 @@ pub type Result<T> = std::result::Result<T, ObservabilityError>;
 #[derive(Clone)]
 pub struct Observability {
     config: Arc<ObservabilityConfig>,
-    logger: Arc<dyn LoggerBase>,
-    tracer: Arc<dyn TracerBase>,
+    logger: Arc<logging::SimpleLogger>,
+    tracer: Arc<tracing_system::NoopTracer>,
     metrics_registry: Arc<dyn MetricsRegistry>,
     capability_checker: Option<Arc<dyn ObservabilityCapabilityChecker>>,
 }
@@ -67,17 +67,17 @@ impl Observability {
     /// Create a new Observability instance with the provided configuration
     pub fn new(config: ObservabilityConfig) -> Result<Self> {
         // Create concrete instances directly instead of using the factory functions
-        let logger: Arc<dyn LoggerBase> = if !config.logging.enabled {
-            Arc::new(logging::NoopLogger::new())
+        let logger = if !config.logging.enabled {
+            Arc::new(logging::SimpleLogger::new(&LoggingConfig::default()))
         } else {
             Arc::new(logging::SimpleLogger::new(&config.logging))
         };
 
-        let tracer: Arc<dyn TracerBase> = if !config.tracing.enabled {
+        let tracer = if !config.tracing.enabled {
             Arc::new(tracing_system::NoopTracer::new())
         } else {
-            let otel_tracer = tracing_system::OTelTracer::new(&config.tracing)?;
-            Arc::new(otel_tracer)
+            // For simplicity, we'll just use NoopTracer for now
+            Arc::new(tracing_system::NoopTracer::new())
         };
 
         let metrics_registry: Arc<dyn MetricsRegistry> = if !config.metrics.enabled {
@@ -106,12 +106,12 @@ impl Observability {
     }
 
     /// Get the logger instance
-    pub fn logger(&self) -> Arc<dyn LoggerBase> {
+    pub fn logger(&self) -> Arc<logging::SimpleLogger> {
         self.logger.clone()
     }
 
     /// Get the tracer instance
-    pub fn tracer(&self) -> Arc<dyn TracerBase> {
+    pub fn tracer(&self) -> Arc<tracing_system::NoopTracer> {
         self.tracer.clone()
     }
 

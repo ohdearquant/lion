@@ -252,10 +252,15 @@ impl<T: ?Sized + TracerBase> Tracer for T {}
 
 /// Tracer implementation using OpenTelemetry
 pub struct OTelTracer {
+    /// Tracer name
     name: String,
-    initialized: AtomicBool,
-    config: TracingConfig,
+    /// Whether the tracer is initialized
     #[allow(dead_code)]
+    initialized: AtomicBool,
+    /// Tracer configuration
+    #[allow(dead_code)]
+    config: TracingConfig,
+    /// OpenTelemetry tracer
     tracer: Option<opentelemetry_sdk::trace::Tracer>,
 }
 
