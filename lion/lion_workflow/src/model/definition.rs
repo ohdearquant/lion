@@ -76,7 +76,7 @@ impl std::fmt::Display for Version {
 }
 
 /// Definition of a workflow
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct WorkflowDefinition {
     /// Unique identifier for this workflow
     pub id: WorkflowId,
@@ -140,10 +140,11 @@ impl WorkflowDefinition {
         
         // Initially, every node is both a start and end node
         // We'll update these sets when edges are added
-        self.start_nodes.insert(node.id);
-        self.end_nodes.insert(node.id);
+        self.start_nodes.insert(node.id.clone());
+        self.end_nodes.insert(node.id.clone());
         
-        self.nodes.insert(node.id, node);
+        let node_id = node.id.clone();
+        self.nodes.insert(node_id, node);
         self.updated_at = chrono::Utc::now();
         
         Ok(())
@@ -169,20 +170,21 @@ impl WorkflowDefinition {
         
         // Update the source node (add outgoing edge)
         if let Some(source_node) = self.nodes.get_mut(&edge.source) {
-            source_node.add_outgoing_edge(edge.id);
+            source_node.add_outgoing_edge(edge.id.clone());
             // Source node is no longer an end node
             self.end_nodes.remove(&edge.source);
         }
         
         // Update the target node (add incoming edge)
         if let Some(target_node) = self.nodes.get_mut(&edge.target) {
-            target_node.add_incoming_edge(edge.id);
+            target_node.add_incoming_edge(edge.id.clone());
             // Target node is no longer a start node
             self.start_nodes.remove(&edge.target);
         }
         
         // Add the edge to our map
-        self.edges.insert(edge.id, edge);
+        let edge_id = edge.id.clone();
+        self.edges.insert(edge_id, edge);
         self.updated_at = chrono::Utc::now();
         
         // Check if the new edge creates a cycle
@@ -198,7 +200,7 @@ impl WorkflowDefinition {
     /// Remove a node from this workflow
     pub fn remove_node(&mut self, node_id: &NodeId) -> Result<Node, WorkflowError> {
         let node = self.nodes.remove(node_id)
-            .ok_or_else(|| WorkflowError::NodeNotFound(*node_id))?;
+            .ok_or_else(|| WorkflowError::NodeNotFound(node_id.clone()))?;
         
         // Remove all edges connected to this node
         let mut edges_to_remove = Vec::new();
@@ -206,7 +208,7 @@ impl WorkflowDefinition {
         // Find all edges that connect to this node
         for edge in self.edges.values() {
             if edge.source == *node_id || edge.target == *node_id {
-                edges_to_remove.push(edge.id);
+                edges_to_remove.push(edge.id.clone());
             }
         }
         
@@ -227,14 +229,14 @@ impl WorkflowDefinition {
     /// Remove an edge from this workflow
     pub fn remove_edge(&mut self, edge_id: &EdgeId) -> Result<Edge, WorkflowError> {
         let edge = self.edges.remove(edge_id)
-            .ok_or_else(|| WorkflowError::EdgeNotFound(*edge_id))?;
+            .ok_or_else(|| WorkflowError::EdgeNotFound(edge_id.clone()))?;
         
         // Update the source node
         if let Some(source_node) = self.nodes.get_mut(&edge.source) {
             source_node.remove_outgoing_edge(edge_id);
             // Check if the source node is now an end node
             if source_node.outgoing_edges.is_empty() {
-                self.end_nodes.insert(edge.source);
+                self.end_nodes.insert(edge.source.clone());
             }
         }
         
@@ -243,7 +245,7 @@ impl WorkflowDefinition {
             target_node.remove_incoming_edge(edge_id);
             // Check if the target node is now a start node
             if target_node.incoming_edges.is_empty() {
-                self.start_nodes.insert(edge.target);
+                self.start_nodes.insert(edge.target.clone());
             }
         }
         
@@ -270,7 +272,7 @@ impl WorkflowDefinition {
     /// Get all child nodes of a given node
     pub fn get_child_nodes(&self, node_id: &NodeId) -> Result<Vec<&Node>, WorkflowError> {
         let node = self.nodes.get(node_id)
-            .ok_or_else(|| WorkflowError::NodeNotFound(*node_id))?;
+            .ok_or_else(|| WorkflowError::NodeNotFound(node_id.clone()))?;
         
         let mut children = Vec::new();
         
@@ -289,7 +291,7 @@ impl WorkflowDefinition {
     /// Get all parent nodes of a given node
     pub fn get_parent_nodes(&self, node_id: &NodeId) -> Result<Vec<&Node>, WorkflowError> {
         let node = self.nodes.get(node_id)
-            .ok_or_else(|| WorkflowError::NodeNotFound(*node_id))?;
+            .ok_or_else(|| WorkflowError::NodeNotFound(node_id.clone()))?;
         
         let mut parents = Vec::new();
         
@@ -308,7 +310,7 @@ impl WorkflowDefinition {
     /// Get the outgoing edges from a node
     pub fn get_outgoing_edges(&self, node_id: &NodeId) -> Result<Vec<&Edge>, WorkflowError> {
         let node = self.nodes.get(node_id)
-            .ok_or_else(|| WorkflowError::NodeNotFound(*node_id))?;
+            .ok_or_else(|| WorkflowError::NodeNotFound(node_id.clone()))?;
         
         let mut edges = Vec::new();
         
@@ -324,7 +326,7 @@ impl WorkflowDefinition {
     /// Get the incoming edges to a node
     pub fn get_incoming_edges(&self, node_id: &NodeId) -> Result<Vec<&Edge>, WorkflowError> {
         let node = self.nodes.get(node_id)
-            .ok_or_else(|| WorkflowError::NodeNotFound(*node_id))?;
+            .ok_or_else(|| WorkflowError::NodeNotFound(node_id.clone()))?;
         
         let mut edges = Vec::new();
         
@@ -368,8 +370,8 @@ impl WorkflowDefinition {
         in_stack: &mut HashSet<NodeId>,
     ) -> bool {
         // Mark current node as visited and add to recursion stack
-        visited.insert(*node_id);
-        in_stack.insert(*node_id);
+        visited.insert(node_id.clone());
+        in_stack.insert(node_id.clone());
         
         // Visit all neighbors
         if let Some(node) = self.nodes.get(node_id) {
@@ -413,15 +415,15 @@ impl WorkflowDefinition {
         
         // Initialize in-degree for all nodes
         for (id, node) in &self.nodes {
-            in_degree.insert(*id, node.in_degree);
+            in_degree.insert(id.clone(), node.in_degree);
             if node.in_degree == 0 {
-                queue.push_back(*id);
+                queue.push_back(id.clone());
             }
         }
         
         // Process nodes with in-degree 0
         while let Some(node_id) = queue.pop_front() {
-            result.push(node_id);
+            result.push(node_id.clone());
             
             // Reduce in-degree of all neighbor nodes
             if let Some(node) = self.nodes.get(&node_id) {
@@ -430,7 +432,7 @@ impl WorkflowDefinition {
                         if let Some(degree) = in_degree.get_mut(&edge.target) {
                             *degree -= 1;
                             if *degree == 0 {
-                                queue.push_back(edge.target);
+                                queue.push_back(edge.target.clone());
                             }
                         }
                     }
@@ -592,8 +594,8 @@ mod tests {
         assert_eq!(workflow.end_nodes.len(), 2);
         
         // Add an edge
-        let edge = Edge::new(EdgeId::new(), &node1_id, &node2_id);
-        let edge_id = edge.id;
+        let edge_id = EdgeId::new();
+        let edge = Edge::new(edge_id.clone(), node1_id.clone(), node2_id.clone());
         
         workflow.add_edge(edge).unwrap();
         
@@ -629,11 +631,11 @@ mod tests {
         workflow.add_node(node3).unwrap();
         
         // Add edges to form a cycle: 1 -> 2 -> 3 -> 1
-        workflow.add_edge(Edge::new(EdgeId::new(), &node1_id, &node2_id)).unwrap();
-        workflow.add_edge(Edge::new(EdgeId::new(), &node2_id, &node3_id)).unwrap();
+        workflow.add_edge(Edge::new(EdgeId::new(), node1_id.clone(), node2_id.clone())).unwrap();
+        workflow.add_edge(Edge::new(EdgeId::new(), node2_id.clone(), node3_id.clone())).unwrap();
         
         // This edge creates a cycle and should fail
-        let result = workflow.add_edge(Edge::new(EdgeId::new(), &node3_id, &node1_id));
+        let result = workflow.add_edge(Edge::new(EdgeId::new(), node3_id.clone(), node1_id.clone()));
         
         assert!(result.is_err());
         match result {
@@ -665,10 +667,10 @@ mod tests {
         // Add edges to form a DAG
         // 1 -> 2 -> 4
         //  \-> 3 -/
-        workflow.add_edge(Edge::new(EdgeId::new(), &node1_id, &node2_id)).unwrap();
-        workflow.add_edge(Edge::new(EdgeId::new(), &node1_id, &node3_id)).unwrap();
-        workflow.add_edge(Edge::new(EdgeId::new(), &node2_id, &node4_id)).unwrap();
-        workflow.add_edge(Edge::new(EdgeId::new(), &node3_id, &node4_id)).unwrap();
+        workflow.add_edge(Edge::new(EdgeId::new(), node1_id.clone(), node2_id.clone())).unwrap();
+        workflow.add_edge(Edge::new(EdgeId::new(), node1_id.clone(), node3_id.clone())).unwrap();
+        workflow.add_edge(Edge::new(EdgeId::new(), node2_id.clone(), node4_id.clone())).unwrap();
+        workflow.add_edge(Edge::new(EdgeId::new(), node3_id.clone(), node4_id.clone())).unwrap();
         
         let order = workflow.get_topological_order().unwrap();
         
@@ -708,7 +710,7 @@ mod tests {
         workflow.add_node(node2).unwrap();
         
         // Create an edge without a capability (should fail)
-        let edge_without_cap = Edge::new(EdgeId::new(), &node1_id, &node2_id);
+        let edge_without_cap = Edge::new(EdgeId::new(), node1_id.clone(), node2_id.clone());
         let result = workflow.add_edge(edge_without_cap);
         
         assert!(result.is_err());
@@ -718,7 +720,7 @@ mod tests {
         }
         
         // Create an edge with a capability (should succeed)
-        let edge_with_cap = Edge::new(EdgeId::new(), &node1_id, &node2_id)
+        let edge_with_cap = Edge::new(EdgeId::new(), node1_id.clone(), node2_id.clone())
             .with_capability(CapabilityId::new());
         
         let result = workflow.add_edge(edge_with_cap);
@@ -737,7 +739,7 @@ mod tests {
             .capability(cap)
             .add_node(Node::new(node1_id, "Node 1".to_string())).unwrap()
             .add_node(Node::new(node2_id, "Node 2".to_string())).unwrap()
-            .add_edge(Edge::new(EdgeId::new(), &node1_id, &node2_id)).unwrap()
+            .add_edge(Edge::new(EdgeId::new(), node1_id.clone(), node2_id.clone())).unwrap()
             .build();
         
         assert_eq!(workflow.name, "Test Workflow");

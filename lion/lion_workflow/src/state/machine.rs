@@ -33,7 +33,7 @@ pub enum StateMachineError {
 }
 
 /// Result of evaluating edge conditions
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum ConditionResult {
     /// Condition passed
     Passed,
@@ -95,7 +95,7 @@ pub struct WorkflowState {
 impl WorkflowState {
     /// Create a new workflow state from a definition
     pub fn new(definition: Arc<WorkflowDefinition>) -> Self {
-        let workflow_id = definition.id;
+        let workflow_id = definition.id.clone();
         let now = chrono::Utc::now();
         let instance_id = format!("{}-{}", workflow_id, uuid::Uuid::new_v4());
         
@@ -105,8 +105,8 @@ impl WorkflowState {
         let mut ready_nodes = HashSet::new();
         
         for (id, node) in &definition.nodes {
-            node_status.insert(*id, NodeStatus::Pending);
-            node_in_degree.insert(*id, node.in_degree);
+            node_status.insert(id.clone(), NodeStatus::Pending);
+            node_in_degree.insert(id.clone(), node.in_degree);
             
             // Add start nodes to ready nodes
             if node.in_degree == 0 {

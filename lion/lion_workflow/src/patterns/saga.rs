@@ -1609,24 +1609,24 @@ mod tests {
         
         // Register handlers
         orch.register_step_handler("inventory", "reserve", Arc::new(|step| {
-            Box::new(async move {
+            Box::new(Box::pin(async move {
                 // Simple mock handler that always succeeds
                 Ok(serde_json::json!({"reservation_id": "123"}))
-            })
+            }))
         })).await;
         
         orch.register_step_handler("payment", "process", Arc::new(|step| {
-            Box::new(async move {
+            Box::new(Box::pin(async move {
                 // Simple mock handler that always fails
                 Err("Payment declined".to_string())
-            })
+            }))
         })).await;
         
         orch.register_compensation_handler("inventory", "cancel_reservation", Arc::new(|step| {
-            Box::new(async move {
+            Box::new(Box::pin(async move {
                 // Simple mock compensation that always succeeds
                 Ok(())
-            })
+            }))
         })).await;
         
         // Create a saga definition

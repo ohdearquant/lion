@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 pub type EdgeId = Id<Edge>;
 
 /// Types of conditions that can be applied to an edge
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Hash)]
 pub enum ConditionType {
     /// No condition (always passes)
     None,
@@ -48,11 +48,11 @@ pub struct Edge {
 
 impl Edge {
     /// Create a new edge connecting source to target
-    pub fn new(id: EdgeId, source: &NodeId, target: &NodeId) -> Self {
+    pub fn new(id: EdgeId, source: NodeId, target: NodeId) -> Self {
         Edge {
             id,
-            source: source.clone(),
-            target: target.clone(),
+            source,
+            target,
             condition: ConditionType::None,
             required_capability: None,
             metadata: serde_json::Value::Null,
@@ -117,7 +117,7 @@ mod tests {
     fn test_edge_creation() {
         let source = NodeId::new();
         let target = NodeId::new();
-        let edge = Edge::new(EdgeId::new(), &source, &target);
+        let edge = Edge::new(EdgeId::new(), source.clone(), target.clone());
         
         assert_eq!(edge.source, source);
         assert_eq!(edge.target, target);
@@ -129,7 +129,7 @@ mod tests {
     fn test_edge_with_json_path_condition() {
         let source = NodeId::new();
         let target = NodeId::new();
-        let edge = Edge::new(EdgeId::new(), &source, &target)
+        let edge = Edge::new(EdgeId::new(), source.clone(), target.clone())
             .with_json_path("$.result.success");
         
         assert_eq!(edge.condition, ConditionType::JsonPath("$.result.success".to_string()));
@@ -141,7 +141,7 @@ mod tests {
         let source = NodeId::new();
         let target = NodeId::new();
         let capability = CapabilityId::new();
-        let edge = Edge::new(EdgeId::new(), &source, &target)
+        let edge = Edge::new(EdgeId::new(), source.clone(), target.clone())
             .with_capability(capability);
         
         assert_eq!(edge.required_capability, Some(capability));

@@ -340,6 +340,7 @@ impl Default for EventBrokerConfig {
 }
 
 /// Event subscription
+#[derive(Debug)]
 pub struct EventSubscription {
     /// Subscription ID
     pub id: String,
@@ -361,6 +362,55 @@ pub struct EventSubscription {
     
     /// Event acknowledgment receiver
     pub ack_receiver: mpsc::Receiver<EventAck>,
+}
+
+// Manual implementation of Clone for EventSubscription
+// Note: We can't clone the ack_receiver, so we'll create a new channel
+impl Clone for EventSubscription {
+    fn clone(&self) -> Self {
+        let (ack_tx, ack_rx) = mpsc::channel(100); // Use a reasonable buffer size
+        
+        EventSubscription {
+            id: self.id.clone(),
+            event_type: self.event_type.clone(),
+            subscriber_id: self.subscriber_id.clone(),
+            created_at: self.created_at,
+            required_capability: self.required_capability.clone(),
+            sender: self.sender.clone(),
+            ack_receiver: ack_rx,
+        }
+    }
+}
+
+// Serializable version of EventSubscription for persistence
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SerializableSubscription {
+    /// Subscription ID
+    pub id: String,
+    
+    /// Event type pattern
+    pub event_type: String,
+    
+    /// Subscriber ID
+    pub subscriber_id: String,
+    
+    /// Subscription creation time
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    
+    /// Required capability to receive events
+    pub required_capability: Option<CapabilityId>,
+}
+
+impl From<&EventSubscription> for SerializableSubscription {
+    fn from(sub: &EventSubscription) -> Self {
+        SerializableSubscription {
+            id: sub.id.clone(),
+            event_type: sub.event_type.clone(),
+            subscriber_id: sub.subscriber_id.clone(),
+            created_at: sub.created_at,
+            required_capability: sub.required_capability.clone(),
+        }
+    }
 }
 
 /// Event broker for managing event distribution
@@ -600,30 +650,20 @@ impl EventBroker {
     
     /// Wait for acknowledgment of an event
     async fn wait_for_acknowledgment(&self, event_id: &str) -> Result<EventAck, EventError> {
-        let subs = self.subscriptions.read().await;
+        // We need to get a mutable reference to the subscriptions
+        let subs_map = self.subscriptions.read().await;
         
-        // Find subscriptions that might have received this event
-        for (_, subscriptions) in subs.iter() {
-            for subscription in subscriptions {
-                // Check each subscription's ack channel
-                let mut ack_rx = subscription.ack_receiver.clone();
-                
-                loop {
-                    match ack_rx.try_recv() {
-                        Ok(ack) => {
-                            if ack.event_id == *event_id {
-                                return Ok(ack);
-                            }
-                            // Not our event, continue checking
-                        },
-                        Err(mpsc::error::TryRecvError::Empty) => {
-                            // No more acks for now, try next subscription
-                            break;
-                        },
-                        Err(mpsc::error::TryRecvError::Disconnected) => {
-                            // Channel closed, try next subscription
-                            break;
-                        }
+        // Check all subscriptions for acknowledgments
+        for subscriptions in subs_map.values() {
+            // We need to clone the subscriptions to avoid borrowing issues
+            let cloned_subs = subscriptions.clone();
+            
+            for mut subscription in cloned_subs {
+                // Now we can try to receive from each subscription's channel
+                // Since we have a cloned subscription with its own receiver
+                if let Ok(ack) = subscription.ack_receiver.try_recv() {
+                    if ack.event_id == *event_id {
+                        return Ok(ack);
                     }
                 }
             }
@@ -699,8 +739,10 @@ impl EventBroker {
         if let Some(store) = &self.event_store {
             // Load events from store
             let events = match event_types {
-                Some(types) => store.load_events_by_types(&types).await?,
-                None => store.load_all_events().await?,
+                Some(types) => store.load_events_by_types(&types).await
+                    .map_err(|e| EventError::Other(format!("Failed to load events by types: {}", e)))?,
+                None => store.load_all_events().await
+                    .map_err(|e| EventError::Other(format!("Failed to load all events: {}", e)))?,
             };
             
             let mut published = 0;
@@ -725,19 +767,26 @@ impl Clone for EventBroker {
             config: RwLock::new(
                 // We need to acquire a read lock and clone the inner data
                 // This is a blocking operation, but it's only used during cloning
-                self.config.blocking_read().clone()
+                (*self.config.blocking_read()).clone()
             ),
             subscriptions: RwLock::new(
-                // Clone the inner HashMap
-                self.subscriptions.blocking_read().clone()
+                // Create a new HashMap with cloned values
+                {
+                    let subs = self.subscriptions.blocking_read();
+                    let mut new_subs = HashMap::new();
+                    for (key, value) in subs.iter() {
+                        new_subs.insert(key.clone(), value.clone());
+                    }
+                    new_subs
+                }
             ),
             in_flight: RwLock::new(
                 // Clone the inner HashMap
-                self.in_flight.blocking_read().clone()
+                (*self.in_flight.blocking_read()).clone()
             ),
             processed_events: RwLock::new(
                 // Clone the inner HashSet
-                self.processed_events.blocking_read().clone()
+                (*self.processed_events.blocking_read()).clone()
             ),
             event_store: self.event_store.clone(),
         }
