@@ -2,13 +2,11 @@
 //!
 //! This module provides functionality for resolving constraints.
 
-use lion_core::error::{CapabilityError, Result};
+use lion_core::error::Result;
 use lion_core::id::PluginId;
 use lion_core::types::AccessRequest;
-use std::collections::HashMap;
 
-use crate::error::capability_error_to_core_error;
-use crate::model::{Constraint, EvaluationResult, PolicyAction, PolicyRule};
+use crate::model::{Constraint, EvaluationResult, PolicyAction, PolicyObject};
 use crate::store::PolicyStore;
 
 /// A resolver that resolves constraints for access requests.
@@ -17,7 +15,7 @@ pub struct ConstraintResolver<'a, P> {
     policy_store: &'a P,
 
     /// Cached constraints by plugin and request type.
-    constraint_cache: HashMap<(PluginId, String), Vec<Constraint>>,
+    constraint_cache: std::collections::HashMap<(PluginId, String), Vec<Constraint>>,
 }
 
 impl<'a, P> ConstraintResolver<'a, P>
@@ -36,7 +34,7 @@ where
     pub fn new(policy_store: &'a P) -> Self {
         Self {
             policy_store,
-            constraint_cache: HashMap::new(),
+            constraint_cache: std::collections::HashMap::new(),
         }
     }
 
@@ -229,7 +227,7 @@ where
         // Check if any policy allows or denies the request
         for policy in &policies {
             match &policy.action {
-                PolicyAction::Allow => return Ok(EvaluationResult::Allow),
+                PolicyAction::Allow => {}
                 PolicyAction::Deny => return Ok(EvaluationResult::Deny),
                 PolicyAction::AllowWithConstraints(_) => {
                     // Get constraints from the policy
@@ -243,6 +241,26 @@ where
                     // Continue checking other policies
                 }
             }
+
+            // Special handling for file paths - check if the path matches the policy object
+            if let AccessRequest::File { path, .. } = request {
+                if let PolicyObject::File(file_obj) = &policy.object {
+                    let path_str = path.to_string_lossy();
+                    if path_str.starts_with(&file_obj.path) {
+                        // If this is a deny rule for a matching path, deny immediately
+                        if matches!(policy.action, PolicyAction::Deny) {
+                            return Ok(EvaluationResult::Deny);
+                        }
+                    }
+
+                    // If this is an allow rule for a matching path, allow it
+                    if path_str.starts_with(&file_obj.path) {
+                        if matches!(policy.action, PolicyAction::Allow) {
+                            return Ok(EvaluationResult::Allow);
+                        }
+                    }
+                }
+            }
         }
 
         // If no policy explicitly allows or denies, default to deny
@@ -254,7 +272,7 @@ where
 mod tests {
     use super::*;
     use crate::model::rule::FileObject;
-    use crate::model::{PolicyAction, PolicyObject, PolicySubject};
+    use crate::model::{PolicyAction, PolicyObject, PolicyRule, PolicySubject};
     use crate::store::InMemoryPolicyStore;
     use std::path::PathBuf;
 

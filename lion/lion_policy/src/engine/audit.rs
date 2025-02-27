@@ -7,7 +7,7 @@ use lion_core::error::Result;
 use lion_core::id::PluginId;
 use std::sync::Arc;
 
-use crate::model::{Evaluation, EvaluationResult, PolicyRule};
+use crate::model::{Evaluation, EvaluationResult};
 
 /// A policy audit.
 ///
@@ -182,7 +182,7 @@ impl Default for PolicyAudit {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::{PolicyAction, PolicyObject, PolicySubject};
+    use crate::model::{PolicyAction, PolicyObject, PolicyRule, PolicySubject};
     use lion_core::types::AccessRequest;
     use std::path::PathBuf;
 

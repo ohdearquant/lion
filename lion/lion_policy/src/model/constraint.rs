@@ -147,7 +147,7 @@ impl Constraint {
                 function: function.clone(),
             },
             Self::MemoryRegion {
-                region_id,
+                region_id: _,
                 read,
                 write,
             } => lion_capability::Constraint::MemoryRange {
@@ -156,9 +156,10 @@ impl Constraint {
                 read: *read,
                 write: *write,
             },
-            Self::Message { recipient, topic } => {
-                lion_capability::Constraint::MessageTopic(topic.clone())
-            }
+            Self::Message {
+                recipient: _,
+                topic,
+            } => lion_capability::Constraint::MessageTopic(topic.clone()),
             Self::ResourceUsage { .. } => {
                 // Resource usage constraints don't map directly to capability constraints
                 lion_capability::Constraint::Custom {

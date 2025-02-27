@@ -7,10 +7,9 @@ use lion_capability::Capability;
 use lion_core::error::{CapabilityError, Result};
 use lion_core::id::{CapabilityId, PluginId};
 use lion_core::types::AccessRequest;
-use std::sync::Arc;
 
 use crate::error::capability_error_to_core_error;
-use crate::model::{Constraint, PolicyAction, PolicyObject, PolicyRule};
+use crate::model::{Constraint, PolicyAction, PolicyObject};
 use crate::store::PolicyStore;
 
 /// A mapper that maps policies to capabilities.
@@ -210,8 +209,8 @@ where
             "file_operation" => {
                 // Format: read=true,write=false,execute=false
                 let mut read = true;
-                let mut write = true;
-                let mut execute = true;
+                let mut write = false;
+                let mut execute = false;
 
                 for op in value.split(',') {
                     let op_parts: Vec<&str> = op.splitn(2, '=').collect();
@@ -635,7 +634,7 @@ where
 mod tests {
     use super::*;
     use crate::model::rule::FileObject;
-    use crate::model::{PolicyAction, PolicyObject, PolicySubject};
+    use crate::model::{PolicyAction, PolicyObject, PolicyRule, PolicySubject};
     use crate::store::InMemoryPolicyStore;
     use lion_capability::model::file::{FileCapability, FileOperations};
     use lion_capability::store::InMemoryCapabilityStore;

@@ -2,10 +2,10 @@
 //!
 //! This module provides the policy evaluation engine.
 
-use lion_core::error::{PolicyError, Result};
+use lion_core::error::Result;
 use lion_core::id::PluginId;
 use lion_core::types::AccessRequest;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use crate::model::{Evaluation, EvaluationResult, PolicyRule};
 use crate::store::PolicyStore;
@@ -154,7 +154,7 @@ where
             if rule.is_expired() {
                 return false;
             }
-            
+
             // Check if the rule applies to this plugin
             let plugin_match = match &rule.subject {
                 crate::model::PolicySubject::Any => true,
@@ -166,7 +166,7 @@ where
                 crate::model::PolicySubject::PluginTag(_) => false,
                 crate::model::PolicySubject::PluginRole(_) => false,
             };
-            
+
             // Check if the rule applies to this request type
             let request_match = match request {
                 AccessRequest::File { path, .. } => {
@@ -175,31 +175,21 @@ where
                 },
                 AccessRequest::Network { host, port, .. } => {
                     matches!(rule.object, crate::model::PolicyObject::Any) ||
-                    matches!(rule.object, crate::model::PolicyObject::Network(ref network) if 
-                        (network.host == "*" || &network.host == host) && 
-                        (network.port.is_none() || network.port == Some(*port))
+                    matches!(rule.object, crate::model::PolicyObject::Network(ref network) if (network.host == "*" || &network.host == host) && (network.port.is_none() || network.port == Some(*port))
                     )
                 },
                 AccessRequest::PluginCall { plugin_id, function } => {
                     matches!(rule.object, crate::model::PolicyObject::Any) ||
-                    matches!(rule.object, crate::model::PolicyObject::PluginCall(ref call) if 
-                        call.plugin_id == *plugin_id && 
-                        (call.function.is_none() || call.function == Some(function.clone()))
-                    )
+                    matches!(rule.object, crate::model::PolicyObject::PluginCall(ref call) if call.plugin_id == *plugin_id && (call.function.is_none() || call.function == Some(function.clone())))
                 },
                 AccessRequest::Memory { region_id, .. } => {
                     matches!(rule.object, crate::model::PolicyObject::Any) ||
-                    matches!(rule.object, crate::model::PolicyObject::Memory(ref memory) if 
-                        memory.region_id == *region_id
+                    matches!(rule.object, crate::model::PolicyObject::Memory(ref memory) if memory.region_id == *region_id
                     )
                 },
                 AccessRequest::Message { recipient, topic } => {
                     matches!(rule.object, crate::model::PolicyObject::Any) ||
-                    matches!(rule.object, crate::model::PolicyObject::Message(ref message) if 
-                        message.recipient == *recipient && 
-                        (message.topic.is_none() || message.topic == Some(topic.clone()))
-                    )
-                },
+                    matches!(rule.object, crate::model::PolicyObject::Message(ref message) if message.recipient == *recipient && (message.topic.is_none() || message.topic == Some(topic.clone())))},
                 AccessRequest::Custom { resource_type, operation, .. } => {
                     matches!(rule.object, crate::model::PolicyObject::Any) ||
                     if let crate::model::PolicyObject::Custom { ref object_type, ref value } = rule.object {
@@ -207,12 +197,8 @@ where
                     } else {
                         false
                     }
-                    
                 },
-            };
-            
-            plugin_match && request_match
-        })
+            };plugin_match && request_match})
     }
 
     /// Check if a request is allowed.
