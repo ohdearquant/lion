@@ -69,17 +69,28 @@ pub mod engine;
 pub mod patterns;
 
 // Re-export important types
-pub use model::{WorkflowDefinition, WorkflowId, WorkflowError, Node, NodeId, NodeStatus, Edge, EdgeId, WorkflowBuilder};
-pub use state::{WorkflowState, StateMachineManager, CheckpointManager, StorageBackend, MemoryStorage, FileStorage};
-pub use engine::{WorkflowExecutor, ExecutorConfig, WorkflowScheduler, SchedulerConfig, ExecutionContext, NodeResult, TaskStatus, SchedulingPolicy};
-pub use patterns::{Event, EventBroker, SagaManager, SagaDefinition, SagaInstance, SagaDefinitionBuilder};
+pub use engine::{
+    ExecutionContext, ExecutorConfig, NodeResult, SchedulerConfig, SchedulingPolicy, TaskStatus,
+    WorkflowExecutor, WorkflowScheduler,
+};
+pub use model::{
+    Edge, EdgeId, Node, NodeId, NodeStatus, WorkflowBuilder, WorkflowDefinition, WorkflowError,
+    WorkflowId,
+};
+pub use patterns::{
+    Event, EventBroker, SagaDefinition, SagaDefinitionBuilder, SagaInstance, SagaManager,
+};
+pub use state::{
+    CheckpointManager, FileStorage, MemoryStorage, StateMachineManager, StorageBackend,
+    WorkflowState,
+};
 
 /// Error types from across the workflow engine
 pub mod error {
+    pub use crate::engine::{ContextError, ExecutorError, SchedulerError};
     pub use crate::model::WorkflowError;
-    pub use crate::state::{StateMachineError, CheckpointError, StorageError};
-    pub use crate::engine::{ExecutorError, SchedulerError, ContextError};
     pub use crate::patterns::{EventError, SagaError};
+    pub use crate::state::{CheckpointError, StateMachineError, StorageError};
 }
 
 /// Create a new workflow definition
@@ -90,23 +101,26 @@ pub fn create_workflow(name: &str) -> WorkflowBuilder {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::{Node, Edge, NodeId, EdgeId};
-    
+    use crate::model::{Edge, EdgeId, Node, NodeId};
+
     #[test]
     fn test_create_workflow() {
         let mut builder = create_workflow("Test Workflow");
         let node1 = Node::new(NodeId::new(), "Node 1".to_string());
         let node2 = Node::new(NodeId::new(), "Node 2".to_string());
-        
+
         let node1_id = node1.id.clone();
         let node2_id = node2.id.clone();
-        
+
         let workflow = builder
-            .add_node(node1).unwrap()
-            .add_node(node2).unwrap()
-            .add_edge(Edge::new(EdgeId::new(), &node1_id, &node2_id)).unwrap()
+            .add_node(node1)
+            .unwrap()
+            .add_node(node2)
+            .unwrap()
+            .add_edge(Edge::new(EdgeId::new(), &node1_id, &node2_id))
+            .unwrap()
             .build();
-        
+
         assert_eq!(workflow.name, "Test Workflow");
         assert_eq!(workflow.nodes.len(), 2);
         assert_eq!(workflow.edges.len(), 1);

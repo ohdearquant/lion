@@ -47,33 +47,33 @@ impl Default for Priority {
 pub struct Node {
     /// Unique identifier for this node
     pub id: NodeId,
-    
+
     /// Human-readable name of the node
     pub name: String,
-    
+
     /// Current status of this node
     #[serde(skip)]
     pub status: NodeStatus,
-    
+
     /// Number of incomplete dependencies (in-degree)
     #[serde(skip)]
     pub in_degree: usize,
-    
+
     /// IDs of outgoing edges (to child nodes)
     pub outgoing_edges: HashSet<EdgeId>,
-    
+
     /// IDs of incoming edges (from parent nodes)
     pub incoming_edges: HashSet<EdgeId>,
-    
+
     /// Capability required to execute this node
     pub required_capability: Option<CapabilityId>,
-    
+
     /// Execution priority of this node
     pub priority: Priority,
-    
+
     /// Optional deadline for node execution
     pub deadline: Option<chrono::DateTime<chrono::Utc>>,
-    
+
     /// Type-specific configuration for this node
     pub config: serde_json::Value,
 }
@@ -94,65 +94,65 @@ impl Node {
             config: serde_json::Value::Null,
         }
     }
-    
+
     /// Check if this node is ready to execute (all dependencies completed)
     pub fn is_ready(&self) -> bool {
         self.status == NodeStatus::Pending && self.in_degree == 0
     }
-    
+
     /// Mark this node as ready for execution
     pub fn mark_ready(&mut self) {
         if self.status == NodeStatus::Pending && self.in_degree == 0 {
             self.status = NodeStatus::Ready;
         }
     }
-    
+
     /// Mark this node as running
     pub fn mark_running(&mut self) {
         if self.status == NodeStatus::Ready {
             self.status = NodeStatus::Running;
         }
     }
-    
+
     /// Mark this node as completed
     pub fn mark_completed(&mut self) {
         self.status = NodeStatus::Completed;
     }
-    
+
     /// Mark this node as failed
     pub fn mark_failed(&mut self) {
         self.status = NodeStatus::Failed;
     }
-    
+
     /// Add a required capability to this node
     pub fn with_capability(mut self, capability_id: CapabilityId) -> Self {
         self.required_capability = Some(capability_id);
         self
     }
-    
+
     /// Set the priority for this node
     pub fn with_priority(mut self, priority: Priority) -> Self {
         self.priority = priority;
         self
     }
-    
+
     /// Set a deadline for this node
     pub fn with_deadline(mut self, deadline: chrono::DateTime<chrono::Utc>) -> Self {
         self.deadline = Some(deadline);
         self
     }
-    
+
     /// Set configuration for this node
     pub fn with_config(mut self, config: serde_json::Value) -> Self {
         self.config = config;
         self
     }
-    
+
     /// Increment the in-degree counter for this node
     pub fn increment_in_degree(&mut self) {
         self.in_degree += 1;
     }
-    
+
     /// Decrement the in-degree counter for this node
     /// Returns true if the node becomes ready (in_degree == 0)
     pub fn decrement_in_degree(&mut self) -> bool {
@@ -165,23 +165,23 @@ impl Node {
         }
         false
     }
-    
+
     /// Add an outgoing edge to this node
     pub fn add_outgoing_edge(&mut self, edge_id: EdgeId) {
         self.outgoing_edges.insert(edge_id);
     }
-    
+
     /// Add an incoming edge to this node
     pub fn add_incoming_edge(&mut self, edge_id: EdgeId) {
         self.incoming_edges.insert(edge_id);
         self.increment_in_degree();
     }
-    
+
     /// Remove an outgoing edge from this node
     pub fn remove_outgoing_edge(&mut self, edge_id: &EdgeId) -> bool {
         self.outgoing_edges.remove(edge_id)
     }
-    
+
     /// Remove an incoming edge from this node
     pub fn remove_incoming_edge(&mut self, edge_id: &EdgeId) -> bool {
         if self.incoming_edges.remove(edge_id) {
@@ -196,10 +196,10 @@ impl Node {
 pub struct AtomicNode {
     /// Node identifier
     pub id: NodeId,
-    
+
     /// Atomic counter for in-degree (number of incomplete dependencies)
     in_degree: AtomicUsize,
-    
+
     /// Current node status
     status: std::sync::atomic::AtomicU8,
 }
@@ -216,14 +216,14 @@ impl AtomicNode {
             NodeStatus::Skipped => 5,
             NodeStatus::Cancelled => 6,
         };
-        
+
         AtomicNode {
             id: node.id.clone(),
             in_degree: AtomicUsize::new(node.in_degree),
             status: std::sync::atomic::AtomicU8::new(status_value),
         }
     }
-    
+
     /// Atomically decrement the in-degree and check if the node becomes ready
     pub fn decrement_in_degree(&self) -> bool {
         let previous = self.in_degree.fetch_sub(1, Ordering::SeqCst);
@@ -233,7 +233,7 @@ impl AtomicNode {
         }
         false
     }
-    
+
     /// Get the current status of this node
     pub fn get_status(&self) -> NodeStatus {
         match self.status.load(Ordering::SeqCst) {
@@ -247,7 +247,7 @@ impl AtomicNode {
             _ => NodeStatus::Pending, // Default fallback
         }
     }
-    
+
     /// Set the status of this node
     pub fn set_status(&self, status: NodeStatus) {
         let value = match status {
@@ -261,7 +261,7 @@ impl AtomicNode {
         };
         self.status.store(value, Ordering::SeqCst);
     }
-    
+
     /// Get the current in-degree value
     pub fn get_in_degree(&self) -> usize {
         self.in_degree.load(Ordering::SeqCst)
@@ -271,46 +271,46 @@ impl AtomicNode {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_node_in_degree_management() {
         let mut node = Node::new(NodeId::new(), "Test Node".to_string());
         assert_eq!(node.in_degree, 0);
         assert_eq!(node.status, NodeStatus::Pending);
-        
+
         // Add some dependencies
         node.increment_in_degree();
         node.increment_in_degree();
         assert_eq!(node.in_degree, 2);
-        
+
         // Remove one dependency
         let became_ready = node.decrement_in_degree();
         assert_eq!(became_ready, false);
         assert_eq!(node.in_degree, 1);
         assert_eq!(node.status, NodeStatus::Pending);
-        
+
         // Remove last dependency, should become ready
         let became_ready = node.decrement_in_degree();
         assert_eq!(became_ready, true);
         assert_eq!(node.in_degree, 0);
         assert_eq!(node.status, NodeStatus::Ready);
     }
-    
+
     #[test]
     fn test_atomic_node() {
         let mut node = Node::new(NodeId::new(), "Test Node".to_string());
         node.increment_in_degree();
         node.increment_in_degree();
-        
+
         let atomic_node = AtomicNode::new(&node);
         assert_eq!(atomic_node.get_in_degree(), 2);
         assert_eq!(atomic_node.get_status(), NodeStatus::Pending);
-        
+
         // Test atomic operations
         let became_ready = atomic_node.decrement_in_degree();
         assert_eq!(became_ready, false);
         assert_eq!(atomic_node.get_in_degree(), 1);
-        
+
         let became_ready = atomic_node.decrement_in_degree();
         assert_eq!(became_ready, true);
         assert_eq!(atomic_node.get_in_degree(), 0);
