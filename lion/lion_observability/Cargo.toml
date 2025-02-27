@@ -3,8 +3,8 @@ name = "lion_observability"
 version = "0.1.0"
 edition = "2021"
 description = "Observability framework for the Lion microkernel"
-authors = ["Lion Contributors"]
-license = "MIT OR Apache-2.0"
+authors = ["Haiyang Li"]
+license = "Apache-2.0"
 
 [dependencies]
 # Core functionality

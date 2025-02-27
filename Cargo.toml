@@ -6,6 +6,8 @@ members = [
     "lion/lion_isolation",
     "lion/lion_observability",
     "lion/lion_policy",
+    "lion/lion_runtime",
+    "lion/lion_workflow",
     "plugins/calculator"
 ]
 resolver = "2"
