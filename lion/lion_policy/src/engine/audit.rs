@@ -1,12 +1,11 @@
 //! Policy auditing.
-//! 
+//!
 //! This module provides functionality for auditing policy evaluations.
 
-use std::sync::Arc;
 use dashmap::DashMap;
-use chrono::Utc;
 use lion_core::error::Result;
 use lion_core::id::PluginId;
+use std::sync::Arc;
 
 use crate::model::{Evaluation, EvaluationResult, PolicyRule};
 
@@ -17,7 +16,7 @@ use crate::model::{Evaluation, EvaluationResult, PolicyRule};
 pub struct PolicyAudit {
     /// The audit entries.
     entries: Arc<DashMap<PluginId, Vec<Evaluation>>>,
-    
+
     /// The maximum number of entries to keep per plugin.
     max_entries_per_plugin: usize,
 }
@@ -38,7 +37,7 @@ impl PolicyAudit {
             max_entries_per_plugin,
         }
     }
-    
+
     /// Record an evaluation.
     ///
     /// # Arguments
@@ -54,19 +53,19 @@ impl PolicyAudit {
         self.entries
             .entry(evaluation.plugin_id.clone())
             .or_insert_with(Vec::new)
-            .push(evaluation);
-        
+            .push(evaluation.clone());
+
         // Trim the entries if necessary
-        if let Some(mut plugin_entries) = self.entries.get_mut(&evaluation.plugin_id) {
+        if let Some(mut plugin_entries) = self.entries.get_mut(&evaluation.plugin_id.clone()) {
             if plugin_entries.len() > self.max_entries_per_plugin {
                 let to_remove = plugin_entries.len() - self.max_entries_per_plugin;
                 plugin_entries.drain(0..to_remove);
             }
         }
-        
+
         Ok(())
     }
-    
+
     /// Get evaluations for a plugin.
     ///
     /// # Arguments
@@ -83,10 +82,10 @@ impl PolicyAudit {
             Some(entries) => entries.clone(),
             None => Vec::new(),
         };
-        
+
         Ok(evaluations)
     }
-    
+
     /// Clear evaluations for a plugin.
     ///
     /// # Arguments
@@ -100,10 +99,10 @@ impl PolicyAudit {
     pub fn clear_evaluations(&self, plugin_id: &PluginId) -> Result<()> {
         // Remove the plugin's entries
         self.entries.remove(plugin_id);
-        
+
         Ok(())
     }
-    
+
     /// Get all evaluations.
     ///
     /// # Returns
@@ -113,14 +112,14 @@ impl PolicyAudit {
     pub fn get_all_evaluations(&self) -> Result<Vec<Evaluation>> {
         // Get all evaluations
         let mut evaluations = Vec::new();
-        
+
         for entry in self.entries.iter() {
             evaluations.extend(entry.value().clone());
         }
-        
+
         Ok(evaluations)
     }
-    
+
     /// Get evaluations filtered by result.
     ///
     /// # Arguments
@@ -134,7 +133,7 @@ impl PolicyAudit {
     pub fn get_evaluations_by_result(&self, result: &EvaluationResult) -> Result<Vec<Evaluation>> {
         // Get evaluations matching the result
         let mut evaluations = Vec::new();
-        
+
         for entry in self.entries.iter() {
             for evaluation in entry.value() {
                 if &evaluation.result == result {
@@ -142,10 +141,10 @@ impl PolicyAudit {
                 }
             }
         }
-        
+
         Ok(evaluations)
     }
-    
+
     /// Get evaluations filtered by rule.
     ///
     /// # Arguments
@@ -159,7 +158,7 @@ impl PolicyAudit {
     pub fn get_evaluations_by_rule(&self, rule_id: &str) -> Result<Vec<Evaluation>> {
         // Get evaluations matching the rule
         let mut evaluations = Vec::new();
-        
+
         for entry in self.entries.iter() {
             for evaluation in entry.value() {
                 if let Some(rule) = &evaluation.matched_rule {
@@ -169,7 +168,7 @@ impl PolicyAudit {
                 }
             }
         }
-        
+
         Ok(evaluations)
     }
 }
@@ -183,15 +182,15 @@ impl Default for PolicyAudit {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::{PolicySubject, PolicyObject, PolicyAction};
+    use crate::model::{PolicyAction, PolicyObject, PolicySubject};
     use lion_core::types::AccessRequest;
     use std::path::PathBuf;
-    
+
     #[test]
     fn test_record_and_get_evaluations() {
         let audit = PolicyAudit::new(10);
         let plugin_id = PluginId::new();
-        
+
         // Create an evaluation
         let request = AccessRequest::File {
             path: PathBuf::from("/tmp/file"),
@@ -211,28 +210,28 @@ mod tests {
             0,
         );
         let evaluation = Evaluation::new(plugin_id.clone(), request, result, Some(rule));
-        
+
         // Record the evaluation
         audit.record(evaluation.clone()).unwrap();
-        
+
         // Get evaluations for the plugin
         let evaluations = audit.get_evaluations(&plugin_id).unwrap();
-        
+
         // Check that there's one evaluation
         assert_eq!(evaluations.len(), 1);
-        
+
         // Check the evaluation details
         let recorded = &evaluations[0];
         assert_eq!(recorded.plugin_id, plugin_id);
         assert!(matches!(recorded.result, EvaluationResult::Allow));
         assert!(recorded.matched_rule.is_some());
     }
-    
+
     #[test]
     fn test_clear_evaluations() {
         let audit = PolicyAudit::new(10);
         let plugin_id = PluginId::new();
-        
+
         // Create an evaluation
         let request = AccessRequest::File {
             path: PathBuf::from("/tmp/file"),
@@ -242,25 +241,25 @@ mod tests {
         };
         let result = EvaluationResult::Allow;
         let evaluation = Evaluation::new(plugin_id.clone(), request, result, None);
-        
+
         // Record the evaluation
         audit.record(evaluation).unwrap();
-        
+
         // Clear evaluations for the plugin
         audit.clear_evaluations(&plugin_id).unwrap();
-        
+
         // Get evaluations for the plugin
         let evaluations = audit.get_evaluations(&plugin_id).unwrap();
-        
+
         // Check that there are no evaluations
         assert_eq!(evaluations.len(), 0);
     }
-    
+
     #[test]
     fn test_max_entries_per_plugin() {
         let audit = PolicyAudit::new(2);
         let plugin_id = PluginId::new();
-        
+
         // Create evaluations
         for i in 0..3 {
             let request = AccessRequest::File {
@@ -271,33 +270,33 @@ mod tests {
             };
             let result = EvaluationResult::Allow;
             let evaluation = Evaluation::new(plugin_id.clone(), request, result, None);
-            
+
             // Record the evaluation
             audit.record(evaluation).unwrap();
         }
-        
+
         // Get evaluations for the plugin
         let evaluations = audit.get_evaluations(&plugin_id).unwrap();
-        
+
         // Check that there are only two evaluations
         assert_eq!(evaluations.len(), 2);
-        
+
         // Check that the oldest evaluation was removed
         assert!(matches!(
-            evaluations[0].request,
-            AccessRequest::File { path, .. } if path == PathBuf::from("/tmp/file1")
+            &evaluations[0].request,
+            AccessRequest::File { path, .. } if *path == PathBuf::from("/tmp/file1")
         ));
         assert!(matches!(
-            evaluations[1].request,
-            AccessRequest::File { path, .. } if path == PathBuf::from("/tmp/file2")
+            &evaluations[1].request,
+            AccessRequest::File { path, .. } if *path == PathBuf::from("/tmp/file2")
         ));
     }
-    
+
     #[test]
     fn test_get_evaluations_by_result() {
         let audit = PolicyAudit::new(10);
         let plugin_id = PluginId::new();
-        
+
         // Create an Allow evaluation
         let request = AccessRequest::File {
             path: PathBuf::from("/tmp/file"),
@@ -307,10 +306,10 @@ mod tests {
         };
         let result = EvaluationResult::Allow;
         let evaluation = Evaluation::new(plugin_id.clone(), request, result, None);
-        
+
         // Record the evaluation
         audit.record(evaluation).unwrap();
-        
+
         // Create a Deny evaluation
         let request = AccessRequest::File {
             path: PathBuf::from("/etc/passwd"),
@@ -320,27 +319,34 @@ mod tests {
         };
         let result = EvaluationResult::Deny;
         let evaluation = Evaluation::new(plugin_id.clone(), request, result, None);
-        
+
         // Record the evaluation
         audit.record(evaluation).unwrap();
-        
+
         // Get evaluations by result
-        let allow_evaluations = audit.get_evaluations_by_result(&EvaluationResult::Allow).unwrap();
-        let deny_evaluations = audit.get_evaluations_by_result(&EvaluationResult::Deny).unwrap();
-        
+        let allow_evaluations = audit
+            .get_evaluations_by_result(&EvaluationResult::Allow)
+            .unwrap();
+        let deny_evaluations = audit
+            .get_evaluations_by_result(&EvaluationResult::Deny)
+            .unwrap();
+
         // Check the evaluations
         assert_eq!(allow_evaluations.len(), 1);
         assert_eq!(deny_evaluations.len(), 1);
-        
-        assert!(matches!(allow_evaluations[0].result, EvaluationResult::Allow));
+
+        assert!(matches!(
+            allow_evaluations[0].result,
+            EvaluationResult::Allow
+        ));
         assert!(matches!(deny_evaluations[0].result, EvaluationResult::Deny));
     }
-    
+
     #[test]
     fn test_get_evaluations_by_rule() {
         let audit = PolicyAudit::new(10);
         let plugin_id = PluginId::new();
-        
+
         // Create rules
         let rule1 = PolicyRule::new(
             "rule1",
@@ -352,7 +358,7 @@ mod tests {
             None,
             0,
         );
-        
+
         let rule2 = PolicyRule::new(
             "rule2",
             "Rule 2",
@@ -363,7 +369,7 @@ mod tests {
             None,
             0,
         );
-        
+
         // Create evaluations
         let request = AccessRequest::File {
             path: PathBuf::from("/tmp/file"),
@@ -372,26 +378,37 @@ mod tests {
             execute: false,
         };
         let result = EvaluationResult::Allow;
-        let evaluation = Evaluation::new(plugin_id.clone(), request.clone(), result, Some(rule1.clone()));
-        
+        let evaluation = Evaluation::new(
+            plugin_id.clone(),
+            request.clone(),
+            result,
+            Some(rule1.clone()),
+        );
+
         // Record the evaluation
         audit.record(evaluation).unwrap();
-        
+
         let result = EvaluationResult::Deny;
         let evaluation = Evaluation::new(plugin_id.clone(), request, result, Some(rule2.clone()));
-        
+
         // Record the evaluation
         audit.record(evaluation).unwrap();
-        
+
         // Get evaluations by rule
         let rule1_evaluations = audit.get_evaluations_by_rule("rule1").unwrap();
         let rule2_evaluations = audit.get_evaluations_by_rule("rule2").unwrap();
-        
+
         // Check the evaluations
         assert_eq!(rule1_evaluations.len(), 1);
         assert_eq!(rule2_evaluations.len(), 1);
-        
-        assert_eq!(rule1_evaluations[0].matched_rule.as_ref().unwrap().id, "rule1");
-        assert_eq!(rule2_evaluations[0].matched_rule.as_ref().unwrap().id, "rule2");
+
+        assert_eq!(
+            rule1_evaluations[0].matched_rule.as_ref().unwrap().id,
+            "rule1"
+        );
+        assert_eq!(
+            rule2_evaluations[0].matched_rule.as_ref().unwrap().id,
+            "rule2"
+        );
     }
 }

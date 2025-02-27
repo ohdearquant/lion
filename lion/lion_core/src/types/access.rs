@@ -12,7 +12,7 @@ use std::path::PathBuf;
 /// This enum represents different types of resource access requests
 /// that can be checked against capabilities to determine if they
 /// are permitted.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum AccessRequest {
     /// File access.
     ///
