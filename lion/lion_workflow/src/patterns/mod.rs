@@ -6,6 +6,6 @@ pub use event::{
     EventStore, InMemoryEventStore,
 };
 pub use saga::{
-    CompensationPolicy, SagaDefinition, SagaDefinitionBuilder, SagaError, SagaExecutionPolicy,
-    SagaInstance, SagaManager, SagaStatus, SagaStep, StepStatus,
+    SagaDefinition, SagaError, SagaOrchestrator, SagaOrchestratorConfig, SagaStatus, SagaStep,
+    SagaStrategy, StepStatus,
 };

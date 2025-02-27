@@ -1,12 +1,33 @@
 use crate::model::{EdgeId, NodeId, NodeStatus, WorkflowDefinition};
 use crate::state::{ConditionResult, WorkflowState};
-use lion_capability::check::engine::CapabilityChecker;
-use lion_capability::model::capability::CapabilityId;
+use lion_core::id::PluginId;
+use lion_core::CapabilityId;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt;
 use std::sync::Arc;
 use thiserror::Error;
+
+/// Trait for capability checking
+pub trait CapabilityChecker: Send + Sync {
+    /// Check if a subject has permission to perform an action on an object
+    fn check_permission(
+        &self,
+        subject: &str,
+        object: &str,
+        action: &str,
+    ) -> Result<PermissionResult, String>;
+}
+
+/// Result of a permission check
+#[derive(Debug, Clone, Copy)]
+pub struct PermissionResult(pub bool);
+
+impl PermissionResult {
+    pub fn is_allowed(&self) -> bool {
+        self.0
+    }
+}
 
 /// Error types for workflow execution context
 #[derive(Error, Debug)]
@@ -110,7 +131,7 @@ pub struct ExecutionContext {
     pub state: Arc<WorkflowState>,
 
     /// Capability checker for capability-based security
-    pub capability_checker: Option<Arc<dyn CapabilityChecker>>,
+    pub capability_checker: Option<Arc<dyn CapabilityChecker + 'static>>,
 
     /// Currently executing node ID
     pub current_node_id: Option<NodeId>,
@@ -144,7 +165,10 @@ impl ExecutionContext {
     }
 
     /// Set the capability checker
-    pub fn with_capability_checker(mut self, checker: Arc<dyn CapabilityChecker>) -> Self {
+    pub fn with_capability_checker(
+        mut self,
+        checker: Arc<dyn CapabilityChecker + 'static>,
+    ) -> Self {
         self.capability_checker = Some(checker);
         self
     }
@@ -223,7 +247,7 @@ impl ExecutionContext {
 
         checker
             .check_permission(subject, &object, action)
-            .map_err(|e| ContextError::CapabilityError(e.to_string()))
+            .map_err(|e| ContextError::CapabilityError(e))
             .map(|result| result.is_allowed())
     }
 

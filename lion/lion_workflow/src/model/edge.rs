@@ -1,6 +1,6 @@
 use crate::model::node::NodeId;
-use lion_capability::model::capability::CapabilityId;
 use lion_core::id::Id;
+use lion_core::CapabilityId;
 use serde::{Deserialize, Serialize};
 
 /// Unique identifier for workflow edges

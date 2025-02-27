@@ -1,8 +1,8 @@
 use crate::model::edge::{Edge, EdgeId};
 use crate::model::node::{Node, NodeId, NodeStatus};
-use lion_capability::model::capability::CapabilityId;
 use lion_core::error::Error as CoreError;
 use lion_core::id::Id;
+use lion_core::CapabilityId;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet, VecDeque};
 use thiserror::Error;

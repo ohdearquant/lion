@@ -1,6 +1,6 @@
 use crate::model::edge::EdgeId;
-use lion_capability::model::capability::CapabilityId;
 use lion_core::id::Id;
+use lion_core::CapabilityId;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::sync::atomic::{AtomicUsize, Ordering};

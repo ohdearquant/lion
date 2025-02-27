@@ -1,5 +1,5 @@
 use crate::model::{NodeId, WorkflowDefinition, WorkflowId};
-use lion_capability::model::capability::CapabilityId;
+use lion_core::CapabilityId;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;

@@ -36,8 +36,8 @@
 //!     .add_node(node1).unwrap()
 //!     .add_node(node2).unwrap()
 //!     .add_node(node3).unwrap()
-//!     .add_edge(Edge::new(EdgeId::new(), &node1_id, &node2_id)).unwrap()
-//!     .add_edge(Edge::new(EdgeId::new(), &node2_id, &node3_id)).unwrap()
+//!     .add_edge(Edge::new(EdgeId::new(), node1_id, node2_id)).unwrap()
+//!     .add_edge(Edge::new(EdgeId::new(), node2_id, node3_id)).unwrap()
 //!     .build();
 //!
 //! // Create execution components
@@ -70,16 +70,15 @@ pub mod patterns;
 
 // Re-export important types
 pub use engine::{
-    ExecutionContext, ExecutorConfig, NodeResult, SchedulerConfig, SchedulingPolicy, TaskStatus,
-    WorkflowExecutor, WorkflowScheduler,
+    context::ExecutionContext, context::NodeResult, executor::ExecutorConfig,
+    executor::WorkflowExecutor, scheduler::SchedulerConfig, scheduler::SchedulingPolicy,
+    scheduler::TaskStatus,
 };
 pub use model::{
     Edge, EdgeId, Node, NodeId, NodeStatus, WorkflowBuilder, WorkflowDefinition, WorkflowError,
     WorkflowId,
 };
-pub use patterns::{
-    Event, EventBroker, SagaDefinition, SagaDefinitionBuilder, SagaInstance, SagaManager,
-};
+pub use patterns::event::{Event, EventBroker};
 pub use state::{
     CheckpointManager, FileStorage, MemoryStorage, StateMachineManager, StorageBackend,
     WorkflowState,
@@ -87,7 +86,9 @@ pub use state::{
 
 /// Error types from across the workflow engine
 pub mod error {
-    pub use crate::engine::{ContextError, ExecutorError, SchedulerError};
+    pub use crate::engine::context::ContextError;
+    pub use crate::engine::executor::ExecutorError;
+    pub use crate::engine::scheduler::SchedulerError;
     pub use crate::model::WorkflowError;
     pub use crate::patterns::{EventError, SagaError};
     pub use crate::state::{CheckpointError, StateMachineError, StorageError};
@@ -117,7 +118,7 @@ mod tests {
             .unwrap()
             .add_node(node2)
             .unwrap()
-            .add_edge(Edge::new(EdgeId::new(), &node1_id, &node2_id))
+            .add_edge(Edge::new(EdgeId::new(), node1_id, node2_id))
             .unwrap()
             .build();
 

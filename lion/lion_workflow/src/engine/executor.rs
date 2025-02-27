@@ -1,10 +1,9 @@
-use crate::engine::context::{ContextError, ExecutionContext, NodeResult};
+use crate::engine::context::{CapabilityChecker, ContextError, ExecutionContext, NodeResult};
 use crate::engine::scheduler::{
     SchedulerError, SchedulingPolicy, Task, TaskId, TaskStatus, WorkflowScheduler,
 };
 use crate::model::{NodeId, NodeStatus, WorkflowDefinition};
 use crate::state::{StateMachineManager, WorkflowState};
-use lion_capability::check::engine::CapabilityChecker;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
@@ -183,7 +182,7 @@ where
     node_handlers: Arc<RwLock<HashMap<String, NodeHandler>>>,
 
     /// Capability checker for capability-based security
-    capability_checker: Option<Arc<dyn CapabilityChecker>>,
+    capability_checker: Option<Arc<dyn CapabilityChecker + 'static>>,
 
     /// Worker states
     workers: Arc<RwLock<Vec<Worker>>>,
@@ -239,7 +238,10 @@ where
     }
 
     /// Set the capability checker
-    pub fn with_capability_checker(mut self, checker: Arc<dyn CapabilityChecker>) -> Self {
+    pub fn with_capability_checker(
+        mut self,
+        checker: Arc<dyn CapabilityChecker + 'static>,
+    ) -> Self {
         self.capability_checker = Some(checker);
         self
     }
@@ -675,10 +677,10 @@ mod tests {
         workflow.add_node(node3).unwrap();
 
         workflow
-            .add_edge(Edge::new(EdgeId::new(), node1_id, node2_id))
+            .add_edge(Edge::new(crate::model::EdgeId::new(), node1_id, node2_id))
             .unwrap();
         workflow
-            .add_edge(Edge::new(EdgeId::new(), node2_id, node3_id))
+            .add_edge(Edge::new(crate::model::EdgeId::new(), node2_id, node3_id))
             .unwrap();
 
         Arc::new(workflow)
