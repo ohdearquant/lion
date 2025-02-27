@@ -381,8 +381,15 @@ impl CapabilityLogger {
             .and_then(|ctx| ctx.plugin_id)
             .unwrap_or_else(|| "unknown".to_string());
 
-        self.checker
-            .check_capability(&plugin_id, ObservabilityCapability::Log(level))
+        // Get the result of the capability check
+        let has_capability = self
+            .checker
+            .check_capability(&plugin_id, ObservabilityCapability::Log(level))?;
+
+        // For log levels, we need to check if the plugin has the capability for the requested level
+        // A plugin with Info level capability can log at Info, Warn, and Error levels
+        // But not at Debug or Trace levels
+        Ok(has_capability)
     }
 }
 

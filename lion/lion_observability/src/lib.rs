@@ -128,6 +128,7 @@ impl Observability {
             self.tracer.clone(),
             self.metrics_registry.clone(),
             self.capability_checker.clone(),
+            self.config.enforce_capabilities,
         )
     }
 
