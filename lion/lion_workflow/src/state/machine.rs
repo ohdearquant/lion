@@ -1,8 +1,8 @@
-use crate::model::{Edge, EdgeId, NodeId, NodeStatus, WorkflowDefinition, WorkflowId};
+use crate::model::{EdgeId, NodeId, NodeStatus, WorkflowDefinition, WorkflowId};
 use crate::state::checkpoint::{CheckpointError, CheckpointManager};
 use crate::state::storage::StorageBackend;
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use thiserror::Error;
 use tokio::sync::RwLock;
@@ -540,7 +540,7 @@ impl<S: StorageBackend> StateMachineManager<S> {
         // If workflow completed, create a final checkpoint
         if state.is_completed && !state.has_failed {
             drop(state); // Release write lock before checkpoint
-            if let Some(manager) = &self.checkpoint_manager {
+            if let Some(_manager) = &self.checkpoint_manager {
                 // TODO: Save the final state
             }
         }

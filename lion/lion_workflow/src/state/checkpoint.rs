@@ -2,7 +2,7 @@ use crate::model::{WorkflowDefinition, WorkflowError, WorkflowId};
 use crate::state::storage::StorageBackend;
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
 use thiserror::Error;
 use tokio::sync::Mutex;

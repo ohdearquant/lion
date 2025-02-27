@@ -1,9 +1,6 @@
 use crate::engine::context::{CapabilityChecker, ContextError, ExecutionContext, NodeResult};
-use crate::engine::scheduler::{
-    SchedulerError, SchedulingPolicy, Task, TaskId, TaskStatus, WorkflowScheduler,
-};
-use crate::model::{NodeId, NodeStatus, WorkflowDefinition};
-use crate::state::{StateMachineManager, WorkflowState};
+use crate::engine::scheduler::{SchedulerError, Task, TaskId, TaskStatus, WorkflowScheduler};
+use crate::model::{NodeId, WorkflowDefinition};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
@@ -176,7 +173,7 @@ where
     scheduler: Arc<WorkflowScheduler>,
 
     /// State machine manager
-    state_manager: Arc<StateMachineManager<S>>,
+    state_manager: Arc<crate::state::StateMachineManager<S>>,
 
     /// Node handlers by node type
     node_handlers: Arc<RwLock<HashMap<String, NodeHandler>>>,
@@ -207,7 +204,7 @@ where
     /// Create a new workflow executor
     pub fn new(
         scheduler: Arc<WorkflowScheduler>,
-        state_manager: Arc<StateMachineManager<S>>,
+        state_manager: Arc<crate::state::StateMachineManager<S>>,
         config: ExecutorConfig,
     ) -> Self {
         let (tx, rx) = mpsc::channel(1);
@@ -276,40 +273,45 @@ where
     /// Start a worker thread
     async fn start_worker(&self, worker_id: usize) -> Result<(), ExecutorError> {
         // Clone necessary references for the worker
-        let scheduler = self.scheduler.clone();
-        let state_manager = self.state_manager.clone();
-        let node_handlers = self.node_handlers.clone();
-        let capability_checker = self.capability_checker.clone();
-        let is_running = self.is_running.clone();
-        let workers = self.workers.clone();
-        let config = self.config.clone();
-        let mut cancel_rx = self.cancel_rx.lock().await.clone();
+        let scheduler_clone = self.scheduler.clone();
+        let state_manager_clone = self.state_manager.clone();
+        let node_handlers_clone = self.node_handlers.clone();
+        let capability_checker_clone = self.capability_checker.clone();
+        let workers_clone = self.workers.clone();
+
+        // Get current values
+        let is_running_val = *self.is_running.read().await;
+        let config_val = self.config.read().await.clone();
+
+        // Create a new channel for this worker
+        let (_tx, mut cancel_rx) = mpsc::channel::<()>(1);
 
         // Spawn a worker task
         tokio::spawn(async move {
             let worker_id_copy = worker_id;
+            let is_running_local = is_running_val;
 
             // Worker loop
             'worker_loop: loop {
                 // Check if executor is still running
-                if !*is_running.read().await {
+                if !is_running_local {
                     break;
                 }
 
                 // Update worker status
                 {
-                    let mut workers_guard = workers.write().await;
+                    let mut workers_guard = workers_clone.write().await;
                     workers_guard[worker_id].is_busy = false;
                     workers_guard[worker_id].current_task = None;
                 }
 
                 // Check cancellation
-                if let Ok(_) = cancel_rx.try_recv() {
+                if cancel_rx.try_recv().is_ok() {
                     break;
                 }
 
                 // Get next task from scheduler
-                let next_task = scheduler.next_task().await;
+                let next_task = scheduler_clone.next_task().await;
 
                 // If no task, wait a bit and try again
                 if next_task.is_none() {
@@ -324,64 +326,67 @@ where
 
                 let task = next_task.unwrap();
                 let task_id = task.id;
-                let node_id = task.node_id;
+                let node_id = task.node_id.clone();
                 let instance_id = task.instance_id.clone();
 
                 // Update worker status
                 {
-                    let mut workers_guard = workers.write().await;
+                    let mut workers_guard = workers_clone.write().await;
                     workers_guard[worker_id].is_busy = true;
                     workers_guard[worker_id].current_task = Some(task_id);
                 }
 
                 // Mark task as running
-                if let Err(e) = scheduler.mark_task_running(task_id).await {
+                if let Err(e) = scheduler_clone.mark_task_running(task_id).await {
                     log::error!("Failed to mark task as running: {:?}", e);
                     continue;
                 }
 
                 // Mark node as running in state machine
-                if let Err(e) = state_manager.set_node_running(&instance_id, &node_id).await {
+                if let Err(e) = state_manager_clone
+                    .set_node_running(&instance_id, &node_id)
+                    .await
+                {
                     log::error!("Failed to mark node as running: {:?}", e);
                     continue;
                 }
 
                 // Get node type
-                let node_type = if let Ok(state) = state_manager.get_instance(&instance_id).await {
-                    let state_guard = state.read().await;
-                    if let Some(def) = &state_guard.definition {
-                        if let Some(node) = def.get_node(&node_id) {
-                            node.name.clone()
+                let node_type =
+                    if let Some(state) = state_manager_clone.get_instance(&instance_id).await {
+                        let state_guard = state.read().await;
+                        if let Some(def) = &state_guard.definition {
+                            if let Some(node) = def.get_node(&node_id) {
+                                node.name.clone()
+                            } else {
+                                String::from("unknown")
+                            }
                         } else {
                             String::from("unknown")
                         }
                     } else {
                         String::from("unknown")
-                    }
-                } else {
-                    String::from("unknown")
-                };
+                    };
 
                 // Get node handler
                 let handler = {
-                    let handlers = node_handlers.read().await;
+                    let handlers = node_handlers_clone.read().await;
                     handlers.get(&node_type).cloned()
                 };
 
                 // Execute task with timeout
-                let execution_config = config.read().await;
                 let start_time = std::time::Instant::now();
 
                 let execution_result = if let Some(handler) = handler {
                     // Create execution context
                     let mut context = task.context.clone();
-                    if let Some(checker) = &capability_checker {
+                    if let Some(checker) = &capability_checker_clone {
                         context = context.with_capability_checker(checker.clone());
                     }
 
                     // Execute with timeout
                     let execution_future = (handler)(context);
-                    match timeout(execution_config.default_timeout, execution_future).await {
+                    match timeout(config_val.default_timeout, execution_future).await {
                         Ok(result) => result,
                         Err(_) => Err(ExecutorError::TaskTimeout(task_id)),
                     }
@@ -393,7 +398,7 @@ where
 
                 // Update worker stats
                 {
-                    let mut workers_guard = workers.write().await;
+                    let mut workers_guard = workers_clone.write().await;
                     let worker = &mut workers_guard[worker_id];
                     worker.last_completion = Some(chrono::Utc::now());
                     worker.stats.total_execution_time += execution_time.as_secs_f64();
@@ -412,12 +417,12 @@ where
                 match execution_result {
                     Ok(node_result) => {
                         // Mark task as completed
-                        if let Err(e) = scheduler.mark_task_completed(task_id).await {
+                        if let Err(e) = scheduler_clone.mark_task_completed(task_id).await {
                             log::error!("Failed to mark task as completed: {:?}", e);
                         }
 
                         // Update state machine
-                        if let Err(e) = state_manager
+                        if let Err(e) = state_manager_clone
                             .set_node_completed(&instance_id, &node_id, node_result.output.clone())
                             .await
                         {
@@ -426,7 +431,7 @@ where
                     }
                     Err(e) => {
                         // Mark task as failed
-                        if let Err(mark_err) = scheduler.mark_task_failed(task_id).await {
+                        if let Err(mark_err) = scheduler_clone.mark_task_failed(task_id).await {
                             log::error!("Failed to mark task as failed: {:?}", mark_err);
                         }
 
@@ -443,7 +448,7 @@ where
                             }
                         };
 
-                        if let Err(state_err) = state_manager
+                        if let Err(state_err) = state_manager_clone
                             .set_node_failed(&instance_id, &node_id, error_json)
                             .await
                         {
@@ -457,7 +462,7 @@ where
 
             // Update worker status on exit
             {
-                let mut workers_guard = workers.write().await;
+                let mut workers_guard = workers_clone.write().await;
                 workers_guard[worker_id_copy].is_busy = false;
                 workers_guard[worker_id_copy].current_task = None;
             }
@@ -471,31 +476,37 @@ where
     /// Start the task monitor for timeouts and scheduling corrections
     async fn start_task_monitor(&self) -> Result<(), ExecutorError> {
         // Clone necessary references
-        let scheduler = self.scheduler.clone();
-        let is_running = self.is_running.clone();
-        let config = self.config.clone();
-        let mut cancel_rx = self.cancel_rx.lock().await.clone();
+        let scheduler_clone = self.scheduler.clone();
+
+        // Get current values
+        let is_running_val = *self.is_running.read().await;
+
+        // Create a new channel for this monitor
+        let (_tx, mut cancel_rx) = mpsc::channel::<()>(1);
 
         // Spawn monitor task
         tokio::spawn(async move {
+            let is_running_local = is_running_val;
+            let check_interval = Duration::from_secs(1);
+
             // Monitor loop
             'monitor_loop: loop {
                 // Check if executor is still running
-                if !*is_running.read().await {
+                if !is_running_local {
                     break;
                 }
 
                 // Check cancellation
-                if let Ok(_) = cancel_rx.try_recv() {
+                if cancel_rx.try_recv().is_ok() {
                     break;
                 }
 
                 // Check for timed out tasks
-                let timed_out_tasks = scheduler.check_timeouts().await;
+                let timed_out_tasks = scheduler_clone.check_timeouts().await;
 
                 for task_id in timed_out_tasks {
                     // Cancel timed out tasks
-                    if let Err(e) = scheduler.cancel_task(task_id).await {
+                    if let Err(e) = scheduler_clone.cancel_task(task_id).await {
                         log::error!("Failed to cancel timed out task {}: {:?}", task_id, e);
                     } else {
                         log::warn!("Task {} timed out and was cancelled", task_id);
@@ -504,7 +515,7 @@ where
 
                 // Sleep before next check
                 tokio::select! {
-                    _ = tokio::time::sleep(Duration::from_secs(1)) => {}
+                    _ = tokio::time::sleep(check_interval) => {}
                     _ = cancel_rx.recv() => {
                         break 'monitor_loop;
                     }
@@ -548,7 +559,7 @@ where
 
         // Create execution context
         let context =
-            ExecutionContext::new(definition, Arc::new(instance_guard.clone())).with_node(node_id);
+            ExecutionContext::new(definition, Arc::new(instance_guard.clone())).with_node(&node_id);
 
         // Create task
         let task = Task::new(node_id, workflow_instance_id.to_string(), context);
@@ -664,23 +675,35 @@ mod tests {
         let mut workflow =
             WorkflowDefinition::new(crate::model::WorkflowId::new(), "Test Workflow".to_string());
 
+        // Create nodes
         let node1 = Node::new(NodeId::new(), "start".to_string());
         let node2 = Node::new(NodeId::new(), "process".to_string());
         let node3 = Node::new(NodeId::new(), "end".to_string());
 
-        let node1_id = node1.id;
-        let node2_id = node2.id;
-        let node3_id = node3.id;
+        // Clone the IDs before adding nodes to workflow
+        let node1_id = node1.id.clone();
+        let node2_id = node2.id.clone();
+        let node3_id = node3.id.clone();
 
+        // Add nodes to workflow
         workflow.add_node(node1).unwrap();
         workflow.add_node(node2).unwrap();
         workflow.add_node(node3).unwrap();
 
+        // Add edges
         workflow
-            .add_edge(Edge::new(crate::model::EdgeId::new(), node1_id, node2_id))
+            .add_edge(Edge::new(
+                crate::model::EdgeId::new(),
+                node1_id.clone(),
+                node2_id.clone(),
+            ))
             .unwrap();
         workflow
-            .add_edge(Edge::new(crate::model::EdgeId::new(), node2_id, node3_id))
+            .add_edge(Edge::new(
+                crate::model::EdgeId::new(),
+                node2_id.clone(),
+                node3_id.clone(),
+            ))
             .unwrap();
 
         Arc::new(workflow)
@@ -690,7 +713,7 @@ mod tests {
     async fn test_executor_basic_workflow() {
         // Create dependencies
         let scheduler = Arc::new(WorkflowScheduler::new(SchedulerConfig::default()));
-        let state_manager = Arc::new(StateMachineManager::<MemoryStorage>::new());
+        let state_manager = Arc::new(crate::state::StateMachineManager::<MemoryStorage>::new());
 
         // Create executor
         let executor = WorkflowExecutor::new(scheduler, state_manager, ExecutorConfig::default());
@@ -788,7 +811,7 @@ mod tests {
         let all_completed = state
             .node_status
             .values()
-            .all(|status| *status == NodeStatus::Completed);
+            .all(|status| *status == crate::model::NodeStatus::Completed);
 
         assert!(all_completed, "Not all nodes completed");
     }
@@ -797,7 +820,7 @@ mod tests {
     async fn test_executor_node_failure() {
         // Create dependencies
         let scheduler = Arc::new(WorkflowScheduler::new(SchedulerConfig::default()));
-        let state_manager = Arc::new(StateMachineManager::<MemoryStorage>::new());
+        let state_manager = Arc::new(crate::state::StateMachineManager::<MemoryStorage>::new());
 
         // Create executor
         let executor = WorkflowExecutor::new(scheduler, state_manager, ExecutorConfig::default());
@@ -886,8 +909,17 @@ mod tests {
         let nodes: Vec<NodeId> = state.node_status.keys().cloned().collect();
 
         // Verify start completed, process failed, end not started
-        assert_eq!(state.node_status[&nodes[0]], NodeStatus::Completed); // start
-        assert_eq!(state.node_status[&nodes[1]], NodeStatus::Failed); // process
-        assert_eq!(state.node_status[&nodes[2]], NodeStatus::Pending); // end (not reached)
+        assert_eq!(
+            state.node_status[&nodes[0]],
+            crate::model::NodeStatus::Completed
+        ); // start
+        assert_eq!(
+            state.node_status[&nodes[1]],
+            crate::model::NodeStatus::Failed
+        ); // process
+        assert_eq!(
+            state.node_status[&nodes[2]],
+            crate::model::NodeStatus::Pending
+        ); // end (not reached)
     }
 }

@@ -1,6 +1,5 @@
 use crate::model::{EdgeId, NodeId, NodeStatus, WorkflowDefinition};
 use crate::state::{ConditionResult, WorkflowState};
-use lion_core::id::PluginId;
 use lion_core::CapabilityId;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -174,8 +173,8 @@ impl ExecutionContext {
     }
 
     /// Set the current node ID
-    pub fn with_node(mut self, node_id: NodeId) -> Self {
-        self.current_node_id = Some(node_id);
+    pub fn with_node(mut self, node_id: &NodeId) -> Self {
+        self.current_node_id = Some(node_id.clone());
         self
     }
 
@@ -358,8 +357,8 @@ fn evaluate_json_path(value: &serde_json::Value, path: &str) -> Result<bool, Str
 /// Evaluate an expression against a context
 fn evaluate_expression(
     expr: &str,
-    source_result: &serde_json::Value,
-    variables: &HashMap<String, serde_json::Value>,
+    _source_result: &serde_json::Value,
+    _variables: &HashMap<String, serde_json::Value>,
 ) -> Result<bool, String> {
     // Very simple expression evaluator - would use a proper expression engine in production
     // This just checks if the expression is a direct boolean value
@@ -420,7 +419,7 @@ mod tests {
         let node_id = definition.nodes.keys().next().unwrap().clone();
 
         let context = ExecutionContext::new(definition, state)
-            .with_node(node_id.clone())
+            .with_node(&node_id)
             .with_priority(2)
             .with_attempt(3);
 
@@ -430,7 +429,7 @@ mod tests {
 
         // Get current node
         let node = context.get_current_node().unwrap();
-        assert_eq!(node.id, node_id);
+        assert_eq!(node.id, node_id.clone());
     }
 
     #[test]

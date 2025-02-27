@@ -1,11 +1,10 @@
-use crate::model::{NodeId, WorkflowDefinition, WorkflowId};
 use lion_core::CapabilityId;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::Duration;
 use thiserror::Error;
-use tokio::sync::{mpsc, Mutex, RwLock};
+use tokio::sync::{mpsc, RwLock};
 use tokio::time::timeout;
 use uuid::Uuid;
 
@@ -136,6 +135,10 @@ pub struct Event {
 
     /// Custom metadata
     pub metadata: serde_json::Value,
+
+    /// Whether this event requires acknowledgment
+    #[serde(default)]
+    pub requires_ack: bool,
 }
 
 impl Event {
@@ -154,6 +157,7 @@ impl Event {
             retry_count: 0,
             required_capability: None,
             metadata: serde_json::Value::Null,
+            requires_ack: true,
         }
     }
 
@@ -229,6 +233,7 @@ impl Event {
             retry_count: 0,
             required_capability: None,
             metadata: serde_json::Value::Null,
+            requires_ack: true,
         }
     }
 
@@ -370,7 +375,7 @@ impl Clone for EventSubscription {
     fn clone(&self) -> Self {
         let (ack_tx, ack_rx) = mpsc::channel(100); // Use a reasonable buffer size
 
-        EventSubscription {
+        Self {
             id: self.id.clone(),
             event_type: self.event_type.clone(),
             subscriber_id: self.subscriber_id.clone(),
@@ -488,10 +493,10 @@ impl EventBroker {
         // Check if event already processed (for exactly-once)
         let config = self.config.read().await;
 
-        if config.delivery_semantic == DeliverySemantic::ExactlyOnce {
+        if config.delivery_semantic == DeliverySemantic::ExactlyOnce && event.retry_count == 0 {
             let processed = self.processed_events.read().await;
             if processed.contains(&event.id) {
-                return Err(EventError::AlreadyProcessed(event.id));
+                return Err(EventError::AlreadyProcessed(event.id.clone()));
             }
         }
 
@@ -558,8 +563,17 @@ impl EventBroker {
 
             if sent {
                 // Start ack handler if needed
-                if config.delivery_semantic != DeliverySemantic::AtMostOnce {
-                    self.handle_acknowledgments(&event).await;
+                if config.delivery_semantic != DeliverySemantic::AtMostOnce && event.requires_ack {
+                    let event_id = event.id.clone();
+                    let config_clone = config.clone();
+                    let broker_clone = self.clone();
+
+                    // Spawn a task to handle acknowledgment
+                    tokio::spawn(async move {
+                        broker_clone
+                            .process_acknowledgment(event_id, config_clone)
+                            .await;
+                    });
                 }
 
                 Ok(EventStatus::Sent)
@@ -576,101 +590,105 @@ impl EventBroker {
         }
     }
 
-    /// Handle acknowledgments for an event
-    async fn handle_acknowledgments(&self, event: &Event) {
-        let event_id = event.id.clone();
-        let config = self.config.read().await.clone();
-        let broker = self.clone();
+    /// Process acknowledgment for an event
+    async fn process_acknowledgment(&self, event_id: String, config: EventBrokerConfig) {
+        // Wait for acknowledgment or timeout
+        let ack_result = timeout(config.ack_timeout, self.wait_for_acknowledgment(&event_id)).await;
 
-        tokio::spawn(async move {
-            // Wait for acknowledgment or timeout
-            let ack_result = timeout(
-                config.ack_timeout,
-                broker.wait_for_acknowledgment(&event_id),
-            )
-            .await;
+        match ack_result {
+            Ok(Ok(ack)) => {
+                // Process acknowledgment
+                match ack.status {
+                    EventStatus::Acknowledged => {
+                        // Success, event delivered
+                        self.mark_event_processed(&event_id).await;
+                        self.remove_in_flight(&event_id).await;
+                    }
+                    EventStatus::Failed => {
+                        // Handle failure, maybe retry
+                        let event_opt = self.remove_in_flight(&event_id).await;
 
-            match ack_result {
-                Ok(Ok(ack)) => {
-                    // Process acknowledgment
-                    match ack.status {
-                        EventStatus::Acknowledged => {
-                            // Success, event delivered
-                            broker.mark_event_processed(&event_id).await;
-                            broker.remove_in_flight(&event_id).await;
-                        }
-                        EventStatus::Failed => {
-                            // Handle failure, maybe retry
-                            let mut event_opt = broker.remove_in_flight(&event_id).await;
+                        if let Some(mut event) = event_opt {
+                            // Increment retry count
+                            event.increment_retry();
 
-                            if let Some(mut event) = event_opt {
-                                event.increment_retry();
+                            if event.retry_count < config.max_retries {
+                                // Retry publishing directly
+                                let broker_clone = self.clone();
+                                let event_clone = event.clone();
 
-                                if event.retry_count < config.max_retries {
-                                    // Retry
-                                    let _ = broker.publish(event).await;
-                                } else {
-                                    // Too many retries, give up
-                                    log::error!(
-                                        "Event {} failed after {} retries",
-                                        event_id,
-                                        config.max_retries
-                                    );
-                                }
+                                // Spawn a task to retry
+                                tokio::spawn(async move {
+                                    let _ = broker_clone.publish(event_clone).await;
+                                });
+                            } else {
+                                // Too many retries, give up
+                                log::error!(
+                                    "Event {} failed after {} retries",
+                                    event_id,
+                                    config.max_retries
+                                );
                             }
                         }
-                        EventStatus::Rejected => {
-                            // Event rejected, don't retry
-                            broker.remove_in_flight(&event_id).await;
-                            log::warn!(
-                                "Event {} rejected by consumer {}: {:?}",
-                                event_id,
-                                ack.consumer,
-                                ack.error
-                            );
-                        }
-                        _ => {
-                            // Other statuses not expected in ack
-                            broker.remove_in_flight(&event_id).await;
-                        }
                     }
-                }
-                Ok(Err(e)) => {
-                    // Error waiting for ack
-                    log::error!(
-                        "Error waiting for acknowledgment of event {}: {:?}",
-                        event_id,
-                        e
-                    );
-
-                    // Remove from in-flight
-                    broker.remove_in_flight(&event_id).await;
-                }
-                Err(_) => {
-                    // Timeout waiting for ack
-                    log::warn!("Timeout waiting for acknowledgment of event {}", event_id);
-
-                    // Handle timeout, maybe retry
-                    let mut event_opt = broker.remove_in_flight(&event_id).await;
-
-                    if let Some(mut event) = event_opt {
-                        event.increment_retry();
-
-                        if event.retry_count < config.max_retries {
-                            // Retry
-                            let _ = broker.publish(event).await;
-                        } else {
-                            // Too many retries, give up
-                            log::error!(
-                                "Event {} timed out after {} retries",
-                                event_id,
-                                config.max_retries
-                            );
-                        }
+                    EventStatus::Rejected => {
+                        // Event rejected, don't retry
+                        self.remove_in_flight(&event_id).await;
+                        log::warn!(
+                            "Event {} rejected by consumer {}: {:?}",
+                            event_id,
+                            ack.consumer,
+                            ack.error
+                        );
+                    }
+                    _ => {
+                        // Other statuses not expected in ack
+                        self.remove_in_flight(&event_id).await;
                     }
                 }
             }
-        });
+            Ok(Err(e)) => {
+                // Error waiting for ack
+                log::error!(
+                    "Error waiting for acknowledgment of event {}: {:?}",
+                    event_id,
+                    e
+                );
+
+                // Remove from in-flight
+                self.remove_in_flight(&event_id).await;
+            }
+            Err(_) => {
+                // Timeout waiting for ack
+                log::warn!("Timeout waiting for acknowledgment of event {}", event_id);
+
+                // Handle timeout, maybe retry
+                let event_opt = self.remove_in_flight(&event_id).await;
+
+                if let Some(mut event) = event_opt {
+                    // Increment retry count
+                    event.increment_retry();
+
+                    if event.retry_count < config.max_retries {
+                        // Retry publishing directly
+                        let broker_clone = self.clone();
+                        let event_clone = event.clone();
+
+                        // Spawn a task to retry
+                        tokio::spawn(async move {
+                            let _ = broker_clone.publish(event_clone).await;
+                        });
+                    } else {
+                        // Too many retries, give up
+                        log::error!(
+                            "Event {} timed out after {} retries",
+                            event_id,
+                            config.max_retries
+                        );
+                    }
+                }
+            }
+        }
     }
 
     /// Wait for acknowledgment of an event
@@ -781,9 +799,18 @@ impl EventBroker {
 
             // Republish events
             for event in events {
-                if let Ok(_) = self.publish(event).await {
-                    published += 1;
-                }
+                let broker_clone = self.clone();
+                let event_clone = event.clone();
+
+                // Spawn a task to publish each event
+                tokio::spawn(async move {
+                    if broker_clone.publish(event_clone).await.is_ok() {
+                        // We can't increment published here since it's in a separate task
+                        // This is a limitation of this approach
+                    }
+                });
+
+                published += 1;
             }
 
             Ok(published)

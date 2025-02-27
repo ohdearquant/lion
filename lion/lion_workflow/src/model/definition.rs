@@ -6,7 +6,6 @@ use lion_core::CapabilityId;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet, VecDeque};
 use thiserror::Error;
-use uuid::Uuid;
 
 /// Unique identifier for workflows
 pub type WorkflowId = Id<WorkflowDefinition>;

@@ -1,7 +1,5 @@
-use crate::engine::context::NodeResult;
-use crate::engine::context::{ContextError, ExecutionContext};
-use crate::model::{NodeId, NodeStatus, Priority, WorkflowDefinition, WorkflowId};
-use crate::patterns::event::{DeliverySemantic, Event, EventBroker, EventError, EventStatus};
+use crate::model::Priority;
+use crate::patterns::event::{EventBroker, EventError};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -965,7 +963,8 @@ impl SagaOrchestrator {
     /// Start the timeout monitor
     async fn start_timeout_monitor(&self) -> Result<(), SagaError> {
         let orch = self.clone();
-        let mut cancel_rx = mpsc::Receiver::clone(&*self.cancel_rx.lock().await);
+        // Create a new channel
+        let (_cancel_tx, mut cancel_rx) = mpsc::channel::<()>(1);
 
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(tokio::time::Duration::from_millis(
@@ -990,7 +989,8 @@ impl SagaOrchestrator {
     /// Start the cleanup task
     async fn start_cleanup_task(&self) -> Result<(), SagaError> {
         let orch = self.clone();
-        let mut cancel_rx = mpsc::Receiver::clone(&*self.cancel_rx.lock().await);
+        // Create a new channel
+        let (_cancel_tx, mut cancel_rx) = mpsc::channel::<()>(1);
 
         tokio::spawn(async move {
             let interval_ms = orch.config.read().await.check_interval_ms * 10; // Less frequent
@@ -1049,8 +1049,17 @@ impl SagaOrchestrator {
         Ok(())
     }
 
-    /// Execute ready steps
-    async fn execute_ready_steps(&self, saga_id: &str) -> Result<(), SagaError> {
+    /// Non-recursive implementation of execute_ready_steps
+    fn execute_ready_steps_impl<'a>(
+        &'a self,
+        saga_id: &'a str,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), SagaError>> + 'a + Send>>
+    {
+        Box::pin(async move { self.execute_ready_steps_inner(saga_id).await })
+    }
+
+    /// Inner implementation of execute_ready_steps
+    async fn execute_ready_steps_inner(&self, saga_id: &str) -> Result<(), SagaError> {
         let saga_lock = {
             let sagas = self.sagas.read().await;
             sagas
@@ -1071,6 +1080,11 @@ impl SagaOrchestrator {
         }
 
         Ok(())
+    }
+
+    /// Execute ready steps (public API)
+    async fn execute_ready_steps(&self, saga_id: &str) -> Result<(), SagaError> {
+        self.execute_ready_steps_impl(saga_id).await
     }
 
     /// Execute a specific step
@@ -1148,10 +1162,13 @@ impl SagaOrchestrator {
 
                 step.mark_completed(data.clone());
 
+                // Create a copy of the steps for the result
+                let steps_copy = saga.steps.clone();
+
                 // Check if saga is complete
                 if saga.is_complete() {
                     saga.mark_completed(Some(serde_json::json!({
-                        "steps": saga.steps,
+                        "steps": steps_copy,
                     })));
                 }
 
@@ -1181,8 +1198,24 @@ impl SagaOrchestrator {
                     let self_clone = self.clone();
                     let saga_id_clone = saga_id.to_string();
 
+                    // Drop the lock before spawning the task
+                    drop(saga);
+
+                    // Use a non-recursive approach for compensation
                     tokio::spawn(async move {
-                        if let Err(e) = self_clone.compensate_saga(&saga_id_clone).await {
+                        // Use a boxed future to avoid recursion issues
+                        fn compensate_saga_impl<'a>(
+                            orchestrator: &'a SagaOrchestrator,
+                            saga_id: &'a str,
+                        ) -> std::pin::Pin<
+                            Box<
+                                dyn std::future::Future<Output = Result<(), SagaError>> + 'a + Send,
+                            >,
+                        > {
+                            Box::pin(async move { orchestrator.compensate_saga(saga_id).await })
+                        }
+
+                        if let Err(e) = compensate_saga_impl(&self_clone, &saga_id_clone).await {
                             log::error!("Failed to compensate saga {}: {:?}", saga_id_clone, e);
                         }
                     });
@@ -1205,20 +1238,14 @@ impl SagaOrchestrator {
         };
 
         // Check and execute any newly ready steps
-        tokio::spawn({
-            let self_clone = self.clone();
-            let saga_id = saga_id.to_string();
-
-            async move {
-                if let Err(e) = self_clone.execute_ready_steps(&saga_id).await {
-                    log::error!(
-                        "Failed to execute ready steps for saga {}: {:?}",
-                        saga_id,
-                        e
-                    );
-                }
-            }
-        });
+        // Instead of spawning a task, just execute ready steps directly
+        if let Err(e) = self.execute_ready_steps(saga_id).await {
+            log::error!(
+                "Failed to execute ready steps for saga {}: {:?}",
+                saga_id,
+                e
+            );
+        }
 
         Ok(result)
     }
@@ -1391,8 +1418,19 @@ impl SagaOrchestrator {
                 let self_clone = self.clone();
                 let saga_id_clone = saga_id.to_string();
 
+                // Use a non-recursive approach for compensation
                 tokio::spawn(async move {
-                    if let Err(e) = self_clone.compensate_saga(&saga_id_clone).await {
+                    // Use a boxed future to avoid recursion issues
+                    fn compensate_saga_impl<'a>(
+                        orchestrator: &'a SagaOrchestrator,
+                        saga_id: &'a str,
+                    ) -> std::pin::Pin<
+                        Box<dyn std::future::Future<Output = Result<(), SagaError>> + 'a + Send>,
+                    > {
+                        Box::pin(async move { orchestrator.compensate_saga(saga_id).await })
+                    }
+
+                    if let Err(e) = compensate_saga_impl(&self_clone, &saga_id_clone).await {
                         log::error!(
                             "Failed to compensate aborted saga {}: {:?}",
                             saga_id_clone,
@@ -1464,8 +1502,20 @@ impl SagaOrchestrator {
                 let self_clone = self.clone();
                 let saga_id = saga_id.clone();
 
+                // Use a non-recursive approach for aborting
                 tokio::spawn(async move {
-                    if let Err(e) = self_clone.abort_saga(&saga_id, "Saga timeout").await {
+                    // Use a boxed future to avoid recursion issues
+                    fn abort_saga_impl<'a>(
+                        orchestrator: &'a SagaOrchestrator,
+                        saga_id: &'a str,
+                        reason: &'a str,
+                    ) -> std::pin::Pin<
+                        Box<dyn std::future::Future<Output = Result<(), SagaError>> + 'a + Send>,
+                    > {
+                        Box::pin(async move { orchestrator.abort_saga(saga_id, reason).await })
+                    }
+
+                    if let Err(e) = abort_saga_impl(&self_clone, &saga_id, "Saga timeout").await {
                         log::error!("Failed to abort timed out saga {}: {:?}", saga_id, e);
                     }
                 });
@@ -1555,7 +1605,7 @@ impl Clone for SagaOrchestrator {
                 self.compensation_handlers.blocking_read().clone(),
             ),
             event_broker: self.event_broker.clone(),
-            is_running: self.is_running.clone(),
+            is_running: RwLock::new(false),
             cancel_tx: tx,
             cancel_rx: Mutex::new(rx),
         }
@@ -1686,7 +1736,7 @@ mod tests {
         orch.register_step_handler(
             "inventory",
             "reserve",
-            Arc::new(|step| {
+            Arc::new(|_step| {
                 Box::new(Box::pin(async move {
                     // Simple mock handler that always succeeds
                     Ok(serde_json::json!({"reservation_id": "123"}))
@@ -1698,7 +1748,7 @@ mod tests {
         orch.register_step_handler(
             "payment",
             "process",
-            Arc::new(|step| {
+            Arc::new(|_step| {
                 Box::new(Box::pin(async move {
                     // Simple mock handler that always fails
                     Err("Payment declined".to_string())
@@ -1710,7 +1760,7 @@ mod tests {
         orch.register_compensation_handler(
             "inventory",
             "cancel_reservation",
-            Arc::new(|step| {
+            Arc::new(|_step| {
                 Box::new(Box::pin(async move {
                     // Simple mock compensation that always succeeds
                     Ok(())
