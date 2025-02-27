@@ -17,9 +17,9 @@ use lion_observability::capability::{
 use lion_observability::config::{
     LoggingConfig, MetricsConfig, ObservabilityConfig, TracingConfig,
 };
-use lion_observability::context::Context;
 use lion_observability::error::ObservabilityError;
 use lion_observability::tracing_system::SpanStatus;
+use lion_observability::tracing_system::Tracer;
 use lion_observability::{Observability, Result};
 
 fn main() -> Result<()> {
@@ -98,17 +98,16 @@ fn create_capability_checker() -> impl lion_observability::capability::Observabi
         // Auth plugin can log at all levels and use metrics
         .allow("auth_plugin", ObservabilityCapability::Log(LogLevel::Trace))
         .allow("auth_plugin", ObservabilityCapability::Metrics)
-        
         // Data plugin can log at info and above, use metrics and tracing
         .allow("data_plugin", ObservabilityCapability::Log(LogLevel::Info))
         .allow("data_plugin", ObservabilityCapability::Metrics)
         .allow("data_plugin", ObservabilityCapability::Tracing)
-        
         // UI plugin can only log at warn and above
         .allow("ui_plugin", ObservabilityCapability::Log(LogLevel::Warn))
 }
 
 /// Example plugin trait
+#[allow(dead_code)]
 trait Plugin: Send + Sync {
     /// Get the plugin ID
     fn id(&self) -> &str;
@@ -218,7 +217,7 @@ impl ExamplePluginManager {
         // Record workflow duration
         let duration = timer.stop()?;
         println!(
-            "Workflow completed in {:.2} ms with result: {}",
+            "Workflow completed in {:.2} ms with result: {:?}",
             duration.as_secs_f64() * 1000.0,
             result
         );
@@ -264,7 +263,7 @@ impl Plugin for AuthPlugin {
         self.request_counter.increment(1)?;
 
         // Execute with context
-        ctx.with_current(|| {
+        let result = ctx.with_current(|| {
             match operation {
                 "authenticate" => {
                     if args.len() < 2 {
@@ -308,7 +307,13 @@ impl Plugin for AuthPlugin {
                     )))
                 }
             }
-        })
+        });
+
+        // Unwrap the nested Result
+        match result {
+            Ok(s) => Ok(s),
+            Err(e) => Err(e),
+        }
     }
 }
 
@@ -339,7 +344,7 @@ impl Plugin for DataPlugin {
         let ctx = self.obs.create_context();
 
         // Execute with context
-        ctx.with_current(|| {
+        let result = ctx.with_current(|| {
             match operation {
                 "fetch_data" => {
                     if args.is_empty() {
@@ -394,7 +399,14 @@ impl Plugin for DataPlugin {
                     )))
                 }
             }
-        })
+        });
+
+        // Unwrap the nested Result
+        match result {
+            Ok(Ok(s)) => Ok(s),
+            Ok(Err(e)) => Err(e),
+            Err(e) => Err(e),
+        }
     }
 }
 
@@ -419,7 +431,7 @@ impl Plugin for UiPlugin {
         let ctx = self.obs.create_context();
 
         // Execute with context
-        ctx.with_current(|| {
+        let result = ctx.with_current(|| {
             match operation {
                 "render" => {
                     if args.is_empty() {
@@ -460,6 +472,12 @@ impl Plugin for UiPlugin {
                     )))
                 }
             }
-        })
+        });
+
+        // Unwrap the nested Result
+        match result {
+            Ok(s) => Ok(s),
+            Err(e) => Err(e),
+        }
     }
 }

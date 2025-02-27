@@ -3,10 +3,9 @@
 //! This module defines the capabilities required for observability operations
 //! and provides integration with Lion's capability system.
 
-use crate::error::ObservabilityError;
 use crate::Result;
+use serde::{Deserialize, Serialize};
 use std::fmt;
-use std::sync::Arc;
 
 /// Represents specific observability capabilities
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -34,7 +33,7 @@ pub enum ObservabilityCapability {
 }
 
 /// Log level for capability checking
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum LogLevel {
     /// Trace level logs (most verbose)
     Trace,
@@ -177,7 +176,7 @@ impl ObservabilityCapabilityChecker for SelectiveCapabilityChecker {
                     if let ObservabilityCapability::Log(allowed_level) = cap {
                         // The plugin can log at the requested level if it has permission
                         // for that level or any lower (more verbose) level
-                        return Ok(*allowed_level <= requested_level);
+                        return Ok(requested_level >= *allowed_level);
                     }
                 }
             }

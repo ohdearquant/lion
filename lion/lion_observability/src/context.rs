@@ -135,19 +135,19 @@ pub struct Context {
 /// Trait for context values
 pub trait ContextValue: Send + Sync + fmt::Debug {
     /// Convert to string for display
-    fn to_string(&self) -> String;
+    fn to_string_value(&self) -> String;
 
     /// Convert to JSON value
     fn to_json_value(&self) -> serde_json::Value;
 }
 
 impl<T: Send + Sync + fmt::Debug + fmt::Display + Clone + 'static> ContextValue for T {
-    fn to_string(&self) -> String {
-        self.to_string()
+    fn to_string_value(&self) -> String {
+        format!("{}", self)
     }
 
     fn to_json_value(&self) -> serde_json::Value {
-        serde_json::Value::String(self.to_string())
+        serde_json::Value::String(format!("{}", self))
     }
 }
 
@@ -224,10 +224,12 @@ impl Context {
 
     /// Set the current context in thread-local storage
     pub fn set_current(context: Option<Self>) {
-        if let Some(lock) = CURRENT_CONTEXT.get() {
-            *lock.write() = context;
+        if let Some(local) = CURRENT_CONTEXT.get() {
+            *local.write() = context;
         } else {
-            CURRENT_CONTEXT.set(RwLock::new(context));
+            // Initialize with a new RwLock and then get it to set the value
+            let local = CURRENT_CONTEXT.get_or(|| RwLock::new(None));
+            *local.write() = context;
         }
     }
 
@@ -276,7 +278,7 @@ impl Context {
         }
 
         for (key, value) in &self.attributes {
-            map.insert(key.clone(), value.to_string());
+            map.insert(key.clone(), value.to_string_value());
         }
 
         map
