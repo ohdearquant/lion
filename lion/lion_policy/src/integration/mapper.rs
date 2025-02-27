@@ -21,6 +21,7 @@ pub struct CapabilityMapper<'a, P, C> {
     capability_store: &'a C,
 }
 
+#[allow(dead_code)]
 impl<'a, P, C> CapabilityMapper<'a, P, C>
 where
     P: PolicyStore,
