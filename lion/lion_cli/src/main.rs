@@ -1,4 +1,5 @@
 use clap::{Parser, Subcommand};
+use std::process::Command;
 
 /// Lion Command Line Interface
 ///
@@ -70,16 +71,40 @@ fn main() {
     let cli = Cli::parse();
 
     println!("\n⚠️  The Lion CLI is currently under development");
-    println!("⚠️  This command is not fully implemented yet\n");
+
+    // Determine if the command is implemented or not
+    let is_implemented = matches!(cli.command, Commands::Ci | Commands::TestCli);
+
+    if !is_implemented {
+        println!("⚠️  This command is not fully implemented yet\n");
+    } else {
+        println!("⚠️  Running implemented command\n");
+    }
 
     match cli.command {
         Commands::Ci => {
-            println!("The 'ci' command would run all CI checks.");
-            println!("For now, please use the script directly: ./scripts/ci.sh");
+            println!("🔄 Executing CI script...");
+
+            let status = Command::new("sh")
+                .arg("./scripts/ci.sh")
+                .status()
+                .expect("Failed to execute CI script");
+
+            if !status.success() {
+                std::process::exit(status.code().unwrap_or(1));
+            }
         }
         Commands::TestCli => {
-            println!("The 'test-cli' command would run CLI tests.");
-            println!("For now, please use the script directly: ./scripts/test_cli.sh");
+            println!("🧪 Running CLI tests...");
+
+            let status = Command::new("sh")
+                .arg("./scripts/test_cli.sh")
+                .status()
+                .expect("Failed to execute test-cli script");
+
+            if !status.success() {
+                std::process::exit(status.code().unwrap_or(1));
+            }
         }
         Commands::Demo {
             data,
@@ -112,6 +137,8 @@ fn main() {
         }
     }
 
-    println!("\n📝 These commands will be implemented in future updates");
-    println!("🔄 Please check the project documentation for current functionality");
+    if !is_implemented {
+        println!("\n📝 These commands will be implemented in future updates");
+        println!("🔄 Please check the project documentation for current functionality");
+    }
 }
