@@ -418,10 +418,10 @@ where
                     }
 
                     // If this is an allow rule for a matching path, allow it
-                    if path_str.starts_with(&file_obj.path) {
-                        if matches!(policy.action, PolicyAction::Allow) {
-                            return Ok(EvaluationResult::Allow);
-                        }
+                    if path_str.starts_with(&file_obj.path)
+                        && matches!(policy.action, PolicyAction::Allow)
+                    {
+                        return Ok(EvaluationResult::Allow);
                     }
                 }
             }

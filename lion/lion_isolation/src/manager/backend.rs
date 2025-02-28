@@ -224,11 +224,11 @@ impl IsolationBackend for DefaultIsolationBackend {
         let module_arc = Arc::new(module);
 
         // Create a plugin lifecycle
-        let lifecycle = PluginLifecycle::new(plugin_id.clone(), PluginState::Loaded);
+        let lifecycle = PluginLifecycle::new(*plugin_id, PluginState::Loaded);
 
         // Store the module and lifecycle
-        self.modules.insert(plugin_id.clone(), module_arc);
-        self.plugin_lifecycles.insert(plugin_id.clone(), lifecycle);
+        self.modules.insert(*plugin_id, module_arc);
+        self.plugin_lifecycles.insert(*plugin_id, lifecycle);
 
         info!("Plugin {} loaded successfully", plugin_id);
 
@@ -238,7 +238,7 @@ impl IsolationBackend for DefaultIsolationBackend {
     fn unload_plugin(&mut self, plugin_id: &PluginId) -> Result<()> {
         // Check if plugin exists
         if !self.plugin_lifecycles.contains_key(plugin_id) {
-            return Err(IsolationError::PluginNotLoaded(plugin_id.clone()).into());
+            return Err(IsolationError::PluginNotLoaded(*plugin_id).into());
         }
 
         info!("Unloading plugin {}", plugin_id);
@@ -267,7 +267,7 @@ impl IsolationBackend for DefaultIsolationBackend {
         // Get the module
         let module = self
             .get_module(plugin_id)
-            .ok_or_else(|| IsolationError::PluginNotLoaded(plugin_id.clone()))?;
+            .ok_or_else(|| IsolationError::PluginNotLoaded(*plugin_id))?;
 
         // Get or create an instance
         let mut instance_pool = self.instance_pool.lock().unwrap();
@@ -281,7 +281,7 @@ impl IsolationBackend for DefaultIsolationBackend {
         // Get a lifecycle
         let mut lifecycle = self
             .get_lifecycle(plugin_id)
-            .ok_or_else(|| IsolationError::PluginNotLoaded(plugin_id.clone()))?;
+            .ok_or_else(|| IsolationError::PluginNotLoaded(*plugin_id))?;
 
         // Check if the plugin is in a state that allows function calls
         if !lifecycle.can_call_function() {
@@ -312,7 +312,7 @@ impl IsolationBackend for DefaultIsolationBackend {
     fn get_plugin_state(&self, plugin_id: &PluginId) -> Result<PluginState> {
         let lifecycle = self
             .get_lifecycle(plugin_id)
-            .ok_or_else(|| IsolationError::PluginNotLoaded(plugin_id.clone()))?;
+            .ok_or_else(|| IsolationError::PluginNotLoaded(*plugin_id))?;
 
         Ok(lifecycle.state())
     }
@@ -324,7 +324,7 @@ impl IsolationBackend for DefaultIsolationBackend {
         // Get aggregated resource usage for the plugin
         let usage = instance_pool
             .get_plugin_resource_usage(plugin_id)
-            .ok_or_else(|| IsolationError::PluginNotLoaded(plugin_id.clone()))?;
+            .ok_or_else(|| IsolationError::PluginNotLoaded(*plugin_id))?;
 
         Ok(usage)
     }

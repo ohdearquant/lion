@@ -269,6 +269,12 @@ impl NoopLogger {
     }
 }
 
+impl Default for NoopLogger {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl LoggerBase for NoopLogger {
     fn log(&self, _event: LogEvent) -> Result<()> {
         // Discard the log
@@ -466,7 +472,7 @@ impl LoggerBase for BufferedLogger {
                     .plugin_id
                     .clone()
                     .unwrap_or_else(|| "unknown".to_string());
-                let mut entry = self.buffer.entry(plugin_id).or_insert_with(Vec::new);
+                let mut entry = self.buffer.entry(plugin_id).or_default();
 
                 // Check buffer size
                 if entry.len() < self.max_buffer_size {

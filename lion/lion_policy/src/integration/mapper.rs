@@ -127,16 +127,13 @@ where
         request: &lion_core::types::AccessRequest,
     ) -> Result<bool> {
         // Get policies that apply to this plugin
-        let policies = match self
+        let policies = self
             .policy_store
             .list_rules_matching(|rule| match &rule.subject {
                 crate::model::PolicySubject::Any => true,
                 crate::model::PolicySubject::Plugin(id) => id == plugin_id,
                 _ => false,
-            }) {
-            Ok(policies) => policies,
-            Err(e) => return Err(e),
-        };
+            })?;
 
         // Filter policies by request type
         let policies = policies
