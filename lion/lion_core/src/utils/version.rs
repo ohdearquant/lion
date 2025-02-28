@@ -204,9 +204,9 @@ impl Ord for Version {
 
         // Compare prerelease
         match (&self.prerelease, &other.prerelease) {
-            (None, Some(_)) => return Ordering::Greater,
-            (Some(_), None) => return Ordering::Less,
-            (None, None) => return Ordering::Equal,
+            (None, Some(_)) => Ordering::Greater,
+            (Some(_), None) => Ordering::Less,
+            (None, None) => Ordering::Equal,
             (Some(a), Some(b)) => {
                 // Compare prerelease identifiers
                 let a_parts: Vec<&str> = a.split('.').collect();
@@ -240,7 +240,7 @@ impl Ord for Version {
                 }
 
                 // If we get here, the common parts are equal, so the longer one is greater
-                return a_parts.len().cmp(&b_parts.len());
+                a_parts.len().cmp(&b_parts.len())
             }
         }
     }

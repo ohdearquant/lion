@@ -628,9 +628,9 @@ impl Config {
         // Parse the path first
         let parts = Self::parse_path(path);
 
-        // Handle each part except the last one
-        for i in 0..parts.len() - 1 {
-            match parts[i] {
+        // Handle each part except the last one using iterator
+        for part in parts.iter().take(parts.len() - 1) {
+            match *part {
                 PathPart::Key(key) => {
                     current = current.get_mut(key)?;
                 }
@@ -719,14 +719,11 @@ impl Config {
                         };
 
                         // Create the key if it doesn't exist
-                        if !map.contains_key(&key.to_string()) {
-                            let next_part = &parts[i + 1];
-                            let new_value = match next_part {
+                        map.entry(key.to_string())
+                            .or_insert_with(|| match &parts[i + 1] {
                                 PathPart::Key(_) => ConfigValue::Map(HashMap::new()),
                                 PathPart::Index(_) => ConfigValue::Array(Vec::new()),
-                            };
-                            map.insert(key.to_string(), new_value);
-                        }
+                            });
 
                         current = map.get_mut(&key.to_string()).unwrap();
                     }
@@ -842,7 +839,7 @@ impl Config {
     }
 
     // Helper method to parse a path into parts
-    fn parse_path<'a>(path: &'a str) -> Vec<PathPart<'a>> {
+    fn parse_path(path: &str) -> Vec<PathPart<'_>> {
         let mut parts = Vec::new();
         let mut start = 0;
         let mut in_bracket = false;

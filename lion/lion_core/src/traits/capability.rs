@@ -391,7 +391,7 @@ pub enum Constraint {
 #[allow(dead_code)]
 struct CapabilityWrapper<'a>(&'a dyn Capability);
 
-impl<'a> Capability for CapabilityWrapper<'a> {
+impl Capability for CapabilityWrapper<'_> {
     fn capability_type(&self) -> &str {
         self.0.capability_type()
     }
