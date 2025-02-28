@@ -52,9 +52,8 @@ impl InMemoryCapabilityStore {
             // Create a deterministic UUID from the value
             let bytes = value.to_le_bytes();
             let mut uuid_bytes = [0u8; 16];
-            for i in 0..std::cmp::min(8, uuid_bytes.len()) {
-                uuid_bytes[i] = bytes[i];
-            }
+            let copy_len = std::cmp::min(8, uuid_bytes.len());
+            uuid_bytes[..copy_len].copy_from_slice(&bytes[..copy_len]);
             let uuid = uuid::Uuid::from_bytes(uuid_bytes);
             CapabilityId::from_uuid(uuid)
         }
@@ -258,9 +257,8 @@ mod tests {
         // Create a deterministic UUID from the value
         let bytes = value.to_le_bytes();
         let mut uuid_bytes = [0u8; 16];
-        for i in 0..std::cmp::min(8, uuid_bytes.len()) {
-            uuid_bytes[i] = bytes[i];
-        }
+        let copy_len = std::cmp::min(8, uuid_bytes.len());
+        uuid_bytes[..copy_len].copy_from_slice(&bytes[..copy_len]);
         let uuid = Uuid::from_bytes(uuid_bytes);
         PluginId::from_uuid(uuid)
     }
@@ -270,9 +268,8 @@ mod tests {
         // Create a deterministic UUID from the value
         let bytes = value.to_le_bytes();
         let mut uuid_bytes = [0u8; 16];
-        for i in 0..std::cmp::min(8, uuid_bytes.len()) {
-            uuid_bytes[i] = bytes[i];
-        }
+        let copy_len = std::cmp::min(8, uuid_bytes.len());
+        uuid_bytes[..copy_len].copy_from_slice(&bytes[..copy_len]);
         let uuid = Uuid::from_bytes(uuid_bytes);
         CapabilityId::from_uuid(uuid)
     }

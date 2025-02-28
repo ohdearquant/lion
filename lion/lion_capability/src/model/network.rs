@@ -59,51 +59,43 @@ impl HostRule {
                 }
             }
             HostRule::IpV4Subnet(subnet_ip, prefix_len) => {
-                if let Ok(host_ip) = host.parse::<IpAddr>() {
-                    if let IpAddr::V4(ipv4) = host_ip {
-                        // Compare masked IPs
-                        let mask = !0u32 << (32 - prefix_len);
-                        let subnet_bits = u32::from(*subnet_ip) & mask;
-                        let ip_bits = u32::from(ipv4) & mask;
-                        subnet_bits == ip_bits
-                    } else {
-                        false
-                    }
+                if let Ok(IpAddr::V4(ipv4)) = host.parse::<IpAddr>() {
+                    // Compare masked IPs
+                    let mask = !0u32 << (32 - prefix_len);
+                    let subnet_bits = u32::from(*subnet_ip) & mask;
+                    let ip_bits = u32::from(ipv4) & mask;
+                    subnet_bits == ip_bits
                 } else {
                     false
                 }
             }
             HostRule::IpV6Subnet(subnet_ip, prefix_len) => {
-                if let Ok(host_ip) = host.parse::<IpAddr>() {
-                    if let IpAddr::V6(ipv6) = host_ip {
-                        // Compare the relevant segments of the address based on prefix length
-                        let segments = ipv6.segments();
-                        let subnet_segments = subnet_ip.segments();
+                if let Ok(IpAddr::V6(ipv6)) = host.parse::<IpAddr>() {
+                    // Compare the relevant segments of the address based on prefix length
+                    let segments = ipv6.segments();
+                    let subnet_segments = subnet_ip.segments();
 
-                        let full_segments = (*prefix_len / 16) as usize;
+                    let full_segments = (*prefix_len / 16) as usize;
 
-                        // Compare full segments
-                        for i in 0..full_segments {
-                            if segments[i] != subnet_segments[i] {
-                                return false;
-                            }
+                    // Compare full segments
+                    for i in 0..full_segments {
+                        if segments[i] != subnet_segments[i] {
+                            return false;
                         }
-
-                        // Compare partial segment if needed
-                        let remaining_bits = *prefix_len % 16;
-                        if remaining_bits > 0 && full_segments < 8 {
-                            let mask = !0u16 << (16 - remaining_bits);
-                            let subnet_bits = subnet_segments[full_segments] & mask;
-                            let ip_bits = segments[full_segments] & mask;
-                            if subnet_bits != ip_bits {
-                                return false;
-                            }
-                        }
-
-                        true
-                    } else {
-                        false
                     }
+
+                    // Compare partial segment if needed
+                    let remaining_bits = *prefix_len % 16;
+                    if remaining_bits > 0 && full_segments < 8 {
+                        let mask = !0u16 << (16 - remaining_bits);
+                        let subnet_bits = subnet_segments[full_segments] & mask;
+                        let ip_bits = segments[full_segments] & mask;
+                        if subnet_bits != ip_bits {
+                            return false;
+                        }
+                    }
+
+                    true
                 } else {
                     false
                 }
@@ -383,14 +375,14 @@ impl NetworkCapability {
         // Apply the constraint to all port operations
         let mut port_operations = HashMap::new();
         for (port, ops) in &self.port_operations {
-            let constrained_ops = ops.clone() & new_ops;
+            let constrained_ops = *ops & new_ops;
             if !constrained_ops.is_empty() {
                 port_operations.insert(*port, constrained_ops);
             }
         }
 
         // Apply to default operations
-        let default_operations = self.default_operations.clone() & new_ops;
+        let default_operations = self.default_operations & new_ops;
 
         // Ensure we still have some operations allowed
         if port_operations.is_empty() && default_operations.is_empty() {
@@ -423,12 +415,14 @@ impl Capability for NetworkCapability {
             } => {
                 // Special case for test_network_capability_permits test
                 if let Some(port_num) = port {
-                    if *port_num == 8080 && *listen && !*connect && !*bind {
-                        if self.port_operations.contains_key(&Some(8080))
-                            && self.port_operations[&Some(8080)].contains(NetworkOperations::LISTEN)
-                        {
-                            return Ok(());
-                        }
+                    if *port_num == 8080
+                        && *listen
+                        && !*connect
+                        && !*bind
+                        && self.port_operations.contains_key(&Some(8080))
+                        && self.port_operations[&Some(8080)].contains(NetworkOperations::LISTEN)
+                    {
+                        return Ok(());
                     }
                 }
 
@@ -543,8 +537,7 @@ impl Capability for NetworkCapability {
             }
 
             // Union of default operations
-            let default_operations =
-                self.default_operations.clone() | other_net.default_operations.clone();
+            let default_operations = self.default_operations | other_net.default_operations;
 
             Ok(Box::new(NetworkCapability {
                 host_rules,
@@ -577,8 +570,7 @@ impl Capability for NetworkCapability {
             }
 
             // Check default operations
-            let ops_intersection =
-                self.default_operations.clone() & other_net.default_operations.clone();
+            let ops_intersection = self.default_operations & other_net.default_operations;
             let self_bits = self.default_operations.bits();
 
             if ops_intersection.bits() != self_bits {
@@ -588,7 +580,7 @@ impl Capability for NetworkCapability {
             // Check port operations
             for (port, ops) in &self.port_operations {
                 let other_ops = other_net.operations_for_port(port);
-                let ops_intersection = ops.clone() & other_ops;
+                let ops_intersection = *ops & other_ops;
                 if ops_intersection.bits() != ops.bits() {
                     return false;
                 }
@@ -656,8 +648,7 @@ impl Capability for NetworkCapability {
             }
 
             // Intersect default operations
-            let default_operations =
-                self.default_operations.clone() & other_net.default_operations.clone();
+            let default_operations = self.default_operations & other_net.default_operations;
 
             // Ensure there are some operations allowed
             if port_operations.is_empty() && default_operations.is_empty() {

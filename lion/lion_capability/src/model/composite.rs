@@ -38,8 +38,8 @@ impl CompositeCapability {
     }
 
     /// Gets a capability by type
-    pub fn get_capability(&self, capability_type: &str) -> Option<&Box<dyn Capability>> {
-        self.capabilities.get(capability_type)
+    pub fn get_capability(&self, capability_type: &str) -> Option<&dyn Capability> {
+        self.capabilities.get(capability_type).map(AsRef::as_ref)
     }
 
     /// Gets a mutable capability by type
@@ -61,7 +61,7 @@ impl CompositeCapability {
     }
 
     /// Finds the right capability for an access request
-    fn find_capability_for_request(&self, request: &AccessRequest) -> Option<&Box<dyn Capability>> {
+    fn find_capability_for_request(&self, request: &AccessRequest) -> Option<&dyn Capability> {
         match request {
             AccessRequest::File { .. } => self.get_capability("file"),
             AccessRequest::Network { .. } => self.get_capability("network"),
@@ -144,7 +144,7 @@ impl Capability for CompositeCapability {
         let mut result = Vec::new();
 
         // For each capability type, create a new composite with just that capability
-        for (_capability_type, capability) in &self.capabilities {
+        for capability in self.capabilities.values() {
             // Get all sub-capabilities from the split
             let sub_capabilities = capability.split();
 
@@ -205,7 +205,7 @@ impl Capability for CompositeCapability {
             // For each capability in self, check if it's <= the corresponding capability in other
             for (capability_type, self_capability) in &self.capabilities {
                 if let Some(other_capability) = other_composite.get_capability(capability_type) {
-                    if !self_capability.leq(other_capability.as_ref()) {
+                    if !self_capability.leq(other_capability) {
                         return false;
                     }
                 } else {
@@ -242,7 +242,7 @@ impl Capability for CompositeCapability {
                 if let Some(other_capability) = other_composite.get_capability(&capability_type) {
                     if let Some(self_capability) = self.get_capability(&capability_type) {
                         // Compute meet of the two capabilities
-                        if let Ok(meet) = self_capability.meet(other_capability.as_ref()) {
+                        if let Ok(meet) = self_capability.meet(other_capability) {
                             result.add_capability(meet);
                             has_capabilities = true;
                         }

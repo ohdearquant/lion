@@ -280,8 +280,7 @@ impl Display for CapabilityOwner {
 /// Handles wildcards, prefixes, and exact matches
 pub fn path_matches(pattern: &str, path: &str) -> bool {
     // Handle prefix matches with trailing /*
-    if pattern.ends_with("/*") {
-        let prefix = &pattern[..pattern.len() - 2];
+    if let Some(prefix) = pattern.strip_suffix("/*") {
         return path.starts_with(prefix);
     }
 

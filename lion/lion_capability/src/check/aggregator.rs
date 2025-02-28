@@ -24,10 +24,7 @@ impl CapabilitySet {
     pub fn add_capability(&mut self, capability: Box<dyn Capability>) {
         let capability_type = capability.capability_type().to_string();
 
-        let type_capabilities = self
-            .capabilities
-            .entry(capability_type)
-            .or_insert_with(Vec::new);
+        let type_capabilities = self.capabilities.entry(capability_type).or_default();
 
         type_capabilities.push(capability);
     }
@@ -56,7 +53,7 @@ impl CapabilitySet {
     pub fn merge_by_type(&self) -> Result<CapabilitySet, CapabilityError> {
         let mut result = CapabilitySet::new();
 
-        for (_capability_type, capabilities) in &self.capabilities {
+        for capabilities in self.capabilities.values() {
             if capabilities.is_empty() {
                 continue;
             }
