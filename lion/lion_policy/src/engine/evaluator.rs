@@ -63,11 +63,11 @@ where
         request: &AccessRequest,
     ) -> Result<Evaluation> {
         // Check if we have a cached evaluation
-        let cache_key = (plugin_id.clone(), request.clone());
+        let cache_key = (*plugin_id, request.clone());
 
         if let Some(result) = self.evaluation_cache.get(&cache_key) {
             return Ok(Evaluation::new(
-                plugin_id.clone(),
+                *plugin_id,
                 request.clone(),
                 result.clone(),
                 None,
@@ -82,12 +82,7 @@ where
             let result = EvaluationResult::NoPolicy;
             self.evaluation_cache.insert(cache_key, result.clone());
 
-            return Ok(Evaluation::new(
-                plugin_id.clone(),
-                request.clone(),
-                result,
-                None,
-            ));
+            return Ok(Evaluation::new(*plugin_id, request.clone(), result, None));
         }
 
         // Sort policies by priority (higher priority first)
@@ -106,7 +101,7 @@ where
                     self.evaluation_cache.insert(cache_key, result.clone());
 
                     return Ok(Evaluation::new(
-                        plugin_id.clone(),
+                        *plugin_id,
                         request.clone(),
                         result,
                         Some(policy.clone()),
@@ -125,12 +120,7 @@ where
         let result = EvaluationResult::Deny;
         self.evaluation_cache.insert(cache_key, result.clone());
 
-        Ok(Evaluation::new(
-            plugin_id.clone(),
-            request.clone(),
-            result,
-            None,
-        ))
+        Ok(Evaluation::new(*plugin_id, request.clone(), result, None))
     }
 
     /// Get policies relevant to the given plugin and request.

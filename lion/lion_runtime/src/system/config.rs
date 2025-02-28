@@ -9,7 +9,7 @@ use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tokio::fs;
-use tracing::{debug, error, info, warn};
+use tracing::{error, info, warn};
 
 use crate::plugin::manager::PluginConfig;
 

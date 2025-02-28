@@ -7,7 +7,7 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use anyhow::Result;
-use lion_core::id::{Id, NodeId, NodeMarker, PluginId, WorkflowId};
+use lion_core::id::{NodeId, PluginId, WorkflowId};
 use lion_core::types::workflow::{ExecutionStatus, NodeStatus};
 use lion_workflow::model::definition::WorkflowDefinition;
 use lion_workflow::model::node::NodeId as ModelNodeId;
@@ -51,21 +51,25 @@ pub enum ExecutionError {
 #[derive(Debug, Clone)]
 struct WorkflowExecutionState {
     /// Workflow definition
+    #[allow(dead_code)]
     definition: WorkflowDefinition,
 
     /// Status of the workflow
     status: ExecutionStatus,
 
     /// Status of each node
+    #[allow(dead_code)]
     node_statuses: HashMap<NodeId, NodeStatus>,
 
     /// Node outputs
     node_outputs: HashMap<NodeId, serde_json::Value>,
 
     /// Workflow input data
+    #[allow(dead_code)]
     input: serde_json::Value,
 
     /// Start time
+    #[allow(dead_code)]
     start_time: Option<Instant>,
 
     /// End time
@@ -110,8 +114,7 @@ impl WorkflowExecutor {
         let mut node_statuses = HashMap::new();
 
         // Set all nodes to Pending
-        for (model_node_id, _) in &definition.nodes {
-            // Convert model NodeId to core NodeId
+        for model_node_id in definition.nodes.keys() {
             let core_node_id = convert_node_id(model_node_id);
             node_statuses.insert(core_node_id, NodeStatus::Pending);
         }
@@ -145,7 +148,7 @@ impl WorkflowExecutor {
         let mut states = self.workflow_states.write().await;
         let state = states
             .get_mut(&workflow_id)
-            .ok_or_else(|| ExecutionError::WorkflowNotRunning(workflow_id.clone()))?;
+            .ok_or(ExecutionError::WorkflowNotRunning(workflow_id))?;
 
         if state.status == ExecutionStatus::Running {
             state.status = ExecutionStatus::Paused;
@@ -164,7 +167,7 @@ impl WorkflowExecutor {
         let mut states = self.workflow_states.write().await;
         let state = states
             .get_mut(&workflow_id)
-            .ok_or_else(|| ExecutionError::WorkflowNotRunning(workflow_id.clone()))?;
+            .ok_or(ExecutionError::WorkflowNotRunning(workflow_id))?;
 
         if state.status == ExecutionStatus::Paused {
             state.status = ExecutionStatus::Running;
@@ -183,7 +186,7 @@ impl WorkflowExecutor {
         let mut states = self.workflow_states.write().await;
         let state = states
             .get_mut(&workflow_id)
-            .ok_or_else(|| ExecutionError::WorkflowNotRunning(workflow_id.clone()))?;
+            .ok_or(ExecutionError::WorkflowNotRunning(workflow_id))?;
 
         state.status = ExecutionStatus::Cancelled;
         state.end_time = Some(Instant::now());
@@ -200,7 +203,7 @@ impl WorkflowExecutor {
         states
             .get(workflow_id)
             .map(|state| state.status)
-            .ok_or_else(|| ExecutionError::WorkflowNotRunning(workflow_id.clone()).into())
+            .ok_or(ExecutionError::WorkflowNotRunning(*workflow_id).into())
     }
 
     /// Get workflow results
@@ -212,16 +215,16 @@ impl WorkflowExecutor {
 
         let state = states
             .get(workflow_id)
-            .ok_or_else(|| ExecutionError::WorkflowNotRunning(workflow_id.clone()))?;
+            .ok_or(ExecutionError::WorkflowNotRunning(*workflow_id))?;
 
         if state.status != ExecutionStatus::Completed {
-            return Err(ExecutionError::WorkflowNotRunning(workflow_id.clone()).into());
+            return Err(ExecutionError::WorkflowNotRunning(*workflow_id).into());
         }
 
         // Combine all node outputs
         let mut results = serde_json::json!({});
 
-        for (_, output) in &state.node_outputs {
+        for output in state.node_outputs.values() {
             if let serde_json::Value::Object(obj) = output {
                 if let serde_json::Value::Object(results_obj) = &mut results {
                     for (k, v) in obj {
@@ -240,7 +243,7 @@ impl WorkflowExecutor {
         &self,
         workflow_id: &WorkflowId,
         node_id: &NodeId,
-        input: serde_json::Value,
+        _input: serde_json::Value,
     ) -> Result<()> {
         // This is a simplified placeholder for node execution
         // In a real implementation, this would execute the node logic

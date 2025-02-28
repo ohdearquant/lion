@@ -70,7 +70,7 @@ where
         };
 
         // Check if we have cached constraints
-        let cache_key = (plugin_id.clone(), request_type.to_string());
+        let cache_key = (*plugin_id, request_type.to_string());
 
         if let Some(constraints) = self.constraint_cache.get(&cache_key) {
             return Ok(constraints.clone());
@@ -418,10 +418,10 @@ where
                     }
 
                     // If this is an allow rule for a matching path, allow it
-                    if path_str.starts_with(&file_obj.path) {
-                        if matches!(policy.action, PolicyAction::Allow) {
-                            return Ok(EvaluationResult::Allow);
-                        }
+                    if path_str.starts_with(&file_obj.path)
+                        && matches!(policy.action, PolicyAction::Allow)
+                    {
+                        return Ok(EvaluationResult::Allow);
                     }
                 }
             }

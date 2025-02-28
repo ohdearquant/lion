@@ -275,7 +275,7 @@ impl<R: Resource> ResourcePool<R> {
             if let Some(resource) = self.get_resource() {
                 return Ok(ResourceHandle {
                     resource: Some(resource),
-                    pool: Arc::downgrade(&self),
+                    pool: Arc::downgrade(self),
                     acquired_at: Instant::now(),
                 });
             }
@@ -289,7 +289,7 @@ impl<R: Resource> ResourcePool<R> {
                         *self.size.lock().unwrap() += 1;
                         return Ok(ResourceHandle {
                             resource: Some(resource),
-                            pool: Arc::downgrade(&self),
+                            pool: Arc::downgrade(self),
                             acquired_at: Instant::now(),
                         });
                     }
@@ -318,7 +318,7 @@ impl<R: Resource> ResourcePool<R> {
         if let Some(resource) = self.get_resource() {
             return Ok(ResourceHandle {
                 resource: Some(resource),
-                pool: Arc::downgrade(&self),
+                pool: Arc::downgrade(self),
                 acquired_at: Instant::now(),
             });
         }
@@ -332,7 +332,7 @@ impl<R: Resource> ResourcePool<R> {
                     *self.size.lock().unwrap() += 1;
                     return Ok(ResourceHandle {
                         resource: Some(resource),
-                        pool: Arc::downgrade(&self),
+                        pool: Arc::downgrade(self),
                         acquired_at: Instant::now(),
                     });
                 }
@@ -366,13 +366,13 @@ impl<R: Resource> ResourcePool<R> {
             }
 
             // Check if the resource needs a health check
-            if pooled.is_health_check_due(self.config.health_check_interval) {
-                if !pooled.check_health() {
-                    trace!("Removing unhealthy resource");
-                    pooled.resource.close();
-                    *self.size.lock().unwrap() -= 1;
-                    continue;
-                }
+            if pooled.is_health_check_due(self.config.health_check_interval)
+                && !pooled.check_health()
+            {
+                trace!("Removing unhealthy resource");
+                pooled.resource.close();
+                *self.size.lock().unwrap() -= 1;
+                continue;
             }
 
             // Reset the resource for reuse
@@ -470,16 +470,15 @@ impl<R: Resource> ResourcePool<R> {
             }
 
             // Check if the resource needs a health check
-            if resources[i].is_health_check_due(self.config.health_check_interval) {
-                if !resources[i].check_health() {
-                    trace!("Removing unhealthy resource during maintenance");
-                    let mut pooled = resources.remove(i).unwrap();
-                    pooled.resource.close();
-                    *self.size.lock().unwrap() -= 1;
-                    continue;
-                }
+            if resources[i].is_health_check_due(self.config.health_check_interval)
+                && !resources[i].check_health()
+            {
+                trace!("Removing unhealthy resource during maintenance");
+                let mut pooled = resources.remove(i).unwrap();
+                pooled.resource.close();
+                *self.size.lock().unwrap() -= 1;
+                continue;
             }
-
             // Move to the next resource
             i += 1;
         }

@@ -248,7 +248,7 @@ impl ExecutionContext {
 
         checker
             .check_permission(subject, &object, action)
-            .map_err(|e| ContextError::CapabilityError(e))
+            .map_err(ContextError::CapabilityError)
             .map(|result| result.is_allowed())
     }
 

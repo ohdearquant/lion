@@ -59,6 +59,12 @@ pub struct MessageCapability {
     default_permission: Option<MessagePermission>,
 }
 
+impl Default for MessageCapability {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MessageCapability {
     /// Creates a new message capability with no default permissions
     pub fn new() -> Self {
@@ -199,8 +205,7 @@ impl MessageCapability {
 /// Implements a simple wildcard matching for topic patterns
 fn topic_matches(pattern: &str, topic: &str) -> bool {
     // If pattern ends with #, it's a prefix match
-    if pattern.ends_with("#") {
-        let prefix = &pattern[..pattern.len() - 1];
+    if let Some(prefix) = pattern.strip_suffix("#") {
         return topic.starts_with(prefix);
     }
 
@@ -318,14 +323,12 @@ impl Capability for MessageCapability {
             if let Some(self_default) = self.default_permission {
                 if let Some(other_default) = other_msg.default_permission {
                     // If other's default permission doesn't include self's, this is not a subset
-                    if !self_default.can_publish()
-                        || (self_default.can_publish() && !other_default.can_publish())
+                    if (!self_default.can_publish()
+                        || (self_default.can_publish() && !other_default.can_publish()))
+                        && (!self_default.can_subscribe()
+                            || (self_default.can_subscribe() && !other_default.can_subscribe()))
                     {
-                        if !self_default.can_subscribe()
-                            || (self_default.can_subscribe() && !other_default.can_subscribe())
-                        {
-                            return false;
-                        }
+                        return false;
                     }
                 } else {
                     // Other has no default permission, so self can't have one either

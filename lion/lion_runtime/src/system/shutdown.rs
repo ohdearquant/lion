@@ -61,9 +61,7 @@ impl ShutdownHandle {
             // Create a new receiver by cloning from the existing one
             // The lock is dropped at the end of this block
             let guard = self.receiver.lock();
-            let rx = guard.resubscribe();
-            // Return the newly created receiver
-            rx
+            guard.resubscribe()
         };
 
         // Now await on the local receiver without holding the lock
@@ -75,7 +73,7 @@ impl ShutdownHandle {
 
     /// Signal that shutdown is complete
     pub fn shutdown_complete(&self) {
-        let _ = self.completion.add_permits(1);
+        self.completion.add_permits(1);
     }
 
     /// Get the ID of this handle
@@ -140,13 +138,15 @@ impl ShutdownManager {
         info!("Initiating graceful shutdown");
 
         // Check if shutdown is already in progress
-        let mut in_progress = self.in_progress.lock();
-        if *in_progress {
-            return Err(ShutdownError::AlreadyInProgress.into());
-        }
+        {
+            let mut in_progress = self.in_progress.lock();
+            if *in_progress {
+                return Err(ShutdownError::AlreadyInProgress.into());
+            }
 
-        // Mark shutdown as in progress
-        *in_progress = true;
+            // Mark shutdown as in progress
+            *in_progress = true;
+        }
 
         // Get component count
         let component_count = *self.component_count.lock();
@@ -201,7 +201,7 @@ impl ShutdownManager {
 
     /// Log components that haven't completed shutdown
     fn log_incomplete_components(&self) {
-        let completed_count = self.completion.available_permits() as usize;
+        let completed_count = self.completion.available_permits();
         let total_count = *self.component_count.lock();
         let incomplete_count = total_count - completed_count;
 

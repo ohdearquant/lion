@@ -94,9 +94,7 @@ impl Capability for CombineCapability {
                     if capability.capability_type() == capability_type {
                         has_relevant_capability = true;
                         // If any relevant capability denies, we deny
-                        if let Err(e) = capability.permits(request) {
-                            return Err(e);
-                        }
+                        capability.permits(request)?;
                     }
                 }
 

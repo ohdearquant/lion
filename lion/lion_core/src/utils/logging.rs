@@ -5,6 +5,7 @@
 
 use serde::{Deserialize, Serialize};
 use std::fmt;
+use std::str::FromStr;
 
 /// Log level.
 ///
@@ -29,26 +30,6 @@ pub enum LogLevel {
 }
 
 impl LogLevel {
-    /// Convert from a string.
-    ///
-    /// # Arguments
-    ///
-    /// * `s` - The string to convert from. Case-insensitive.
-    ///
-    /// # Returns
-    ///
-    /// The corresponding log level, or `None` if the string is not a valid log level.
-    pub fn from_str(s: &str) -> Option<Self> {
-        match s.to_lowercase().as_str() {
-            "trace" => Some(Self::Trace),
-            "debug" => Some(Self::Debug),
-            "info" => Some(Self::Info),
-            "warning" | "warn" => Some(Self::Warning),
-            "error" | "err" => Some(Self::Error),
-            _ => None,
-        }
-    }
-
     /// Get the name of this log level.
     ///
     /// # Returns
@@ -63,7 +44,32 @@ impl LogLevel {
             Self::Error => "ERROR",
         }
     }
+}
 
+impl FromStr for LogLevel {
+    type Err = ();
+    /// Convert from a string.
+    ///
+    /// # Arguments
+    ///
+    /// * `s` - The string to convert from. Case-insensitive.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(LogLevel)` if valid, or `Err(())` if not a valid log level.
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "trace" => Ok(Self::Trace),
+            "debug" => Ok(Self::Debug),
+            "info" => Ok(Self::Info),
+            "warning" | "warn" => Ok(Self::Warning),
+            "error" | "err" => Ok(Self::Error),
+            _ => Err(()),
+        }
+    }
+}
+
+impl LogLevel {
     /// Get the numeric value of this log level.
     ///
     /// # Returns
@@ -219,19 +225,19 @@ mod tests {
 
     #[test]
     fn test_log_level_from_str() {
-        assert_eq!(LogLevel::from_str("trace"), Some(LogLevel::Trace));
-        assert_eq!(LogLevel::from_str("TRACE"), Some(LogLevel::Trace));
-        assert_eq!(LogLevel::from_str("debug"), Some(LogLevel::Debug));
-        assert_eq!(LogLevel::from_str("DEBUG"), Some(LogLevel::Debug));
-        assert_eq!(LogLevel::from_str("info"), Some(LogLevel::Info));
-        assert_eq!(LogLevel::from_str("INFO"), Some(LogLevel::Info));
-        assert_eq!(LogLevel::from_str("warning"), Some(LogLevel::Warning));
-        assert_eq!(LogLevel::from_str("warn"), Some(LogLevel::Warning));
-        assert_eq!(LogLevel::from_str("WARNING"), Some(LogLevel::Warning));
-        assert_eq!(LogLevel::from_str("error"), Some(LogLevel::Error));
-        assert_eq!(LogLevel::from_str("err"), Some(LogLevel::Error));
-        assert_eq!(LogLevel::from_str("ERROR"), Some(LogLevel::Error));
-        assert_eq!(LogLevel::from_str("invalid"), None);
+        assert_eq!("trace".parse::<LogLevel>().unwrap(), LogLevel::Trace);
+        assert_eq!("TRACE".parse::<LogLevel>().unwrap(), LogLevel::Trace);
+        assert_eq!("debug".parse::<LogLevel>().unwrap(), LogLevel::Debug);
+        assert_eq!("DEBUG".parse::<LogLevel>().unwrap(), LogLevel::Debug);
+        assert_eq!("info".parse::<LogLevel>().unwrap(), LogLevel::Info);
+        assert_eq!("INFO".parse::<LogLevel>().unwrap(), LogLevel::Info);
+        assert_eq!("warning".parse::<LogLevel>().unwrap(), LogLevel::Warning);
+        assert_eq!("warn".parse::<LogLevel>().unwrap(), LogLevel::Warning);
+        assert_eq!("WARNING".parse::<LogLevel>().unwrap(), LogLevel::Warning);
+        assert_eq!("error".parse::<LogLevel>().unwrap(), LogLevel::Error);
+        assert_eq!("err".parse::<LogLevel>().unwrap(), LogLevel::Error);
+        assert_eq!("ERROR".parse::<LogLevel>().unwrap(), LogLevel::Error);
+        assert!("invalid".parse::<LogLevel>().is_err());
     }
 
     #[test]

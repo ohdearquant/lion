@@ -14,7 +14,7 @@ pub fn apply_partial_revocation(
     // First check if the capability permits the request
     match capability.permits(request) {
         // If it doesn't permit, no need to revoke
-        Err(_) => return Ok(capability),
+        Err(_) => Ok(capability),
         Ok(_) => {
             // Store the specific values we want to revoke
             let filter: Arc<dyn Fn(&AccessRequest) -> bool + Send + Sync + 'static> = match request

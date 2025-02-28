@@ -4,11 +4,9 @@
 
 use std::sync::Arc;
 
-use super::manager::CapabilityOperation;
 use anyhow::{Context, Result};
-use lion_core::CapabilityId;
 use thiserror::Error;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error};
 
 use super::manager::CapabilityManager;
 
@@ -117,7 +115,7 @@ mod tests {
         let manager = Arc::new(CapabilityManager::new().unwrap());
 
         // Grant some capabilities
-        let cap_id = manager
+        let _cap_id = manager
             .grant_capability(
                 "subject1".to_string(),
                 "object1".to_string(),
@@ -154,7 +152,7 @@ mod tests {
         let manager = Arc::new(CapabilityManager::new().unwrap());
 
         // Grant some capabilities
-        let cap_id = manager
+        let _cap_id = manager
             .grant_capability(
                 "subject1".to_string(),
                 "object1".to_string(),
@@ -193,7 +191,7 @@ mod tests {
         let manager = Arc::new(CapabilityManager::new().unwrap());
 
         // Grant some capabilities
-        let cap_id = manager
+        let _cap_id = manager
             .grant_capability(
                 "subject1".to_string(),
                 "object1".to_string(),

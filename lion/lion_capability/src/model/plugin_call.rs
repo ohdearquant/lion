@@ -24,7 +24,15 @@ impl PluginCallCapability {
             allow_all_functions: HashMap::new(),
         }
     }
+}
 
+impl Default for PluginCallCapability {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl PluginCallCapability {
     /// Creates a new plugin call capability with a specific plugin's functions
     pub fn with_plugin(plugin_id: PluginId, functions: HashSet<String>) -> Self {
         let mut plugin_functions = HashMap::new();
@@ -57,7 +65,7 @@ impl PluginCallCapability {
     pub fn add_function(&mut self, plugin_id: PluginId, function: String) {
         self.plugin_functions
             .entry(plugin_id)
-            .or_insert_with(HashSet::new)
+            .or_default()
             .insert(function);
 
         // Make sure the plugin is in the allow_all_functions map
@@ -69,9 +77,7 @@ impl PluginCallCapability {
         self.allow_all_functions.insert(plugin_id, allow);
 
         // Make sure the plugin is in the plugin_functions map
-        self.plugin_functions
-            .entry(plugin_id)
-            .or_insert_with(HashSet::new);
+        self.plugin_functions.entry(plugin_id).or_default();
     }
 
     /// Get the set of allowed functions for a plugin
@@ -238,10 +244,7 @@ impl Capability for PluginCallCapability {
 
             // Merge plugin functions
             for (plugin_id, functions) in &other_call.plugin_functions {
-                let entry = result
-                    .plugin_functions
-                    .entry(*plugin_id)
-                    .or_insert_with(HashSet::new);
+                let entry = result.plugin_functions.entry(*plugin_id).or_default();
                 entry.extend(functions.iter().cloned());
             }
 
@@ -269,7 +272,7 @@ impl Capability for PluginCallCapability {
             // 1. If self allows all functions, other must also allow all functions
             // 2. All functions allowed by self must be allowed by other
 
-            for (plugin_id, _) in &self.plugin_functions {
+            for plugin_id in self.plugin_functions.keys() {
                 // Check if other has this plugin
                 if !other_call.plugin_functions.contains_key(plugin_id) {
                     return false;

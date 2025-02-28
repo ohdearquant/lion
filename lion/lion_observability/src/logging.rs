@@ -111,9 +111,10 @@ impl LogEvent {
     pub fn to_json(&self) -> Result<String> {
         Ok(serde_json::to_string(self)?)
     }
+}
 
-    /// Convert the log event to a formatted string
-    pub fn to_string(&self) -> String {
+impl fmt::Display for LogEvent {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let level_str = match self.level {
             LogLevel::Trace => "TRACE",
             LogLevel::Debug => "DEBUG",
@@ -122,38 +123,32 @@ impl LogEvent {
             LogLevel::Error => "ERROR",
         };
 
-        let mut result = format!("[{}] {} - {}", self.timestamp, level_str, self.message);
+        write!(f, "[{}] {} - {}", self.timestamp, level_str, self.message)?;
 
         if let Some(plugin_id) = &self.plugin_id {
-            result.push_str(&format!(" [plugin:{}]", plugin_id));
+            write!(f, " [plugin:{}]", plugin_id)?;
         }
 
         if let Some(request_id) = &self.request_id {
-            result.push_str(&format!(" [request:{}]", request_id));
+            write!(f, " [request:{}]", request_id)?;
         }
 
         if let (Some(trace_id), Some(span_id)) = (&self.trace_id, &self.span_id) {
-            result.push_str(&format!(" [trace:{},span:{}]", trace_id, span_id));
+            write!(f, " [trace:{},span:{}]", trace_id, span_id)?;
         }
 
         if !self.attributes.is_empty() {
-            result.push_str(" {");
+            write!(f, " {{")?;
             let attrs: Vec<String> = self
                 .attributes
                 .iter()
                 .map(|(k, v)| format!("{}:{}", k, v))
                 .collect();
-            result.push_str(&attrs.join(", "));
-            result.push('}');
+            write!(f, "{}", attrs.join(", "))?;
+            write!(f, "}}")?;
         }
 
-        result
-    }
-}
-
-impl fmt::Display for LogEvent {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.to_string())
+        Ok(())
     }
 }
 
@@ -266,6 +261,12 @@ impl NoopLogger {
         Self {
             name: "noop_logger".to_string(),
         }
+    }
+}
+
+impl Default for NoopLogger {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -466,7 +467,7 @@ impl LoggerBase for BufferedLogger {
                     .plugin_id
                     .clone()
                     .unwrap_or_else(|| "unknown".to_string());
-                let mut entry = self.buffer.entry(plugin_id).or_insert_with(Vec::new);
+                let mut entry = self.buffer.entry(plugin_id).or_default();
 
                 // Check buffer size
                 if entry.len() < self.max_buffer_size {

@@ -150,7 +150,7 @@ pub mod saga_tests {
         sleep(Duration::from_millis(500)).await;
 
         // Initialize saga_aborted in the outer scope
-        let mut saga_aborted = false;
+        let saga_aborted = false;
 
         // Debug output to help understand the saga's state
         if let Some(saga_lock) = orch.get_saga(&saga_id).await {
@@ -168,7 +168,7 @@ pub mod saga_tests {
                 SagaStatus::Compensated | SagaStatus::Aborted | SagaStatus::FailedWithErrors
             ) {
                 println!("Saga already in terminal state: {:?}", saga.status);
-                saga_aborted = true;
+                //saga_aborted = true;
             }
 
             drop(saga);
@@ -204,7 +204,7 @@ pub mod saga_tests {
 
                 if matches!(saga.status, SagaStatus::Compensated | SagaStatus::Aborted) {
                     println!("Saga successfully entered target state: {:?}", saga.status);
-                    saga_aborted = true;
+                    //saga_aborted = true;
                     break;
                 }
             }
@@ -434,7 +434,6 @@ pub mod saga_tests {
 #[cfg(test)]
 pub mod event_tests {
     use crate::patterns::event::{DeliverySemantic, Event, EventBroker, EventBrokerConfig};
-    use std::time::Duration;
 
     #[tokio::test]
     async fn test_event_broker_retry() {

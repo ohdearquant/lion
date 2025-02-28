@@ -382,10 +382,10 @@ impl WorkflowDefinition {
 
         // Start DFS from each unvisited node
         for node_id in self.nodes.keys() {
-            if !visited.contains(node_id) {
-                if self.has_cycle_dfs(node_id, &mut visited, &mut in_stack) {
-                    return true;
-                }
+            if !visited.contains(node_id)
+                && self.has_cycle_dfs(node_id, &mut visited, &mut in_stack)
+            {
+                return true;
             }
         }
 

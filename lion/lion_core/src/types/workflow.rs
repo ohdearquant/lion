@@ -189,9 +189,7 @@ impl Workflow {
         let node = workflow.get_node(node_id).unwrap();
         for dep_id in &node.dependencies {
             if !visited.contains_key(dep_id) {
-                if let Err(cycle) = Self::check_cycle(dep_id, workflow, visited, path) {
-                    return Err(cycle);
-                }
+                Self::check_cycle(dep_id, workflow, visited, path)?;
             } else if *visited.get(dep_id).unwrap() {
                 // We found a cycle
                 let cycle_start = path.iter().position(|id| id == dep_id).unwrap();

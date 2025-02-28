@@ -61,6 +61,7 @@ impl PolicyRule {
     /// # Returns
     ///
     /// A new policy rule.
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         id: impl Into<String>,
         name: impl Into<String>,

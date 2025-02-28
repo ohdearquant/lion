@@ -51,12 +51,12 @@ impl PolicyAudit {
     pub fn record(&self, evaluation: Evaluation) -> Result<()> {
         // Add the evaluation to the plugin's entries
         self.entries
-            .entry(evaluation.plugin_id.clone())
-            .or_insert_with(Vec::new)
+            .entry(evaluation.plugin_id)
+            .or_default()
             .push(evaluation.clone());
 
         // Trim the entries if necessary
-        if let Some(mut plugin_entries) = self.entries.get_mut(&evaluation.plugin_id.clone()) {
+        if let Some(mut plugin_entries) = self.entries.get_mut(&evaluation.plugin_id) {
             if plugin_entries.len() > self.max_entries_per_plugin {
                 let to_remove = plugin_entries.len() - self.max_entries_per_plugin;
                 plugin_entries.drain(0..to_remove);

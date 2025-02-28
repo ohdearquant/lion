@@ -95,6 +95,18 @@ impl Task {
     }
 }
 
+/// Worker context holding shared state for the worker loop
+struct WorkerContext {
+    receiver: Receiver<Task>,
+    shutdown_flag: Arc<AtomicBool>,
+    collect_stats: bool,
+    tasks_completed: Arc<AtomicUsize>,
+    tasks_panicked: Arc<AtomicUsize>,
+    total_execution_time_us: Arc<AtomicUsize>,
+    total_queue_time_us: Arc<AtomicUsize>,
+    max_execution_time_us: Arc<AtomicUsize>,
+}
+
 /// A generic thread pool for executing tasks
 #[allow(dead_code)]
 pub struct ThreadPool {
@@ -135,8 +147,10 @@ pub struct ThreadPool {
 impl ThreadPool {
     /// Create a new thread pool with the default configuration
     pub fn new(threads: usize) -> Self {
-        let mut config = ThreadPoolConfig::default();
-        config.max_threads = threads;
+        let config = ThreadPoolConfig {
+            max_threads: threads,
+            ..Default::default()
+        };
         Self::with_config(config)
     }
 
@@ -177,8 +191,7 @@ impl ThreadPool {
 
             let handle = builder
                 .spawn(move || {
-                    Self::worker_loop(
-                        id,
+                    let ctx = WorkerContext {
                         receiver,
                         shutdown_flag,
                         collect_stats,
@@ -187,7 +200,9 @@ impl ThreadPool {
                         total_execution_time_us,
                         total_queue_time_us,
                         max_execution_time_us,
-                    );
+                    };
+
+                    Self::worker_loop(id, ctx);
                 })
                 .expect("Failed to spawn worker thread");
 
@@ -210,28 +225,18 @@ impl ThreadPool {
     }
 
     /// Worker thread main loop
-    fn worker_loop(
-        id: usize,
-        receiver: Receiver<Task>,
-        shutdown_flag: Arc<AtomicBool>,
-        collect_stats: bool,
-        tasks_completed: Arc<AtomicUsize>,
-        tasks_panicked: Arc<AtomicUsize>,
-        total_execution_time_us: Arc<AtomicUsize>,
-        total_queue_time_us: Arc<AtomicUsize>,
-        max_execution_time_us: Arc<AtomicUsize>,
-    ) {
+    fn worker_loop(id: usize, ctx: WorkerContext) {
         debug!("Worker {}: Starting", id);
 
-        while !shutdown_flag.load(Ordering::Relaxed) {
+        while !ctx.shutdown_flag.load(Ordering::Relaxed) {
             // Wait for a task or check shutdown flag every 100ms
-            match receiver.recv_timeout(Duration::from_millis(100)) {
+            match ctx.receiver.recv_timeout(Duration::from_millis(100)) {
                 Ok(task) => {
                     // Calculate queue time
                     let queue_time = task.enqueued_at.elapsed();
 
-                    if collect_stats {
-                        total_queue_time_us
+                    if ctx.collect_stats {
+                        ctx.total_queue_time_us
                             .fetch_add(queue_time.as_micros() as usize, Ordering::Relaxed);
                     }
 
@@ -250,17 +255,17 @@ impl ThreadPool {
 
                     let exec_time = exec_start.elapsed();
 
-                    if collect_stats {
+                    if ctx.collect_stats {
                         // Update execution time stats
-                        total_execution_time_us
+                        ctx.total_execution_time_us
                             .fetch_add(exec_time.as_micros() as usize, Ordering::Relaxed);
 
                         // Update max execution time using compare-and-swap
-                        let mut current_max = max_execution_time_us.load(Ordering::Relaxed);
+                        let mut current_max = ctx.max_execution_time_us.load(Ordering::Relaxed);
                         let exec_time_us = exec_time.as_micros() as usize;
 
                         while exec_time_us > current_max {
-                            match max_execution_time_us.compare_exchange(
+                            match ctx.max_execution_time_us.compare_exchange(
                                 current_max,
                                 exec_time_us,
                                 Ordering::SeqCst,
@@ -280,8 +285,8 @@ impl ThreadPool {
                                 exec_time.as_micros() as f64 / 1000.0
                             );
 
-                            if collect_stats {
-                                tasks_completed.fetch_add(1, Ordering::Relaxed);
+                            if ctx.collect_stats {
+                                ctx.tasks_completed.fetch_add(1, Ordering::Relaxed);
                             }
                         }
                         Err(e) => {
@@ -291,15 +296,15 @@ impl ThreadPool {
                                 e.downcast_ref::<&str>().unwrap_or(&"<unknown panic>")
                             );
 
-                            if collect_stats {
-                                tasks_panicked.fetch_add(1, Ordering::Relaxed);
+                            if ctx.collect_stats {
+                                ctx.tasks_panicked.fetch_add(1, Ordering::Relaxed);
                             }
                         }
                     }
                 }
                 Err(_) => {
                     // Timeout occurred, check shutdown flag
-                    if shutdown_flag.load(Ordering::Relaxed) {
+                    if ctx.shutdown_flag.load(Ordering::Relaxed) {
                         break;
                     }
                 }

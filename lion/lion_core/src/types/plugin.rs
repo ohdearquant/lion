@@ -221,7 +221,7 @@ impl PluginConfig {
     pub fn minimal() -> Self {
         Self {
             max_memory_bytes: Some(10 * 1024 * 1024), // 10 MB
-            max_cpu_time_us: Some(1 * 1000 * 1000),   // 1 second
+            max_cpu_time_us: Some(1000 * 1000),       // 1 second
             function_timeout_ms: Some(1000),          // 1 second
             max_instances: Some(1),
             min_instances: Some(1),

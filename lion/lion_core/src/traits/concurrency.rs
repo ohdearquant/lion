@@ -29,20 +29,20 @@ use crate::id::PluginId;
 /// ```
 /// use std::sync::Arc;
 /// use std::time::Duration;
-/// use lion_core::traits::ConcurrencyManager;
-/// use lion_core::error::{Result, ConcurrencyError};
+/// use lion_core::traits::concurrency::ConcurrencyManager;
+/// use lion_core::error::{ConcurrencyError, Result};
 /// use lion_core::id::PluginId;
 ///
 /// struct SimpleConcurrencyManager;
 ///
 /// impl ConcurrencyManager for SimpleConcurrencyManager {
-///     fn schedule_task(&self, task: Box<dyn FnOnce() + Send + 'static>) -> Result<(), ConcurrencyError> {
+///     fn schedule_task(&self, task: Box<dyn FnOnce() + Send + 'static>) -> Result<()> {
 ///         // In a real implementation, we would use a thread pool or async runtime
 ///         std::thread::spawn(move || task());
 ///         Ok(())
 ///     }
 ///
-///     fn call_function(&self, plugin_id: &PluginId, function: &str, params: &[u8]) -> Result<Vec<u8>> {
+///     fn call_function(&self, _plugin_id: &PluginId, _function: &str, _params: &[u8]) -> Result<Vec<u8>> {
 ///         // This is a simplified implementation
 ///         Err(ConcurrencyError::InstanceCreationFailed("Not implemented".into()).into())
 ///     }

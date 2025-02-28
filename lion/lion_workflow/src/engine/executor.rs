@@ -133,7 +133,7 @@ impl Default for ExecutorConfig {
 /// Execution worker state
 struct Worker {
     /// Worker ID
-    id: usize,
+    _id: usize,
 
     /// Task currently being executed
     current_task: Option<TaskId>,
@@ -193,8 +193,8 @@ where
     /// Cancellation channel
     cancel_tx: mpsc::Sender<()>,
 
-    /// Cancellation receiver
-    cancel_rx: Mutex<mpsc::Receiver<()>>,
+    /// Cancellation receiver (kept for cleanup)
+    _cancel_rx: Mutex<mpsc::Receiver<()>>,
 }
 
 impl<S> WorkflowExecutor<S>
@@ -213,7 +213,7 @@ where
         let mut workers = Vec::with_capacity(config.worker_threads);
         for i in 0..config.worker_threads {
             workers.push(Worker {
-                id: i,
+                _id: i,
                 current_task: None,
                 is_busy: false,
                 last_completion: None,
@@ -230,7 +230,7 @@ where
             config: RwLock::new(config),
             is_running: RwLock::new(true),
             cancel_tx: tx,
-            cancel_rx: Mutex::new(rx),
+            _cancel_rx: Mutex::new(rx),
         }
     }
 
@@ -646,9 +646,10 @@ where
     }
 
     /// Get worker statistics
-    async fn get_worker_stats(&self) -> Vec<(usize, WorkerStats)> {
+    #[allow(dead_code)]
+    pub async fn get_worker_stats(&self) -> Vec<(usize, WorkerStats)> {
         let workers = self.workers.read().await;
-        workers.iter().map(|w| (w.id, w.stats.clone())).collect()
+        workers.iter().map(|w| (w._id, w.stats.clone())).collect()
     }
 
     /// Get the number of busy workers
@@ -734,19 +735,20 @@ mod tests {
         let _ = state_manager.schedule_next_nodes(instance_id).await;
 
         // Check scheduler status
-        let running_count = scheduler.get_running_task_count().await;
+        let _running_count = scheduler.get_running_task_count().await;
 
         // Sleep a bit to allow tasks to be picked up
         tokio::time::sleep(Duration::from_millis(20)).await;
     }
 
+    #[allow(unreachable_code)]
     #[tokio::test]
     async fn test_executor_basic_workflow() {
         // Create dependencies
 
         // SKIP: This test hangs in CI environments - skip it to prevent CI failures
         println!("SKIPPING test_executor_basic_workflow - test is known to hang");
-        return;
+        return; //
         let scheduler = Arc::new(WorkflowScheduler::new(SchedulerConfig::default()));
         let state_manager = Arc::new(crate::state::StateMachineManager::<MemoryStorage>::new());
 
@@ -938,13 +940,14 @@ mod tests {
         }
     }
 
+    #[allow(unreachable_code)]
     #[tokio::test]
     async fn test_executor_node_failure() {
         // Create dependencies
 
         // SKIP: This test hangs in CI environments - skip it to prevent CI failures
         println!("SKIPPING test_executor_node_failure - test is known to hang");
-        return;
+        return; //
         let scheduler = Arc::new(WorkflowScheduler::new(SchedulerConfig::default()));
 
         println!("Setting up test_executor_node_failure");

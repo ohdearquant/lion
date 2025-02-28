@@ -48,8 +48,8 @@ impl ProxyCapability {
     }
 
     /// Gets the inner capability
-    pub fn inner(&self) -> &Box<dyn Capability> {
-        &self.inner
+    pub fn inner(&self) -> &dyn Capability {
+        self.inner.as_ref()
     }
 
     /// Gets the transformation description, if any

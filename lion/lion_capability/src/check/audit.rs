@@ -64,7 +64,7 @@ impl AuditLog {
         // Add to the entries map
         let mut entries = self.entries.write().unwrap();
 
-        let plugin_entries = entries.entry(*plugin_id).or_insert_with(Vec::new);
+        let plugin_entries = entries.entry(*plugin_id).or_default();
 
         // Add the new entry
         plugin_entries.push(entry);
@@ -79,10 +79,7 @@ impl AuditLog {
     pub fn get_entries(&self, plugin_id: PluginId) -> Vec<AuditEntry> {
         let entries = self.entries.read().unwrap();
 
-        entries
-            .get(&plugin_id)
-            .map(|e| e.clone())
-            .unwrap_or_default()
+        entries.get(&plugin_id).cloned().unwrap_or_default()
     }
 
     /// Gets all audit entries for all plugins

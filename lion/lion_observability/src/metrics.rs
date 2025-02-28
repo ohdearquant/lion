@@ -578,6 +578,12 @@ impl NoopMetricsRegistry {
     }
 }
 
+impl Default for NoopMetricsRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MetricsRegistry for NoopMetricsRegistry {
     fn counter(
         &self,

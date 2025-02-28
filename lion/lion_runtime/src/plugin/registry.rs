@@ -4,10 +4,8 @@
 
 use std::collections::HashMap;
 use std::path::Path;
-use std::sync::Arc;
 
 use anyhow::Result;
-use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 use tracing::{error, info};
 
@@ -52,7 +50,7 @@ impl PluginRegistry {
 
     /// Register a plugin
     pub async fn register_plugin(&self, metadata: PluginMetadata) -> Result<()> {
-        let id = metadata.id.clone();
+        let id = metadata.id;
         let name = metadata.name.clone();
 
         // Check if plugin already exists
@@ -64,7 +62,7 @@ impl PluginRegistry {
         }
 
         // Store plugin metadata
-        self.plugins.write().await.insert(id.clone(), metadata);
+        self.plugins.write().await.insert(id, metadata);
         self.plugin_names.write().await.insert(name.clone(), id);
 
         info!("Registered plugin: {}", name);
@@ -79,7 +77,7 @@ impl PluginRegistry {
             let plugins = self.plugins.read().await;
             let metadata = plugins
                 .get(plugin_id)
-                .ok_or_else(|| RegistryError::NotFound(plugin_id.clone()))?;
+                .ok_or(RegistryError::NotFound(*plugin_id))?;
             metadata.name.clone()
         };
 
@@ -103,7 +101,7 @@ impl PluginRegistry {
         plugins
             .get(plugin_id)
             .cloned()
-            .ok_or_else(|| RegistryError::NotFound(plugin_id.clone()).into())
+            .ok_or(RegistryError::NotFound(*plugin_id).into())
     }
 
     /// Get plugin ID by name

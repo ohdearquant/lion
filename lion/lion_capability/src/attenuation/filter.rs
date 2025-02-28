@@ -49,8 +49,8 @@ impl FilterCapability {
     }
 
     /// Gets the inner capability
-    pub fn inner(&self) -> &Box<dyn Capability> {
-        &self.inner
+    pub fn inner(&self) -> &dyn Capability {
+        self.inner.as_ref()
     }
 
     /// Gets the filter description, if any

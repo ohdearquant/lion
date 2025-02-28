@@ -5,14 +5,12 @@
 
 use std::collections::{HashMap, HashSet};
 use std::fmt;
-use std::sync::Arc;
 
 use anyhow::Result;
 use lion_core::CapabilityId;
 use parking_lot::RwLock;
 use thiserror::Error;
-use tracing::{debug, error, info, warn};
-use uuid::Uuid;
+use tracing::{error, info};
 
 /// Operation on a capability
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -50,7 +48,7 @@ pub enum CapabilityError {
 #[derive(Debug, Clone)]
 struct CapabilityEntry {
     /// Unique identifier for this capability
-    id: CapabilityId,
+    _id: CapabilityId,
 
     /// The subject that holds this capability
     subject: String,
@@ -65,7 +63,7 @@ struct CapabilityEntry {
     valid: bool,
 
     /// Parent capability, if this was derived from another
-    parent: Option<CapabilityId>,
+    _parent: Option<CapabilityId>,
 
     /// Child capabilities derived from this one
     children: Vec<CapabilityId>,
@@ -87,8 +85,10 @@ struct CapabilityStore {
 }
 
 /// Simplified PolicyEvaluator for now
+#[allow(dead_code)]
 struct PolicyEvaluator;
 
+#[allow(dead_code)]
 impl PolicyEvaluator {
     fn new() -> Result<Self> {
         Ok(Self)
@@ -131,23 +131,23 @@ impl CapabilityManager {
 
         // Create a new capability entry
         let entry = CapabilityEntry {
-            id: cap_id.clone(),
+            _id: cap_id,
             subject: subject.clone(),
             object: object.clone(),
             rights: rights_set,
             valid: true,
-            parent: None,
+            _parent: None,
             children: Vec::new(),
         };
 
         // Add to the capabilities map
-        data.capabilities.insert(cap_id.clone(), entry);
+        data.capabilities.insert(cap_id, entry);
 
         // Add to the subject index
         data.subject_index
             .entry(subject.clone())
-            .or_insert_with(HashSet::new)
-            .insert(cap_id.clone());
+            .or_default()
+            .insert(cap_id);
 
         info!(
             "Granted capability {:?} to subject {} for object {}",
@@ -221,27 +221,27 @@ impl CapabilityManager {
 
         // Create a new capability entry
         let entry = CapabilityEntry {
-            id: cap_id.clone(),
+            _id: cap_id,
             subject: subject.clone(),
             object: parent_object,
             rights: rights_set,
             valid: true,
-            parent: Some(parent_id.clone()),
+            _parent: Some(parent_id),
             children: Vec::new(),
         };
 
         // Add to the capabilities map
-        data.capabilities.insert(cap_id.clone(), entry);
+        data.capabilities.insert(cap_id, entry);
 
         // Add to the subject index
         data.subject_index
             .entry(subject)
-            .or_insert_with(HashSet::new)
-            .insert(cap_id.clone());
+            .or_default()
+            .insert(cap_id);
 
         // Add as child to parent
         if let Some(parent_entry) = data.capabilities.get_mut(&parent_id) {
-            parent_entry.children.push(cap_id.clone());
+            parent_entry.children.push(cap_id);
         }
 
         info!(
@@ -295,6 +295,7 @@ impl CapabilityManager {
     }
 
     // Helper to collect all descendants of a capability
+    #[allow(clippy::only_used_in_recursion)]
     fn collect_descendants(
         &self,
         data: &mut CapabilityStore,
@@ -302,7 +303,7 @@ impl CapabilityManager {
         results: &mut Vec<CapabilityId>,
     ) {
         // First add the current capability to the results
-        results.push(cap_id.clone());
+        results.push(*cap_id);
 
         // Get all children IDs (clone to avoid borrowing issues)
         let children: Vec<CapabilityId> = data
@@ -327,7 +328,7 @@ mod tests {
         let manager = CapabilityManager::new().unwrap();
 
         // Grant a capability
-        let cap_id = manager
+        let _cap_id = manager
             .grant_capability(
                 "subject1".to_string(),
                 "object1".to_string(),
@@ -382,7 +383,7 @@ mod tests {
             .unwrap();
 
         // Derive a child capability with only read
-        let child_id = manager
+        let _child_id = manager
             .attenuate_capability(
                 parent_id.clone(),
                 "subject2".to_string(),

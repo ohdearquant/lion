@@ -218,6 +218,17 @@ impl Executor {
         Self::with_config(ExecutorConfig::default())
     }
 
+    // rest of the implementation...
+}
+
+impl Default for Executor {
+    /// Default implementation that uses the default configuration
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Executor {
     /// Create a new executor with the specified configuration
     pub fn with_config(config: ExecutorConfig) -> Self {
         let thread_pool = ThreadPool::new(config.worker_threads);

@@ -36,11 +36,12 @@ pub enum EventError {
 }
 
 /// Event delivery semantics
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum DeliverySemantic {
     /// At most once delivery (may lose events)
     AtMostOnce,
 
+    #[default]
     /// At least once delivery (may duplicate events)
     AtLeastOnce,
 
@@ -48,25 +49,14 @@ pub enum DeliverySemantic {
     ExactlyOnce,
 }
 
-impl Default for DeliverySemantic {
-    fn default() -> Self {
-        DeliverySemantic::AtLeastOnce
-    }
-}
-
 /// Event priority levels
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Default)]
 pub enum EventPriority {
     Low = 0,
+    #[default]
     Normal = 1,
     High = 2,
     Critical = 3,
-}
-
-impl Default for EventPriority {
-    fn default() -> Self {
-        EventPriority::Normal
-    }
 }
 
 /// Workflow event status

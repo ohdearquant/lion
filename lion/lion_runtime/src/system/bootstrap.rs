@@ -9,7 +9,7 @@ use anyhow::{Context, Result};
 use thiserror::Error;
 use tokio::sync::OnceCell;
 use tokio::time::timeout;
-use tracing::{debug, error, info, warn};
+use tracing::{error, info, warn};
 
 use super::config::RuntimeConfig;
 use super::shutdown::ShutdownManager;
@@ -55,7 +55,7 @@ pub struct System {
     config: RuntimeConfig,
 
     /// Current bootstrap phase
-    phase: BootstrapPhase,
+    _phase: BootstrapPhase,
 
     /// Shutdown manager (wrapped in Arc and OnceCell for initialization)
     shutdown_manager: OnceCell<Arc<ShutdownManager>>,
@@ -66,7 +66,7 @@ impl System {
     pub fn new(config: RuntimeConfig) -> Result<Self> {
         Ok(Self {
             config,
-            phase: BootstrapPhase::Core,
+            _phase: BootstrapPhase::Core,
             shutdown_manager: OnceCell::new(),
         })
     }
@@ -241,7 +241,7 @@ mod tests {
 
         // Set up a component that will cleanly shut down
         tokio::task::spawn({
-            let mut handle = handle.clone();
+            let handle = handle.clone();
             async move {
                 handle.shutdown_complete();
             }

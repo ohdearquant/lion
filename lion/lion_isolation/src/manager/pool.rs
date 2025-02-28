@@ -143,11 +143,10 @@ impl PooledInstance {
 
     /// Get the resource usage of this instance.
     pub fn resource_usage(&self) -> Option<ResourceUsage> {
-        if let Some(metering) = self.store.data().resource_metering() {
-            Some(metering.usage().to_core_resource_usage())
-        } else {
-            None
-        }
+        self.store
+            .data()
+            .resource_metering()
+            .map(|metering| metering.usage().to_core_resource_usage())
     }
 }
 
@@ -188,7 +187,15 @@ impl InstancePool {
             max_instances_per_plugin: 10,
         }
     }
+}
 
+impl Default for InstancePool {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl InstancePool {
     /// Set the maximum number of instances per plugin.
     ///
     /// # Arguments
@@ -224,12 +231,9 @@ impl InstancePool {
     ///
     /// * `instance` - The instance.
     pub fn return_instance(&mut self, instance: PooledInstance) {
-        let plugin_id = instance.plugin_id().clone();
+        let plugin_id = *instance.plugin_id();
 
-        let instances = self
-            .instances
-            .entry(plugin_id.clone())
-            .or_insert_with(Vec::new);
+        let instances = self.instances.entry(plugin_id).or_default();
 
         // Only keep up to max_instances_per_plugin
         if instances.len() < self.max_instances_per_plugin {
@@ -289,12 +293,10 @@ impl InstancePool {
         };
 
         // Create a pooled instance
-        let pooled_instance = PooledInstance::new(plugin_id.clone(), store, instance);
+        let pooled_instance = PooledInstance::new(*plugin_id, store, instance);
 
         // Ensure the plugin exists in the instances map
-        self.instances
-            .entry(plugin_id.clone())
-            .or_insert_with(Vec::new);
+        self.instances.entry(*plugin_id).or_default();
 
         Ok(pooled_instance)
     }

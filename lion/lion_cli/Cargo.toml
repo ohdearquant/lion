@@ -3,7 +3,6 @@ name = "lion_cli"
 version = "0.1.0"
 edition = "2021"
 description = "Command-line interface for the Lion microkernel system"
-license = "MIT OR Apache-2.0"
 authors = ["Haiyang Li"]
 license = "Apache-2.0"
 documentation = "https://docs.rs/lion_cli"

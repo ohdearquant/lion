@@ -95,7 +95,7 @@ impl AtomicFlag {
     ///
     /// Returns true if the flag was set by this call, false if it was already set.
     pub fn try_set(&self) -> bool {
-        !self.flag.swap(true, Ordering::SeqCst) && true
+        !self.flag.swap(true, Ordering::SeqCst)
     }
 
     /// Wait for the flag to be set, returning true if it's set within the timeout.

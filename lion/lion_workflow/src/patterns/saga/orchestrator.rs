@@ -36,8 +36,8 @@ pub struct SagaOrchestrator {
     /// Cancellation channel
     cancel_tx: mpsc::Sender<()>,
 
-    /// Cancellation receiver
-    cancel_rx: Mutex<mpsc::Receiver<()>>,
+    /// Cancellation receiver (kept for cleanup)
+    _cancel_rx: Mutex<mpsc::Receiver<()>>,
 
     /// Queue for saga compensations
     compensation_queue: RwLock<VecDeque<CompensationTask>>,
@@ -262,7 +262,7 @@ impl SagaOrchestrator {
             event_broker: None,
             is_running: RwLock::new(false),
             cancel_tx: tx,
-            cancel_rx: Mutex::new(rx),
+            _cancel_rx: Mutex::new(rx),
             compensation_queue: RwLock::new(VecDeque::new()),
             abort_queue: RwLock::new(VecDeque::new()),
         }
@@ -1028,7 +1028,7 @@ impl Clone for SagaOrchestrator {
             // Initialize other fields with default values
             is_running: RwLock::new(false),
             cancel_tx: tx,
-            cancel_rx: Mutex::new(rx),
+            _cancel_rx: Mutex::new(rx),
             compensation_queue: RwLock::new(VecDeque::new()),
             abort_queue: RwLock::new(VecDeque::new()),
         }
@@ -1038,9 +1038,9 @@ impl Clone for SagaOrchestrator {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::patterns::saga::SagaStepDefinition;
 
     // Helper function to create a boxed step handler that returns the provided value
+    #[allow(dead_code)]
     fn create_success_handler(value: serde_json::Value) -> StepHandler {
         Arc::new(move |_step| {
             let result_value = value.clone();
@@ -1049,6 +1049,7 @@ mod tests {
     }
 
     // Helper function to create a boxed step handler that returns an error
+    #[allow(dead_code)]
     fn create_failure_handler(error: &str) -> StepHandler {
         let error_string = error.to_string();
         Arc::new(move |_step| {
@@ -1058,6 +1059,7 @@ mod tests {
     }
 
     // Helper function to create a boxed compensation handler
+    #[allow(dead_code)]
     fn create_compensation_handler(success: bool) -> CompensationHandler {
         Arc::new(move |_step| {
             Box::new(Box::pin(async move {

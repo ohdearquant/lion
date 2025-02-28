@@ -425,6 +425,12 @@ impl NoopTracer {
     }
 }
 
+impl Default for NoopTracer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TracerBase for NoopTracer {
     fn create_span_with_name(&self, name: &str) -> Result<Span> {
         // Create a span that won't be recorded
