@@ -95,7 +95,7 @@ impl CheckpointManager<crate::state::storage::FileStorage> {
         schema_version: &str,
     ) -> Result<Self, CheckpointError> {
         // Ensure the base directory exists
-        if !base_dir.exists() {
+        if !base_dir.exists() || !base_dir.is_dir() {
             fs::create_dir_all(&base_dir)?;
         }
 
@@ -116,9 +116,9 @@ impl<S: StorageBackend> CheckpointManager<S> {
         workflow: &WorkflowDefinition,
     ) -> Result<String, CheckpointError> {
         // Ensure base directory exists if using file storage
-        if let Some(base_dir) = &self.base_dir {
-            if !base_dir.exists() {
-                fs::create_dir_all(base_dir)?;
+        if let Some(dir) = &self.base_dir {
+            if !dir.exists() || !dir.is_dir() {
+                fs::create_dir_all(dir)?;
             }
         }
 
@@ -190,7 +190,11 @@ impl<S: StorageBackend> CheckpointManager<S> {
         if let Some(base_dir) = &self.base_dir {
             let final_path = base_dir.join(&checkpoint_id);
             if let Some(parent) = final_path.parent() {
-                fs::create_dir_all(parent)?;
+                // Ensure the parent directory exists
+                if !parent.exists() || !parent.is_dir() {
+                    log::debug!("Creating parent directories: {:?}", parent);
+                    fs::create_dir_all(parent)?;
+                }
             }
         }
         self.storage
@@ -382,12 +386,21 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let base_dir = temp_dir.path().to_path_buf();
 
-        // Create a dedicated checkpoints directory inside temp_dir
+        // Create a dedicated checkpoints directory inside temp_dir and ensure it exists
         let checkpoints_dir = base_dir.join("checkpoints");
         std::fs::create_dir_all(&checkpoints_dir).unwrap();
+        assert!(checkpoints_dir.exists(), "Checkpoint directory not created");
+        assert!(
+            checkpoints_dir.is_dir(),
+            "Checkpoint path is not a directory"
+        );
 
-        let manager: CheckpointManager<crate::state::storage::FileStorage> =
-            CheckpointManager::with_file_storage(checkpoints_dir, "1.0.0").unwrap();
+        // Create checkpoint manager with explicit directory creation
+        let manager = CheckpointManager::<crate::state::storage::FileStorage>::with_file_storage(
+            checkpoints_dir.clone(),
+            "1.0.0",
+        )
+        .unwrap();
 
         // Create a test workflow
         let workflow = create_test_workflow();
@@ -413,11 +426,20 @@ mod tests {
         let base_dir = temp_dir.path().to_path_buf();
 
         // Create a dedicated checkpoints directory inside temp_dir
-        let checkpoints_dir = base_dir.join("checkpoints");
+        let checkpoints_dir = base_dir.join("list_checkpoints");
         std::fs::create_dir_all(&checkpoints_dir).unwrap();
+        assert!(checkpoints_dir.exists(), "Checkpoint directory not created");
+        assert!(
+            checkpoints_dir.is_dir(),
+            "Checkpoint path is not a directory"
+        );
 
-        let manager: CheckpointManager<crate::state::storage::FileStorage> =
-            CheckpointManager::with_file_storage(checkpoints_dir, "1.0.0").unwrap();
+        // Create checkpoint manager with explicit directory creation
+        let manager = CheckpointManager::<crate::state::storage::FileStorage>::with_file_storage(
+            checkpoints_dir.clone(),
+            "1.0.0",
+        )
+        .unwrap();
 
         // Create a test workflow
         let workflow = create_test_workflow();
@@ -444,11 +466,20 @@ mod tests {
         let base_dir = temp_dir.path().to_path_buf();
 
         // Create a dedicated checkpoints directory inside temp_dir
-        let checkpoints_dir = base_dir.join("checkpoints");
+        let checkpoints_dir = base_dir.join("latest_checkpoints");
         std::fs::create_dir_all(&checkpoints_dir).unwrap();
+        assert!(checkpoints_dir.exists(), "Checkpoint directory not created");
+        assert!(
+            checkpoints_dir.is_dir(),
+            "Checkpoint path is not a directory"
+        );
 
-        let manager: CheckpointManager<crate::state::storage::FileStorage> =
-            CheckpointManager::with_file_storage(checkpoints_dir, "1.0.0").unwrap();
+        // Create checkpoint manager with explicit directory creation
+        let manager = CheckpointManager::<crate::state::storage::FileStorage>::with_file_storage(
+            checkpoints_dir.clone(),
+            "1.0.0",
+        )
+        .unwrap();
 
         // Create a test workflow
         let mut workflow = create_test_workflow();
@@ -480,11 +511,20 @@ mod tests {
         let base_dir = temp_dir.path().to_path_buf();
 
         // Create a dedicated checkpoints directory inside temp_dir
-        let checkpoints_dir = base_dir.join("checkpoints");
+        let checkpoints_dir = base_dir.join("prune_checkpoints");
         std::fs::create_dir_all(&checkpoints_dir).unwrap();
+        assert!(checkpoints_dir.exists(), "Checkpoint directory not created");
+        assert!(
+            checkpoints_dir.is_dir(),
+            "Checkpoint path is not a directory"
+        );
 
-        let manager: CheckpointManager<crate::state::storage::FileStorage> =
-            CheckpointManager::with_file_storage(checkpoints_dir, "1.0.0").unwrap();
+        // Create checkpoint manager with explicit directory creation
+        let manager = CheckpointManager::<crate::state::storage::FileStorage>::with_file_storage(
+            checkpoints_dir.clone(),
+            "1.0.0",
+        )
+        .unwrap();
 
         // Create a test workflow
         let workflow = create_test_workflow();

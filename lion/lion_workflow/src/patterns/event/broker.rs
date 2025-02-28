@@ -300,7 +300,7 @@ impl EventBroker {
     /// Wait for acknowledgment of an event
     async fn wait_for_acknowledgment(&self, event_id: &str) -> Result<EventAck, EventError> {
         // Try multiple times to find an acknowledgment before giving up
-        let max_attempts = 50; // Increase attempts to give more time for acknowledgment
+        let max_attempts = 100; // Increase attempts to give more time for acknowledgment
         for _ in 0..max_attempts {
             // Get a reference to the subscriptions
             let subs_map = self.subscriptions.read().await;
@@ -531,17 +531,17 @@ mod tests {
 
         // Send acknowledgment and ensure it's received
         let ack = EventAck::success(&event_id, "test_subscriber");
-        println!("Sending acknowledgment for event: {}", event_id);
+        println!("Sending acknowledgment for event: {}", &event_id);
         ack_tx.send(ack).await.unwrap();
 
         // Poll with a longer timeout to ensure acknowledgment is processed
-        for _ in 0..100 {
+        for _ in 0..200 {
             // Increase polling attempts
             if broker.is_event_processed(&event_id).await {
                 println!("Event processed successfully");
                 return; // Test passes
             }
-            tokio::time::sleep(Duration::from_millis(20)).await; // Shorter sleep for more frequent checks
+            tokio::time::sleep(Duration::from_millis(10)).await; // Even shorter sleep for more frequent checks
         }
         panic!("Event was not processed after waiting");
     }

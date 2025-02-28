@@ -50,7 +50,10 @@ pub mod saga_tests {
                 Box::new(Box::pin(async {
                     // Signal that we've reached the second step
                     FIRST_STEP_COMPLETE.store(true, Ordering::SeqCst);
-                    tokio::time::sleep(Duration::from_millis(1000)).await; // Long enough to abort
+                    // Sleep longer to give time for abort to happen before completion
+                    println!("Step2 executing - sleeping to allow abort to happen");
+                    tokio::time::sleep(Duration::from_secs(1)).await;
+                    println!("Step2 woke up - will try to complete if not aborted");
                     Ok(serde_json::json!({"payment_id": "456"}))
                 }))
                     as Box<
@@ -126,10 +129,13 @@ pub mod saga_tests {
         println!("Step1 completed, step2 started");
 
         // Now abort the saga while step2 is still running
-        println!("Aborting saga");
+        println!("Waiting a moment before aborting");
+        sleep(Duration::from_millis(100)).await;
+        println!("Aborting saga now");
         orch.abort_saga(&saga_id, "Testing abort").await.unwrap();
-
         println!("Waiting for saga to complete abort/compensation");
+
+        sleep(Duration::from_millis(100)).await; // Give a little time for abort to process
 
         // Wait for saga to complete abortion or compensation
         let mut saga_aborted = false;
@@ -146,7 +152,7 @@ pub mod saga_tests {
 
                 // Print status for debugging
                 if start.elapsed().as_millis() % 500 == 0 {
-                    println!("Current saga status: {:?}", saga.status);
+                    println!("Current saga status: {:?}", &saga.status);
                 }
 
                 if matches!(saga.status, SagaStatus::Compensated | SagaStatus::Aborted) {
@@ -417,8 +423,14 @@ pub mod event_tests {
         let start = std::time::Instant::now();
         let timeout = Duration::from_secs(5); // Longer timeout for event processing
 
-        while start.elapsed() < timeout {
-            if broker.is_event_processed(&event_id).await {
+        let mut success = false;
+        for i in 0..100 {
+            // Use a fixed number of attempts instead of time-based
+            let processed = broker.is_event_processed(&event_id).await;
+            if i % 10 == 0 {
+                println!("Check #{}: Is event processed: {}", i, processed);
+            }
+            if processed {
                 println!("Event processed successfully after retry");
                 return; // Test passes
             }

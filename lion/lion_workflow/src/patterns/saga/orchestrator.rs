@@ -710,6 +710,7 @@ impl SagaOrchestrator {
             let mut saga = saga_lock.write().await;
 
             if compensation_errors.is_empty() {
+                // Mark the saga as compensated when all compensation steps complete successfully
                 saga.mark_compensated();
             } else {
                 saga.mark_failed_with_errors(&compensation_errors.join("; "));
@@ -797,6 +798,7 @@ impl SagaOrchestrator {
             Ok(_) => {
                 // Compensation succeeded
                 let mut saga = saga_lock.write().await;
+                log::debug!("Compensation for step {} succeeded", step_id);
                 let step = saga
                     .steps
                     .get_mut(step_id)
