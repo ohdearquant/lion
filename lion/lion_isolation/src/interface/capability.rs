@@ -40,6 +40,12 @@ pub trait CapabilityChecker: Send + Sync {
     fn check_capability(&self, plugin_id: &str, operation: &str, params: &[u8]) -> Result<()>;
 }
 
+impl Default for CapabilityInterface {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[allow(dead_code)]
 impl CapabilityInterface {
     /// Create a new capability interface.

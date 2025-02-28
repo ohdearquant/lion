@@ -267,7 +267,7 @@ impl IsolationBackend for DefaultIsolationBackend {
         // Get the module
         let module = self
             .get_module(plugin_id)
-            .ok_or_else(|| IsolationError::PluginNotLoaded(*plugin_id))?;
+            .ok_or(IsolationError::PluginNotLoaded(*plugin_id))?;
 
         // Get or create an instance
         let mut instance_pool = self.instance_pool.lock().unwrap();
@@ -281,7 +281,7 @@ impl IsolationBackend for DefaultIsolationBackend {
         // Get a lifecycle
         let mut lifecycle = self
             .get_lifecycle(plugin_id)
-            .ok_or_else(|| IsolationError::PluginNotLoaded(*plugin_id))?;
+            .ok_or(IsolationError::PluginNotLoaded(*plugin_id))?;
 
         // Check if the plugin is in a state that allows function calls
         if !lifecycle.can_call_function() {
@@ -312,7 +312,7 @@ impl IsolationBackend for DefaultIsolationBackend {
     fn get_plugin_state(&self, plugin_id: &PluginId) -> Result<PluginState> {
         let lifecycle = self
             .get_lifecycle(plugin_id)
-            .ok_or_else(|| IsolationError::PluginNotLoaded(*plugin_id))?;
+            .ok_or(IsolationError::PluginNotLoaded(*plugin_id))?;
 
         Ok(lifecycle.state())
     }
@@ -324,7 +324,7 @@ impl IsolationBackend for DefaultIsolationBackend {
         // Get aggregated resource usage for the plugin
         let usage = instance_pool
             .get_plugin_resource_usage(plugin_id)
-            .ok_or_else(|| IsolationError::PluginNotLoaded(*plugin_id))?;
+            .ok_or(IsolationError::PluginNotLoaded(*plugin_id))?;
 
         Ok(usage)
     }
