@@ -131,7 +131,7 @@ impl PluginManager {
             self.plugins
                 .write()
                 .await
-                .insert(plugin_metadata.id.clone(), Arc::new(lifecycle));
+                .insert(plugin_metadata.id, Arc::new(lifecycle));
         }
 
         info!(
@@ -162,7 +162,7 @@ impl PluginManager {
         self.plugins
             .write()
             .await
-            .insert(metadata.id.clone(), Arc::new(lifecycle));
+            .insert(metadata.id, Arc::new(lifecycle));
 
         Ok(metadata.id)
     }
@@ -174,7 +174,7 @@ impl PluginManager {
         let plugins = self.plugins.read().await;
         let plugin = plugins
             .get(plugin_id)
-            .ok_or_else(|| PluginManagerError::NotFound(plugin_id.clone()))?;
+            .ok_or_else(|| PluginManagerError::NotFound(*plugin_id))?;
 
         // Load the plugin
         plugin.load().await?;
@@ -193,7 +193,7 @@ impl PluginManager {
         let plugins = self.plugins.read().await;
         let plugin = plugins
             .get(plugin_id)
-            .ok_or_else(|| PluginManagerError::NotFound(plugin_id.clone()))?;
+            .ok_or_else(|| PluginManagerError::NotFound(*plugin_id))?;
 
         // Initialize the plugin
         plugin.initialize(config).await?;
@@ -208,7 +208,7 @@ impl PluginManager {
         let plugins = self.plugins.read().await;
         let plugin = plugins
             .get(plugin_id)
-            .ok_or_else(|| PluginManagerError::NotFound(plugin_id.clone()))?;
+            .ok_or_else(|| PluginManagerError::NotFound(*plugin_id))?;
 
         // Get plugin state
         let state = plugin.get_state().await;
@@ -240,7 +240,7 @@ impl PluginManager {
         let plugins = self.plugins.read().await;
         let plugin = plugins
             .get(plugin_id)
-            .ok_or_else(|| PluginManagerError::NotFound(plugin_id.clone()))?;
+            .ok_or_else(|| PluginManagerError::NotFound(*plugin_id))?;
 
         // Pause the plugin
         plugin.pause().await?;
@@ -255,7 +255,7 @@ impl PluginManager {
         let plugins = self.plugins.read().await;
         let plugin = plugins
             .get(plugin_id)
-            .ok_or_else(|| PluginManagerError::NotFound(plugin_id.clone()))?;
+            .ok_or_else(|| PluginManagerError::NotFound(*plugin_id))?;
 
         // Stop the plugin
         plugin.stop().await?;
@@ -270,7 +270,7 @@ impl PluginManager {
         let plugins = self.plugins.read().await;
         let plugin = plugins
             .get(plugin_id)
-            .ok_or_else(|| PluginManagerError::NotFound(plugin_id.clone()))?;
+            .ok_or_else(|| PluginManagerError::NotFound(*plugin_id))?;
 
         // Get plugin state
         let state = plugin.get_state().await;
@@ -296,7 +296,7 @@ impl PluginManager {
             .read()
             .await
             .get(plugin_id)
-            .ok_or_else(|| PluginManagerError::NotFound(plugin_id.clone()))
+            .ok_or_else(|| PluginManagerError::NotFound(*plugin_id))
         {
             let state = plugin.get_state().await;
 
@@ -331,7 +331,7 @@ impl PluginManager {
         let plugins = self.plugins.read().await;
         let plugin = plugins
             .get(plugin_id)
-            .ok_or_else(|| PluginManagerError::NotFound(plugin_id.clone()))?;
+            .ok_or_else(|| PluginManagerError::NotFound(*plugin_id))?;
 
         // Call the function
         let result = plugin.call_function(function_name, params).await?;
@@ -356,7 +356,7 @@ impl PluginManager {
         let plugins = self.plugins.read().await;
         let plugin = plugins
             .get(plugin_id)
-            .ok_or_else(|| PluginManagerError::NotFound(plugin_id.clone()))?;
+            .ok_or_else(|| PluginManagerError::NotFound(*plugin_id))?;
 
         Ok(plugin.get_metadata().await)
     }
@@ -376,7 +376,7 @@ impl PluginManager {
         let plugins = self.plugins.read().await;
         let _plugin = plugins
             .get(plugin_id)
-            .ok_or_else(|| PluginManagerError::NotFound(plugin_id.clone()))?;
+            .ok_or_else(|| PluginManagerError::NotFound(*plugin_id))?;
 
         // Use the capability manager to grant the capability
         let _cap_id = self

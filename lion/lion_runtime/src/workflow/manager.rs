@@ -108,7 +108,7 @@ impl WorkflowManager {
         }
 
         // Store the workflow using the core ID
-        workflows.insert(core_id.clone(), definition);
+        workflows.insert(core_id, definition);
 
         Ok(core_id)
     }
@@ -173,12 +173,12 @@ impl WorkflowManager {
             workflows
                 .get(&workflow_id)
                 .cloned()
-                .ok_or_else(|| WorkflowManagerError::NotFound(workflow_id.clone()))?
+                .ok_or_else(|| WorkflowManagerError::NotFound(workflow_id))?
         };
 
         // Start the workflow
         self.executor
-            .start_workflow(workflow_id.clone(), definition, input)
+            .start_workflow(workflow_id, definition, input)
             .await?;
 
         Ok(())
@@ -192,12 +192,12 @@ impl WorkflowManager {
         {
             let workflows = self.workflows.read().await;
             if !workflows.contains_key(&workflow_id) {
-                return Err(WorkflowManagerError::NotFound(workflow_id.clone()).into());
+                return Err(WorkflowManagerError::NotFound(workflow_id).into());
             }
         }
 
         // Pause the workflow
-        self.executor.pause_workflow(workflow_id.clone()).await?;
+        self.executor.pause_workflow(workflow_id).await?;
 
         Ok(())
     }
@@ -210,12 +210,12 @@ impl WorkflowManager {
         {
             let workflows = self.workflows.read().await;
             if !workflows.contains_key(&workflow_id) {
-                return Err(WorkflowManagerError::NotFound(workflow_id.clone()).into());
+                return Err(WorkflowManagerError::NotFound(workflow_id).into());
             }
         }
 
         // Resume the workflow
-        self.executor.resume_workflow(workflow_id.clone()).await?;
+        self.executor.resume_workflow(workflow_id).await?;
 
         Ok(())
     }
@@ -228,12 +228,12 @@ impl WorkflowManager {
         {
             let workflows = self.workflows.read().await;
             if !workflows.contains_key(&workflow_id) {
-                return Err(WorkflowManagerError::NotFound(workflow_id.clone()).into());
+                return Err(WorkflowManagerError::NotFound(workflow_id).into());
             }
         }
 
         // Cancel the workflow
-        self.executor.cancel_workflow(workflow_id.clone()).await?;
+        self.executor.cancel_workflow(workflow_id).await?;
 
         Ok(())
     }
@@ -244,7 +244,7 @@ impl WorkflowManager {
         {
             let workflows = self.workflows.read().await;
             if !workflows.contains_key(workflow_id) {
-                return Err(WorkflowManagerError::NotFound(workflow_id.clone()).into());
+                return Err(WorkflowManagerError::NotFound(*workflow_id).into());
             }
         }
 
@@ -261,7 +261,7 @@ impl WorkflowManager {
         {
             let workflows = self.workflows.read().await;
             if !workflows.contains_key(workflow_id) {
-                return Err(WorkflowManagerError::NotFound(workflow_id.clone()).into());
+                return Err(WorkflowManagerError::NotFound(*workflow_id).into());
             }
         }
 
@@ -276,7 +276,7 @@ impl WorkflowManager {
         workflows
             .get(workflow_id)
             .cloned()
-            .ok_or_else(|| WorkflowManagerError::NotFound(workflow_id.clone()).into())
+            .ok_or_else(|| WorkflowManagerError::NotFound(*workflow_id).into())
     }
 
     /// Get all registered workflows
@@ -314,7 +314,7 @@ impl WorkflowManager {
         // Check if workflow exists
         let mut workflows = self.workflows.write().await;
         if !workflows.contains_key(workflow_id) {
-            return Err(WorkflowManagerError::NotFound(workflow_id.clone()).into());
+            return Err(WorkflowManagerError::NotFound(*workflow_id).into());
         }
 
         // Remove the workflow
@@ -335,7 +335,7 @@ impl WorkflowManager {
 
         // Cancel each workflow
         for workflow_id in workflow_ids {
-            if let Err(e) = self.cancel_workflow(workflow_id.clone()).await {
+            if let Err(e) = self.cancel_workflow(workflow_id).await {
                 warn!("Failed to cancel workflow {:?}: {}", workflow_id, e);
                 // Continue with next workflow
             }
