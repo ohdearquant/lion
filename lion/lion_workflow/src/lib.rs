@@ -68,6 +68,9 @@ pub mod engine;
 /// Common workflow patterns
 pub mod patterns;
 
+/// Utility modules for serialization and other helpers
+pub mod utils;
+
 // Re-export important types
 pub use engine::{
     context::ExecutionContext, context::NodeResult, executor::ExecutorConfig,
