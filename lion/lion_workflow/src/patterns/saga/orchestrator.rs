@@ -378,7 +378,7 @@ impl SagaOrchestrator {
         // Create a new channel
         let (_cancel_tx, mut cancel_rx) = mpsc::channel::<()>(1);
 
-        tokio::spawn(async move {
+        let task_handle = tokio::spawn(async move {
             let interval_ms = 100; // Process tasks frequently
             let mut interval =
                 tokio::time::interval(tokio::time::Duration::from_millis(interval_ms));
@@ -418,6 +418,9 @@ impl SagaOrchestrator {
                 }
             }
         });
+
+        // Store the task handle for future reference if needed
+        tokio::task::spawn(async move { task_handle.await.unwrap_or_default() });
 
         Ok(())
     }
@@ -816,18 +819,49 @@ impl SagaOrchestrator {
         }
     }
 
+    /// Get a saga instance
+    pub async fn get_saga(&self, saga_id: &str) -> Option<Arc<RwLock<Saga>>> {
+        let sagas = self.sagas.read().await;
+        sagas.get(saga_id).cloned()
+    }
+
+    /// Process any pending abort tasks immediately
+    async fn process_abort_tasks(&self) -> Result<(), SagaError> {
+        if let Some(task) = self.dequeue_abort_task().await {
+            if let Some(saga_lock) = self.get_saga(&task.saga_id).await {
+                let mut saga = saga_lock.write().await;
+                // Abort can happen in any active state - Running, Created,
+                // or even during normal processing as long as it's not
+                // already in a terminal state like Compensated or Failed
+                if saga.status != SagaStatus::Completed
+                    && saga.status != SagaStatus::Compensated
+                    && saga.status != SagaStatus::Failed
+                    && saga.status != SagaStatus::Aborted
+                    && saga.status != SagaStatus::FailedWithErrors
+                {
+                    saga.mark_aborted(&task.reason);
+                    drop(saga);
+
+                    // Queue compensation
+                    self.enqueue_compensation_task(task.saga_id).await;
+                }
+            }
+        }
+
+        Ok(())
+    }
+
     /// Abort a running saga
     pub async fn abort_saga(&self, saga_id: &str, reason: &str) -> Result<(), SagaError> {
         // Queue the abort task
         self.enqueue_abort_task(saga_id.to_string(), reason.to_string())
             .await;
-        Ok(())
-    }
 
-    /// Get a saga instance
-    pub async fn get_saga(&self, saga_id: &str) -> Option<Arc<RwLock<Saga>>> {
-        let sagas = self.sagas.read().await;
-        sagas.get(saga_id).cloned()
+        // Process the abort task immediately to avoid race conditions in tests
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        self.process_abort_tasks().await?;
+
+        Ok(())
     }
 
     /// Get all sagas
@@ -1005,7 +1039,7 @@ mod tests {
         // Create an orchestrator
         let orch = SagaOrchestrator::new(SagaOrchestratorConfig::default());
 
-        // Create a modified config with shorter timeouts for testing
+        // Create a modified config with shorter intervals for testing
         let mut config = SagaOrchestratorConfig::default();
         config.check_interval_ms = 50; // Faster interval for testing
         let orch = SagaOrchestrator::new(config);

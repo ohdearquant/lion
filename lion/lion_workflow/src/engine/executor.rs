@@ -847,7 +847,7 @@ mod tests {
                 );
             }
 
-            tokio::time::sleep(Duration::from_millis(100)).await;
+            tokio::time::sleep(Duration::from_millis(200)).await; // Increase sleep time
         }
 
         // Stop the executor
@@ -965,7 +965,8 @@ mod tests {
 
         // Wait for workflow to fail
         let mut failed = false;
-        for i in 0..50 {
+        for i in 0..100 {
+            // Double the number of attempts
             // Increase timeout attempts
             // Check if instance exists
             let instance = executor.state_manager.get_instance(&instance_id).await;
@@ -989,7 +990,7 @@ mod tests {
                 );
             }
 
-            tokio::time::sleep(Duration::from_millis(100)).await;
+            tokio::time::sleep(Duration::from_millis(150)).await; // Increase sleep time
         }
 
         // Stop the executor

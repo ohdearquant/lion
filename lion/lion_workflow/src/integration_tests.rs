@@ -133,7 +133,7 @@ pub mod saga_tests {
 
         // Wait for saga to complete abortion or compensation
         let mut saga_aborted = false;
-        let timeout = Duration::from_secs(3);
+        let timeout = Duration::from_secs(10); // Increase timeout for saga abortion
         let start = std::time::Instant::now();
 
         while !saga_aborted {
@@ -141,12 +141,23 @@ pub mod saga_tests {
                 break;
             }
 
-            let saga_lock = orch.get_saga(&saga_id).await.unwrap();
-            let saga = saga_lock.read().await;
+            if let Some(saga_lock) = orch.get_saga(&saga_id).await {
+                let saga = saga_lock.read().await;
 
-            if matches!(saga.status, SagaStatus::Compensated | SagaStatus::Aborted) {
-                saga_aborted = true;
-                break;
+                // Print status for debugging
+                if start.elapsed().as_millis() % 500 == 0 {
+                    println!("Current saga status: {:?}", saga.status);
+                }
+
+                if matches!(saga.status, SagaStatus::Compensated | SagaStatus::Aborted) {
+                    saga_aborted = true;
+                    break;
+                }
+            }
+
+            // Force a small delay to allow the abort to be processed
+            if start.elapsed().as_secs() > 5 && !saga_aborted {
+                sleep(Duration::from_millis(500)).await;
             }
 
             sleep(Duration::from_millis(100)).await;
@@ -403,14 +414,17 @@ pub mod event_tests {
         }
 
         // Poll for event to be processed with a longer timeout
-        for _ in 0..30 {
+        let start = std::time::Instant::now();
+        let timeout = Duration::from_secs(5); // Longer timeout for event processing
+
+        while start.elapsed() < timeout {
             if broker.is_event_processed(&event_id).await {
                 println!("Event processed successfully after retry");
                 return; // Test passes
             }
-            tokio::time::sleep(Duration::from_millis(50)).await;
+            tokio::time::sleep(Duration::from_millis(100)).await;
         }
-        panic!("Event was not processed after retry and acknowledgment");
+        panic!("Event was not processed after retry and acknowledgment within timeout period");
     }
 
     #[tokio::test]

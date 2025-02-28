@@ -186,6 +186,13 @@ impl<S: StorageBackend> CheckpointManager<S> {
             })?;
 
         // Atomically rename temporary file to final name
+        // Ensure the parent directory exists for the final file
+        if let Some(base_dir) = &self.base_dir {
+            let final_path = base_dir.join(&checkpoint_id);
+            if let Some(parent) = final_path.parent() {
+                fs::create_dir_all(parent)?;
+            }
+        }
         self.storage
             .rename(&temp_key, &checkpoint_id)
             .await

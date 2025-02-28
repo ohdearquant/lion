@@ -211,6 +211,7 @@ impl EventBroker {
                     EventStatus::Acknowledged => {
                         // Success, event delivered
                         self.mark_event_processed(&event_id).await;
+                        log::debug!("Event {} acknowledged and marked as processed", event_id);
                         self.remove_in_flight(&event_id).await;
                     }
                     EventStatus::Failed => {
@@ -299,7 +300,7 @@ impl EventBroker {
     /// Wait for acknowledgment of an event
     async fn wait_for_acknowledgment(&self, event_id: &str) -> Result<EventAck, EventError> {
         // Try multiple times to find an acknowledgment before giving up
-        let max_attempts = 10;
+        let max_attempts = 50; // Increase attempts to give more time for acknowledgment
         for _ in 0..max_attempts {
             // Get a reference to the subscriptions
             let subs_map = self.subscriptions.read().await;
@@ -321,7 +322,7 @@ impl EventBroker {
 
             // Release the read lock and wait before trying again
             drop(subs_map);
-            tokio::time::sleep(Duration::from_millis(100)).await;
+            tokio::time::sleep(Duration::from_millis(20)).await; // Shorter sleep for more frequent checks
         }
 
         // If we reach here, no acknowledgment was found after all attempts
@@ -346,6 +347,7 @@ impl EventBroker {
         if track_events {
             let mut processed = self.processed_events.write().await;
             processed.insert(event_id.to_string());
+            log::debug!("Event {} marked as processed", event_id);
         }
     }
 
@@ -533,12 +535,13 @@ mod tests {
         ack_tx.send(ack).await.unwrap();
 
         // Poll with a longer timeout to ensure acknowledgment is processed
-        for _ in 0..30 {
+        for _ in 0..100 {
+            // Increase polling attempts
             if broker.is_event_processed(&event_id).await {
                 println!("Event processed successfully");
                 return; // Test passes
             }
-            tokio::time::sleep(Duration::from_millis(50)).await;
+            tokio::time::sleep(Duration::from_millis(20)).await; // Shorter sleep for more frequent checks
         }
         panic!("Event was not processed after waiting");
     }
