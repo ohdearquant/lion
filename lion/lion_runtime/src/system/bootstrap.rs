@@ -13,7 +13,6 @@ use tracing::{debug, error, info, warn};
 
 use super::config::RuntimeConfig;
 use super::shutdown::ShutdownManager;
-use crate::capabilities::manager::CapabilityManager;
 
 /// Errors that can occur during bootstrap
 #[derive(Debug, Error)]
@@ -58,8 +57,8 @@ pub struct System {
     /// Current bootstrap phase
     phase: BootstrapPhase,
 
-    /// Shutdown manager
-    shutdown_manager: Arc<OnceCell<ShutdownManager>>,
+    /// Shutdown manager (wrapped in Arc and OnceCell for initialization)
+    shutdown_manager: OnceCell<Arc<ShutdownManager>>,
 }
 
 impl System {
@@ -68,7 +67,7 @@ impl System {
         Ok(Self {
             config,
             phase: BootstrapPhase::Core,
-            shutdown_manager: Arc::new(OnceCell::new()),
+            shutdown_manager: OnceCell::new(),
         })
     }
 
@@ -103,7 +102,7 @@ impl System {
             // Initialize shutdown manager
             if self.shutdown_manager.get().is_none() {
                 let manager = ShutdownManager::new(self.config.clone());
-                let _ = self.shutdown_manager.set(manager);
+                let _ = self.shutdown_manager.set(Arc::new(manager));
             }
 
             // Basic validations
@@ -205,13 +204,9 @@ impl System {
 
     /// Get the shutdown manager
     pub fn get_shutdown_manager(&self) -> Result<Arc<ShutdownManager>> {
-        match self.shutdown_manager.get() {
-            Some(manager) => Ok(manager.clone()),
-            None => {
-                error!("Shutdown manager not initialized");
-                Err(BootstrapError::DependencyNotInitialized("ShutdownManager".to_string()).into())
-            }
-        }
+        self.shutdown_manager.get().cloned().ok_or_else(|| {
+            BootstrapError::DependencyNotInitialized("ShutdownManager".to_string()).into()
+        })
     }
 }
 

@@ -7,14 +7,20 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use anyhow::Result;
-use lion_core::id::{NodeId, PluginId, WorkflowId};
+use lion_core::id::{Id, NodeId, NodeMarker, PluginId, WorkflowId};
 use lion_core::types::workflow::{ExecutionStatus, NodeStatus};
 use lion_workflow::model::definition::WorkflowDefinition;
+use lion_workflow::model::node::NodeId as ModelNodeId;
 use tokio::sync::RwLock;
 use tracing::{debug, error, info};
 
 use crate::capabilities::manager::CapabilityManager;
 use crate::plugin::manager::PluginManager;
+
+/// Convert a node ID from the workflow model to a core node ID
+fn convert_node_id(node_id: &ModelNodeId) -> NodeId {
+    NodeId::from_uuid(node_id.uuid())
+}
 
 /// Errors that can occur during workflow execution
 #[derive(thiserror::Error, Debug)]
@@ -104,8 +110,10 @@ impl WorkflowExecutor {
         let mut node_statuses = HashMap::new();
 
         // Set all nodes to Pending
-        for (node_id, _) in &definition.nodes {
-            node_statuses.insert(node_id.clone(), NodeStatus::Pending);
+        for (model_node_id, _) in &definition.nodes {
+            // Convert model NodeId to core NodeId
+            let core_node_id = convert_node_id(model_node_id);
+            node_statuses.insert(core_node_id, NodeStatus::Pending);
         }
 
         // Create execution state

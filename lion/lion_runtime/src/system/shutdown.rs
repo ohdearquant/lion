@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use futures::future::join_all;
 use parking_lot::Mutex;
 use thiserror::Error;
@@ -34,7 +34,7 @@ pub enum ShutdownError {
 #[derive(Clone)]
 pub struct ShutdownHandle {
     /// Shutdown signal receiver
-    receiver: broadcast::Receiver<()>,
+    receiver: Arc<Mutex<broadcast::Receiver<()>>>,
 
     /// Completion semaphore
     completion: Arc<Semaphore>,
@@ -47,7 +47,7 @@ impl ShutdownHandle {
     /// Create a new shutdown handle
     fn new(receiver: broadcast::Receiver<()>, completion: Arc<Semaphore>, id: String) -> Self {
         Self {
-            receiver,
+            receiver: Arc::new(Mutex::new(receiver)),
             completion,
             id,
         }
@@ -56,6 +56,7 @@ impl ShutdownHandle {
     /// Wait for shutdown signal
     pub async fn wait_for_shutdown(&mut self) -> Result<()> {
         self.receiver
+            .lock()
             .recv()
             .await
             .map_err(|e| anyhow::anyhow!("Shutdown signal error: {}", e))

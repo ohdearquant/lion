@@ -6,10 +6,10 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use anyhow::Result;
-use lion_core::id::{PluginId, WorkflowId};
+use lion_core::id::{Id, PluginId, WorkflowId, WorkflowMarker};
 use lion_core::types::workflow::ExecutionStatus;
 use lion_workflow::model::definition::WorkflowDefinition;
-use lion_workflow::model::node::Node;
+use lion_workflow::model::definition::WorkflowId as DefWorkflowId;
 use tokio::sync::RwLock;
 use tracing::{debug, error, info, warn};
 
@@ -32,6 +32,16 @@ pub enum WorkflowManagerError {
 
     #[error("Invalid workflow definition: {0}")]
     InvalidDefinition(String),
+}
+
+/// Convert a workflow definition ID to a core workflow ID
+fn def_to_core_id(def_id: &DefWorkflowId) -> WorkflowId {
+    WorkflowId::from_uuid(def_id.uuid())
+}
+
+/// Convert a core workflow ID to a workflow definition ID
+fn core_to_def_id(core_id: &WorkflowId) -> DefWorkflowId {
+    DefWorkflowId::from_uuid(core_id.uuid())
 }
 
 /// Workflow manager for creating and managing workflows
@@ -87,19 +97,19 @@ impl WorkflowManager {
         // Validate the workflow
         self.validate_workflow(&definition).await?;
 
-        // Use the ID from the definition
-        let workflow_id = definition.id.clone();
+        // Convert from workflow definition ID to core workflow ID
+        let core_id = def_to_core_id(&definition.id);
 
         // Check if workflow already exists
         let mut workflows = self.workflows.write().await;
-        if workflows.contains_key(&workflow_id) {
-            return Err(WorkflowManagerError::AlreadyExists(workflow_id).into());
+        if workflows.contains_key(&core_id) {
+            return Err(WorkflowManagerError::AlreadyExists(core_id).into());
         }
 
-        // Store the workflow
-        workflows.insert(workflow_id.clone(), definition);
+        // Store the workflow using the core ID
+        workflows.insert(core_id.clone(), definition);
 
-        Ok(workflow_id)
+        Ok(core_id)
     }
 
     /// Validate a workflow definition
@@ -167,7 +177,7 @@ impl WorkflowManager {
 
         // Start the workflow
         self.executor
-            .start_workflow(workflow_id, definition, input)
+            .start_workflow(workflow_id.clone(), definition, input)
             .await?;
 
         Ok(())
@@ -181,12 +191,12 @@ impl WorkflowManager {
         {
             let workflows = self.workflows.read().await;
             if !workflows.contains_key(&workflow_id) {
-                return Err(WorkflowManagerError::NotFound(workflow_id).into());
+                return Err(WorkflowManagerError::NotFound(workflow_id.clone()).into());
             }
         }
 
         // Pause the workflow
-        self.executor.pause_workflow(workflow_id).await?;
+        self.executor.pause_workflow(workflow_id.clone()).await?;
 
         Ok(())
     }
@@ -199,12 +209,12 @@ impl WorkflowManager {
         {
             let workflows = self.workflows.read().await;
             if !workflows.contains_key(&workflow_id) {
-                return Err(WorkflowManagerError::NotFound(workflow_id).into());
+                return Err(WorkflowManagerError::NotFound(workflow_id.clone()).into());
             }
         }
 
         // Resume the workflow
-        self.executor.resume_workflow(workflow_id).await?;
+        self.executor.resume_workflow(workflow_id.clone()).await?;
 
         Ok(())
     }
@@ -217,12 +227,12 @@ impl WorkflowManager {
         {
             let workflows = self.workflows.read().await;
             if !workflows.contains_key(&workflow_id) {
-                return Err(WorkflowManagerError::NotFound(workflow_id).into());
+                return Err(WorkflowManagerError::NotFound(workflow_id.clone()).into());
             }
         }
 
         // Cancel the workflow
-        self.executor.cancel_workflow(workflow_id).await?;
+        self.executor.cancel_workflow(workflow_id.clone()).await?;
 
         Ok(())
     }
@@ -238,7 +248,7 @@ impl WorkflowManager {
         }
 
         // Get status
-        self.executor.get_workflow_status(workflow_id).await
+        return self.executor.get_workflow_status(workflow_id).await;
     }
 
     /// Get workflow results
@@ -281,14 +291,17 @@ impl WorkflowManager {
         // Validate the workflow
         self.validate_workflow(&definition).await?;
 
+        // Convert to core workflow ID
+        let core_id = def_to_core_id(&definition.id);
+
         // Check if workflow exists
         let mut workflows = self.workflows.write().await;
-        if !workflows.contains_key(&definition.id) {
-            return Err(WorkflowManagerError::NotFound(definition.id.clone()).into());
+        if !workflows.contains_key(&core_id) {
+            return Err(WorkflowManagerError::NotFound(core_id).into());
         }
 
         // Update the workflow
-        workflows.insert(definition.id.clone(), definition);
+        workflows.insert(core_id, definition);
 
         Ok(())
     }
@@ -336,7 +349,7 @@ impl WorkflowManager {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use lion_workflow::model::definition::{WorkflowBuilder, WorkflowId};
+    use lion_workflow::model::definition::WorkflowBuilder;
     use lion_workflow::model::node::NodeId;
 
     #[tokio::test]

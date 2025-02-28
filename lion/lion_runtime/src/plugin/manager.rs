@@ -216,7 +216,7 @@ impl PluginManager {
         let state = plugin.get_state().await;
 
         // Initialize if needed
-        if state == PluginState::Loaded {
+        if state == PluginState::Ready {
             // Get config from runtime config if available
             let metadata = plugin.get_metadata().await;
             let config = self
@@ -302,7 +302,7 @@ impl PluginManager {
         {
             let state = plugin.get_state().await;
 
-            if state != PluginState::Unloaded {
+            if state != PluginState::Terminated {
                 self.unload_plugin(plugin_id).await?;
             }
         }
@@ -376,12 +376,12 @@ impl PluginManager {
         );
 
         let plugins = self.plugins.read().await;
-        let plugin = plugins
+        let _plugin = plugins
             .get(plugin_id)
             .ok_or_else(|| PluginManagerError::NotFound(plugin_id.clone()))?;
 
         // Use the capability manager to grant the capability
-        let cap_id = self
+        let _cap_id = self
             .capability_manager
             .grant_capability(plugin_id.to_string(), object.to_string(), rights)
             .await?;
