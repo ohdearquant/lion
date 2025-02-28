@@ -12,8 +12,8 @@ pub mod workflow;
 use std::sync::Arc;
 
 use anyhow::Result;
-use lion_capability::model::CapabilityId;
 use lion_core::id::WorkflowId;
+use lion_core::CapabilityId;
 use tracing::info;
 
 /// Runtime facade that provides a unified interface to the Lion runtime.

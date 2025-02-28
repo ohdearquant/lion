@@ -1,16 +1,16 @@
-use std::collections::{HashMap, HashSet};
 use chrono::Utc;
 use lion_core::id::Id;
-use lion_workflow::model::node::NodeId;
-use lion_workflow::model::definition::{WorkflowDefinition, Version};
+use lion_workflow::model::definition::{Version, WorkflowDefinition};
 use lion_workflow::model::edge::{Edge, EdgeId};
+use lion_workflow::model::node::NodeId;
 use lion_workflow::model::node::{Node, NodeStatus, Priority};
+use std::collections::{HashMap, HashSet};
 
 /// Test function to check if a workflow is acyclic
 fn is_acyclic(definition: &WorkflowDefinition) -> bool {
     // Count in-degrees for each node
     let mut in_degree = HashMap::new();
-    
+
     for (node_id, _) in &definition.nodes {
         in_degree.insert(node_id.clone(), 0);
     }
@@ -72,7 +72,7 @@ fn create_acyclic_workflow() -> WorkflowDefinition {
         incoming_edges: HashSet::new(),
         required_capability: None,
         priority: Priority::Normal,
-        deadline: None, 
+        deadline: None,
         config: serde_json::Value::Null,
     };
 
@@ -125,7 +125,7 @@ fn create_acyclic_workflow() -> WorkflowDefinition {
     // Set start and end nodes
     start_nodes.insert(node1_id);
     end_nodes.insert(node3_id);
-    
+
     WorkflowDefinition {
         id: Id::new(),
         name: "Acyclic".to_string(),

@@ -4,9 +4,9 @@
 
 use std::sync::Arc;
 
+use super::manager::CapabilityOperation;
 use anyhow::{Context, Result};
 use lion_core::CapabilityId;
-use super::manager::CapabilityOperation;
 use thiserror::Error;
 use tracing::{debug, error, info, warn};
 

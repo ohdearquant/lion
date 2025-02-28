@@ -6,11 +6,11 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use crate::plugin::lifecycle::LifecycleManager;
 use anyhow::{Context, Result};
 use lion_capability::model::Capability;
-use lion_core::id::PluginId;
-use lion_core::traits::plugin::PluginState;
-use lion_isolation::manager::lifecycle::LifecycleManager;
+use lion_core::types::plugin::PluginState;
+use lion_core::{id::PluginId, CapabilityId};
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 use tracing::{debug, error, info, warn};
@@ -383,7 +383,7 @@ impl PluginManager {
         // Use the capability manager to grant the capability
         let cap_id = self
             .capability_manager
-            .grant_capability(plugin_id.0.clone(), object.to_string(), rights)
+            .grant_capability(plugin_id.to_string(), object.to_string(), rights)
             .await?;
 
         Ok(())
@@ -437,7 +437,7 @@ mod tests {
         let manager = PluginManager::new(config, capability_manager).unwrap();
 
         // Create a test plugin
-        let plugin_id = PluginId(Uuid::new_v4().to_string());
+        let plugin_id = PluginId::new();
         let metadata = PluginMetadata {
             id: plugin_id.clone(),
             name: "test-plugin".to_string(),
