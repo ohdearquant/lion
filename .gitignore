@@ -21,3 +21,5 @@ Cargo.lock
 #.idea/
 dev/
 *data/
+.env
+.venv/

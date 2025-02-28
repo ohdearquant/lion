@@ -3,8 +3,8 @@ name = "lion_policy"
 version = "0.1.0"
 edition = "2021"
 description = "Policy system for the Lion microkernel"
-license = "MIT OR Apache-2.0"
-authors = ["Lion Microkernel Team"]
+authors = ["Haiyang Li"]
+license = "Apache-2.0"
 
 [dependencies]
 lion_core = { path = "../lion_core" }

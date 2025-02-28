@@ -2,10 +2,10 @@
 name = "lion_concurrency"
 version = "0.1.0"
 edition = "2021"
-authors = ["Lion Team"]
+authors = ["Haiyang Li"]
+license = "Apache-2.0"
 description = "Concurrency primitives for the Lion microkernel"
 repository = "https://github.com/lion-micro/lion"
-license = "MIT OR Apache-2.0"
 keywords = ["kernel", "microkernel", "actor", "concurrency", "scheduling"]
 categories = ["os", "concurrency"]
 readme = "../README.md"
