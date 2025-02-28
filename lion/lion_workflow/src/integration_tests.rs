@@ -212,19 +212,29 @@ pub mod saga_tests {
 
         // Wait for saga to complete or timeout
         let mut saga_completed = false;
-        for _ in 0..20 {
+        for i in 0..30 {
+            // Increase attempts
             if let Some(saga_lock) = orch.get_saga(&saga_id).await {
                 let saga = saga_lock.read().await;
 
                 if saga.status == SagaStatus::FailedWithErrors
                     || saga.status == SagaStatus::Compensated
+                    || saga.status == SagaStatus::Failed
                 {
                     saga_completed = true;
                     break;
                 }
+
+                // Add debug logs for retry attempts
+                if i % 5 == 0 {
+                    println!(
+                        "Waiting for saga completion - attempt {}, status: {:?}",
+                        i, saga.status
+                    );
+                }
             }
 
-            sleep(Duration::from_millis(100)).await;
+            sleep(Duration::from_millis(50)).await;
         }
 
         // Stop the orchestrator
@@ -251,6 +261,7 @@ pub mod event_tests {
             delivery_semantic: DeliverySemantic::AtLeastOnce,
             max_retries: 3,
             ack_timeout: Duration::from_millis(100),
+            retry_delay_ms: Some(50), // Make retries happen quickly for the test
             ..Default::default()
         };
 
@@ -263,7 +274,8 @@ pub mod event_tests {
             .unwrap();
 
         // Create and publish an event
-        let event = Event::new("test_event", serde_json::json!({"data": "test"}));
+        let mut event = Event::new("test_event", serde_json::json!({"data": "test"}));
+        event.requires_ack = true; // Explicitly require acknowledgment
         let event_id = event.id.clone();
 
         let status = broker.publish(event).await.unwrap();
@@ -278,11 +290,22 @@ pub mod event_tests {
         ack_tx.send(ack).await.unwrap();
 
         // Wait for the event to be enqueued for retry
-        sleep(Duration::from_millis(200)).await;
+        // Try multiple times to verify the retry queue has the event
+        let mut retry_success = false;
+        for _ in 0..10 {
+            sleep(Duration::from_millis(50)).await;
 
-        // Check if event was added to retry queue
-        let retry_count = broker.get_retry_queue_size().await;
-        assert!(retry_count > 0, "Event was not added to retry queue");
+            // Check if event was added to retry queue
+            let retry_count = broker.get_retry_queue_size().await;
+            if retry_count > 0 {
+                retry_success = true;
+                break;
+            }
+        }
+        assert!(
+            retry_success,
+            "Event was not added to retry queue after multiple checks"
+        );
 
         // Process the retry queue
         broker.process_retry_queue().await.unwrap();

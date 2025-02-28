@@ -148,6 +148,11 @@ impl StorageBackend for FileStorage {
         let old_path = self.get_path(old_key);
         let new_path = self.get_path(new_key);
 
+        // Ensure parent directory of the destination exists
+        if let Some(parent) = new_path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+
         match tokio::fs::rename(&old_path, &new_path).await {
             Ok(()) => Ok(()),
             Err(e) => Err(StorageError::RenameError(e.to_string())),

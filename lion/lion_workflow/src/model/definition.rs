@@ -482,10 +482,6 @@ impl WorkflowDefinition {
     /// Validate that all edges respect capability boundaries
     fn validate_edge_capabilities(&self, edge: &Edge) -> Result<(), WorkflowError> {
         // If no capabilities are involved, no validation needed
-        if edge.required_capability.is_none() {
-            return Ok(());
-        }
-
         // Check if source and target have compatible capabilities
         let source_cap = self
             .nodes
@@ -496,6 +492,11 @@ impl WorkflowDefinition {
             .nodes
             .get(&edge.target)
             .and_then(|node| node.required_capability);
+
+        // If both nodes have no capability requirements, we don't need to validate
+        if source_cap.is_none() && target_cap.is_none() {
+            return Ok(());
+        }
 
         // If the nodes have different capabilities, the edge must have a capability
         if source_cap != target_cap && edge.required_capability.is_none() {

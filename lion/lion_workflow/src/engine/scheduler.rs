@@ -236,7 +236,7 @@ impl PartialOrd for PriorityTask {
 impl Ord for PriorityTask {
     fn cmp(&self, other: &Self) -> Ordering {
         // Higher priority first
-        let priority_ord = self.0.priority.cmp(&other.0.priority).reverse();
+        let priority_ord = other.0.priority.cmp(&self.0.priority);
 
         // If priorities equal, use deadlines (earlier first)
         if priority_ord == Ordering::Equal
@@ -288,7 +288,7 @@ impl Ord for DeadlineTask {
             (Some(a), Some(b)) => b.cmp(&a), // Reverse order for max-heap (BinaryHeap)
             (Some(_), None) => Ordering::Greater,
             (None, Some(_)) => Ordering::Less,
-            (None, None) => self.0.priority.cmp(&other.0.priority).reverse(),
+            (None, None) => other.0.priority.cmp(&self.0.priority),
         }
     }
 }
@@ -488,19 +488,27 @@ impl WorkflowScheduler {
     pub async fn mark_task_running(&self, task_id: TaskId) -> Result<(), SchedulerError> {
         let mut task_registry = self.task_registry.write().await;
         let task = task_registry
-            .get_mut(&task_id)
-            .ok_or_else(|| SchedulerError::TaskNotFound(task_id))?;
+            .get(&task_id)
+            .ok_or_else(|| SchedulerError::TaskNotFound(task_id))?
+            .clone(); // Clone the Arc to avoid reference issues
 
-        // Create mutable version of the task for updating status
-        let task_ref = Arc::get_mut(task).ok_or_else(|| {
+        // Remove the original entry so we can create a new one with updated status
+        task_registry.remove(&task_id);
+
+        // Create a new task with the updated status
+        let mut updated_task = Arc::try_unwrap(task).map_err(|_| {
             SchedulerError::SchedulingError("Could not get mutable reference to task".to_string())
         })?;
 
-        task_ref.mark_running();
+        updated_task.mark_running();
+
+        // Re-insert the updated task
+        let updated_arc = Arc::new(updated_task);
+        task_registry.insert(task_id, updated_arc.clone());
 
         // Add to running tasks
         let mut running_tasks = self.running_tasks.write().await;
-        running_tasks.insert(task_id, task.clone());
+        running_tasks.insert(task_id, updated_arc);
 
         Ok(())
     }
@@ -509,15 +517,23 @@ impl WorkflowScheduler {
     pub async fn mark_task_completed(&self, task_id: TaskId) -> Result<(), SchedulerError> {
         let mut task_registry = self.task_registry.write().await;
         let task = task_registry
-            .get_mut(&task_id)
-            .ok_or_else(|| SchedulerError::TaskNotFound(task_id))?;
+            .get(&task_id)
+            .ok_or_else(|| SchedulerError::TaskNotFound(task_id))?
+            .clone(); // Clone the Arc to avoid reference issues
 
-        // Create mutable version of the task for updating status
-        let task_ref = Arc::get_mut(task).ok_or_else(|| {
+        // Remove the original entry so we can create a new one with updated status
+        task_registry.remove(&task_id);
+
+        // Create a new task with the updated status
+        let mut updated_task = Arc::try_unwrap(task).map_err(|_| {
             SchedulerError::SchedulingError("Could not get mutable reference to task".to_string())
         })?;
 
-        task_ref.mark_completed();
+        updated_task.mark_completed();
+
+        // Re-insert the updated task
+        let updated_arc = Arc::new(updated_task);
+        task_registry.insert(task_id, updated_arc);
 
         // Remove from running tasks
         let mut running_tasks = self.running_tasks.write().await;
@@ -530,15 +546,23 @@ impl WorkflowScheduler {
     pub async fn mark_task_failed(&self, task_id: TaskId) -> Result<(), SchedulerError> {
         let mut task_registry = self.task_registry.write().await;
         let task = task_registry
-            .get_mut(&task_id)
-            .ok_or_else(|| SchedulerError::TaskNotFound(task_id))?;
+            .get(&task_id)
+            .ok_or_else(|| SchedulerError::TaskNotFound(task_id))?
+            .clone(); // Clone the Arc to avoid reference issues
 
-        // Create mutable version of the task for updating status
-        let task_ref = Arc::get_mut(task).ok_or_else(|| {
+        // Remove the original entry so we can create a new one with updated status
+        task_registry.remove(&task_id);
+
+        // Create a new task with the updated status
+        let mut updated_task = Arc::try_unwrap(task).map_err(|_| {
             SchedulerError::SchedulingError("Could not get mutable reference to task".to_string())
         })?;
 
-        task_ref.mark_failed();
+        updated_task.mark_failed();
+
+        // Re-insert the updated task
+        let updated_arc = Arc::new(updated_task);
+        task_registry.insert(task_id, updated_arc);
 
         // Remove from running tasks
         let mut running_tasks = self.running_tasks.write().await;
@@ -551,15 +575,23 @@ impl WorkflowScheduler {
     pub async fn cancel_task(&self, task_id: TaskId) -> Result<(), SchedulerError> {
         let mut task_registry = self.task_registry.write().await;
         let task = task_registry
-            .get_mut(&task_id)
-            .ok_or_else(|| SchedulerError::TaskNotFound(task_id))?;
+            .get(&task_id)
+            .ok_or_else(|| SchedulerError::TaskNotFound(task_id))?
+            .clone(); // Clone the Arc to avoid reference issues
 
-        // Create mutable version of the task for updating status
-        let task_ref = Arc::get_mut(task).ok_or_else(|| {
+        // Remove the original entry so we can create a new one with updated status
+        task_registry.remove(&task_id);
+
+        // Create a new task with the updated status
+        let mut updated_task = Arc::try_unwrap(task).map_err(|_| {
             SchedulerError::SchedulingError("Could not get mutable reference to task".to_string())
         })?;
 
-        task_ref.mark_cancelled();
+        updated_task.mark_cancelled();
+
+        // Re-insert the updated task
+        let updated_arc = Arc::new(updated_task);
+        task_registry.insert(task_id, updated_arc);
 
         // Remove from running tasks
         let mut running_tasks = self.running_tasks.write().await;

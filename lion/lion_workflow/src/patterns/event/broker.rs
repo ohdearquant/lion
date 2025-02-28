@@ -294,28 +294,33 @@ impl EventBroker {
 
     /// Wait for acknowledgment of an event
     async fn wait_for_acknowledgment(&self, event_id: &str) -> Result<EventAck, EventError> {
-        // We need to get a mutable reference to the subscriptions
-        let subs_map = self.subscriptions.read().await;
+        // Try multiple times to find an acknowledgment before giving up
+        let max_attempts = 10;
+        for _ in 0..max_attempts {
+            // Get a reference to the subscriptions
+            let subs_map = self.subscriptions.read().await;
 
-        // Check all subscriptions for acknowledgments
-        for subscriptions in subs_map.values() {
-            // We need to clone the subscriptions to avoid borrowing issues
-            let cloned_subs = subscriptions.clone();
+            // Check all subscriptions for acknowledgments
+            for subscriptions in subs_map.values() {
+                // We need to clone the subscriptions to avoid borrowing issues
+                let cloned_subs = subscriptions.clone();
 
-            for mut subscription in cloned_subs {
-                // Now we can try to receive from each subscription's channel
-                // Since we have a cloned subscription with its own receiver
-                if let Ok(ack) = subscription.ack_receiver.try_recv() {
-                    if ack.event_id == event_id {
-                        return Ok(ack);
+                for mut subscription in cloned_subs {
+                    // Try to receive from each subscription's channel
+                    if let Ok(ack) = subscription.ack_receiver.try_recv() {
+                        if ack.event_id == event_id {
+                            return Ok(ack);
+                        }
                     }
                 }
             }
+
+            // Release the read lock and wait before trying again
+            drop(subs_map);
+            tokio::time::sleep(Duration::from_millis(100)).await;
         }
 
-        // No immediate ack, wait for next check
-        tokio::time::sleep(Duration::from_millis(100)).await;
-
+        // If we reach here, no acknowledgment was found after all attempts
         Err(EventError::Other("No acknowledgment found".to_string()))
     }
 
@@ -327,13 +332,16 @@ impl EventBroker {
 
     /// Mark an event as processed
     async fn mark_event_processed(&self, event_id: &str) {
-        let config = self.config.read().await;
+        // First check if we need to track processed events
+        let track_events = {
+            let config = self.config.read().await;
+            config.track_processed_events
+        };
 
-        if config.track_processed_events {
+        // If tracking is enabled, add to processed events set
+        if track_events {
             let mut processed = self.processed_events.write().await;
             processed.insert(event_id.to_string());
-
-            // TODO: Schedule cleanup of old processed events
         }
     }
 

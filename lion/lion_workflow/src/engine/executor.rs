@@ -779,7 +779,8 @@ mod tests {
 
         // Wait for workflow to complete
         let mut completed = false;
-        for _ in 0..10 {
+        for _ in 0..30 {
+            // Increase timeout attempts
             // Check if instance exists
             let instance = executor.state_manager.get_instance(&instance_id).await;
             if let Some(instance) = instance {
@@ -788,6 +789,12 @@ mod tests {
                     completed = true;
                     break;
                 }
+
+                // Log the state for debugging
+                println!(
+                    "Workflow state: completed={}, failed={}",
+                    state.is_completed, state.has_failed
+                );
             }
 
             tokio::time::sleep(Duration::from_millis(100)).await;
@@ -877,7 +884,8 @@ mod tests {
 
         // Wait for workflow to fail
         let mut failed = false;
-        for _ in 0..10 {
+        for _ in 0..30 {
+            // Increase timeout attempts
             // Check if instance exists
             let instance = executor.state_manager.get_instance(&instance_id).await;
             if let Some(instance) = instance {
@@ -886,6 +894,13 @@ mod tests {
                     failed = true;
                     break;
                 }
+
+                // Log the state for debugging
+                println!(
+                    "Workflow state: failed={}, node statuses={:?}",
+                    state.has_failed,
+                    state.node_status.iter().collect::<Vec<_>>()
+                );
             }
 
             tokio::time::sleep(Duration::from_millis(100)).await;

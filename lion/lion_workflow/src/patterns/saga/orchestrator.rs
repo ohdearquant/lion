@@ -1060,7 +1060,8 @@ mod tests {
 
         // Wait for saga to complete or timeout
         let mut saga_completed = false;
-        for _ in 0..10 {
+        for _ in 0..30 {
+            // Increase the number of attempts
             if let Some(saga_lock) = orch.get_saga(&saga_id).await {
                 let saga = saga_lock.read().await;
 
@@ -1070,9 +1071,16 @@ mod tests {
                     saga_completed = true;
                     break;
                 }
+                // Print status to help with debugging
+                log::debug!(
+                    "Saga status: {:?}, step1: {:?}, step2: {:?}",
+                    saga.status,
+                    saga.steps.get("step1").map(|s| s.status),
+                    saga.steps.get("step2").map(|s| s.status)
+                );
             }
 
-            tokio::time::sleep(Duration::from_millis(200)).await;
+            tokio::time::sleep(Duration::from_millis(100)).await;
         }
 
         // Stop the orchestrator

@@ -322,24 +322,41 @@ impl fmt::Debug for ExecutionContext {
 /// Evaluate a JSON path against a value
 fn evaluate_json_path(value: &serde_json::Value, path: &str) -> Result<bool, String> {
     // Very simple implementation - would use a proper JSON path library in production
-    let segments: Vec<&str> = path.split('.').collect();
     let mut current = value;
 
-    for segment in segments {
-        if segment.starts_with('[') && segment.ends_with(']') {
-            // Array index
-            let index = segment[1..segment.len() - 1]
-                .parse::<usize>()
-                .map_err(|_| format!("Invalid array index: {}", segment))?;
+    // For parsing array notation like "array[0]"
+    let parts: Vec<&str> = path.split('.').collect();
 
+    for part in parts {
+        // Check if this part contains array indexing
+        if let Some(bracket_pos) = part.find('[') {
+            if !part.ends_with(']') {
+                return Err(format!("Invalid array indexing syntax: {}", part));
+            }
+
+            // Get the field name (part before bracket)
+            let field_name = &part[0..bracket_pos];
+            if !field_name.is_empty() {
+                current = current
+                    .get(field_name)
+                    .ok_or_else(|| format!("Field not found: {}", field_name))?;
+            }
+
+            // Extract and parse the index
+            let index_str = &part[bracket_pos + 1..part.len() - 1];
+            let index = index_str
+                .parse::<usize>()
+                .map_err(|_| format!("Invalid array index: {}", index_str))?;
+
+            // Access the array element
             current = current
                 .get(index)
                 .ok_or_else(|| format!("Index out of bounds: {}", index))?;
         } else {
-            // Object field
+            // Regular object field access
             current = current
-                .get(segment)
-                .ok_or_else(|| format!("Field not found: {}", segment))?;
+                .get(part)
+                .ok_or_else(|| format!("Field not found: {}", part))?;
         }
     }
 
