@@ -148,7 +148,7 @@ impl WorkflowExecutor {
         let mut states = self.workflow_states.write().await;
         let state = states
             .get_mut(&workflow_id)
-            .ok_or_else(|| ExecutionError::WorkflowNotRunning(workflow_id))?;
+            .ok_or(ExecutionError::WorkflowNotRunning(workflow_id))?;
 
         if state.status == ExecutionStatus::Running {
             state.status = ExecutionStatus::Paused;
@@ -167,7 +167,7 @@ impl WorkflowExecutor {
         let mut states = self.workflow_states.write().await;
         let state = states
             .get_mut(&workflow_id)
-            .ok_or_else(|| ExecutionError::WorkflowNotRunning(workflow_id))?;
+            .ok_or(ExecutionError::WorkflowNotRunning(workflow_id))?;
 
         if state.status == ExecutionStatus::Paused {
             state.status = ExecutionStatus::Running;
@@ -186,7 +186,7 @@ impl WorkflowExecutor {
         let mut states = self.workflow_states.write().await;
         let state = states
             .get_mut(&workflow_id)
-            .ok_or_else(|| ExecutionError::WorkflowNotRunning(workflow_id))?;
+            .ok_or(ExecutionError::WorkflowNotRunning(workflow_id))?;
 
         state.status = ExecutionStatus::Cancelled;
         state.end_time = Some(Instant::now());
@@ -203,7 +203,7 @@ impl WorkflowExecutor {
         states
             .get(workflow_id)
             .map(|state| state.status)
-            .ok_or_else(|| ExecutionError::WorkflowNotRunning(*workflow_id).into())
+            .ok_or(ExecutionError::WorkflowNotRunning(*workflow_id).into())
     }
 
     /// Get workflow results
@@ -215,7 +215,7 @@ impl WorkflowExecutor {
 
         let state = states
             .get(workflow_id)
-            .ok_or_else(|| ExecutionError::WorkflowNotRunning(*workflow_id))?;
+            .ok_or(ExecutionError::WorkflowNotRunning(*workflow_id))?;
 
         if state.status != ExecutionStatus::Completed {
             return Err(ExecutionError::WorkflowNotRunning(*workflow_id).into());

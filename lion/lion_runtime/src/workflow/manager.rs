@@ -173,7 +173,7 @@ impl WorkflowManager {
             workflows
                 .get(&workflow_id)
                 .cloned()
-                .ok_or_else(|| WorkflowManagerError::NotFound(workflow_id))?
+                .ok_or(WorkflowManagerError::NotFound(workflow_id))?
         };
 
         // Start the workflow
@@ -276,7 +276,7 @@ impl WorkflowManager {
         workflows
             .get(workflow_id)
             .cloned()
-            .ok_or_else(|| WorkflowManagerError::NotFound(*workflow_id).into())
+            .ok_or(WorkflowManagerError::NotFound(*workflow_id).into())
     }
 
     /// Get all registered workflows

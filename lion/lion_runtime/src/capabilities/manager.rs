@@ -295,6 +295,7 @@ impl CapabilityManager {
     }
 
     // Helper to collect all descendants of a capability
+    #[allow(clippy::only_used_in_recursion)]
     fn collect_descendants(
         &self,
         data: &mut CapabilityStore,

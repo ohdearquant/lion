@@ -77,7 +77,7 @@ impl PluginRegistry {
             let plugins = self.plugins.read().await;
             let metadata = plugins
                 .get(plugin_id)
-                .ok_or_else(|| RegistryError::NotFound(*plugin_id))?;
+                .ok_or(RegistryError::NotFound(*plugin_id))?;
             metadata.name.clone()
         };
 
@@ -101,7 +101,7 @@ impl PluginRegistry {
         plugins
             .get(plugin_id)
             .cloned()
-            .ok_or_else(|| RegistryError::NotFound(*plugin_id).into())
+            .ok_or(RegistryError::NotFound(*plugin_id).into())
     }
 
     /// Get plugin ID by name
