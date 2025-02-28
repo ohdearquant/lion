@@ -17,9 +17,9 @@ CONFIG_FILE=~/.cargo/config.toml
 # Add aliases
 cat > "$CONFIG_FILE" << 'EOL'
 [alias]
-# CI and testing commands - using script paths to avoid recursion
-ci = "run --bin sh -- scripts/ci.sh"
-test-cli = "run --bin sh -- scripts/test_cli.sh"
+# CI and testing commands - using direct script execution
+ci = "run --quiet -p lion_cli -- ci"
+test-cli = "run --quiet -p lion_cli -- test-cli"
 
 # Utility aliases for common tasks
 format-all = "fmt --all"

@@ -16,8 +16,9 @@
 //! # Getting Started
 //!
 //! ```rust,no_run
-//! use lion_workflow::model::{WorkflowDefinition, Node, Edge, NodeId, WorkflowBuilder};
-//! use lion_workflow::engine::{WorkflowExecutor, ExecutorConfig, NodeHandler};
+//! use lion_workflow::{WorkflowDefinition, Node, Edge, NodeId, WorkflowBuilder, EdgeId};
+//! use lion_workflow::{WorkflowExecutor, ExecutorConfig};
+//! use lion_workflow::engine::executor::NodeHandler;
 //! use lion_workflow::state::{StateMachineManager, CheckpointManager, MemoryStorage};
 //! use lion_workflow::engine::scheduler::{WorkflowScheduler, SchedulerConfig};
 //! use std::sync::Arc;
@@ -25,19 +26,18 @@
 //! // Define a simple workflow
 //! let mut builder = WorkflowBuilder::new("Example Workflow");
 //! let node1 = Node::new(NodeId::new(), "Start".to_string());
+//! let node1_id = node1.id.clone(); // Clone ID before moving the node
 //! let node2 = Node::new(NodeId::new(), "Process".to_string());
+//! let node2_id = node2.id.clone(); // Clone ID before moving the node
 //! let node3 = Node::new(NodeId::new(), "End".to_string());
-//!
-//! let node1_id = node1.id;
-//! let node2_id = node2.id;
-//! let node3_id = node3.id;
+//! let node3_id = node3.id.clone(); // Clone ID before moving the node
 //!
 //! let workflow = builder
 //!     .add_node(node1).unwrap()
 //!     .add_node(node2).unwrap()
 //!     .add_node(node3).unwrap()
-//!     .add_edge(Edge::new(EdgeId::new(), node1_id, node2_id)).unwrap()
-//!     .add_edge(Edge::new(EdgeId::new(), node2_id, node3_id)).unwrap()
+//!     .add_edge(Edge::new(EdgeId::new(), node1_id.clone(), node2_id.clone())).unwrap()
+//!     .add_edge(Edge::new(EdgeId::new(), node2_id.clone(), node3_id.clone())).unwrap()
 //!     .build();
 //!
 //! // Create execution components

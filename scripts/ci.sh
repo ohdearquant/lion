@@ -11,11 +11,6 @@ echo "🚀 Running CI checks..."
 # Move to the project root
 cd "$(dirname "$0")/.."
 
-# Fix warnings first
-echo -e "\n${GREEN}Fixing code warnings...${NC}"
-./scripts/fix_warnings.sh
-echo "✅ Warnings fixed"
-
 # Run cargo check
 echo -e "\n${GREEN}Running cargo check...${NC}"
 cargo check --workspace
