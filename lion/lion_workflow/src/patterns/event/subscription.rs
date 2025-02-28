@@ -1,6 +1,5 @@
 use crate::patterns::event::types::*;
 use lion_core::CapabilityId;
-use std::sync::Arc;
 use tokio::sync::mpsc;
 use uuid::Uuid;
 
@@ -33,7 +32,7 @@ pub struct EventSubscription {
 // Note: We can't clone the ack_receiver, so we'll create a new channel
 impl Clone for EventSubscription {
     fn clone(&self) -> Self {
-        let (ack_tx, ack_rx) = mpsc::channel(100); // Use a reasonable buffer size
+        let (_ack_tx, ack_rx) = mpsc::channel(100); // Use a reasonable buffer size
 
         Self {
             id: self.id.clone(),

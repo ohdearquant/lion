@@ -3,7 +3,6 @@ use crate::patterns::saga::types::SagaError;
 use crate::patterns::saga::types::SagaStrategy;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
-use uuid::Uuid;
 
 /// Saga definition
 #[derive(Debug, Clone, Serialize, Deserialize)]

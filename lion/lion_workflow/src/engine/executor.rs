@@ -150,7 +150,7 @@ struct Worker {
 
 /// Worker statistics
 #[derive(Debug, Default, Clone)]
-struct WorkerStats {
+pub struct WorkerStats {
     /// Number of tasks completed
     tasks_completed: usize,
 
@@ -161,7 +161,7 @@ struct WorkerStats {
     total_execution_time: f64,
 
     /// Total wait time (seconds)
-    total_wait_time: f64,
+    _total_wait_time: f64,
 }
 
 /// Workflow executor
@@ -633,7 +633,7 @@ where
     }
 
     /// Get worker statistics
-    pub async fn get_worker_stats(&self) -> Vec<(usize, WorkerStats)> {
+    async fn get_worker_stats(&self) -> Vec<(usize, WorkerStats)> {
         let workers = self.workers.read().await;
         workers.iter().map(|w| (w.id, w.stats.clone())).collect()
     }

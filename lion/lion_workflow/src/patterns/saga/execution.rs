@@ -2,7 +2,6 @@ use crate::patterns::saga::step::SagaStep;
 use crate::patterns::saga::types::{SagaError, StepResult, StepStatus};
 use std::future::Future;
 use std::pin::Pin;
-use std::sync::Arc;
 use std::time::Duration;
 use tokio::time::timeout;
 

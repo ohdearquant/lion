@@ -741,7 +741,7 @@ mod tests {
         };
 
         // Test checkpoint creation
-        let checkpoint_id = manager.checkpoint_instance(&instance_id).await.unwrap();
+        let _checkpoint_id = manager.checkpoint_instance(&instance_id).await.unwrap();
 
         // Load definition from checkpoint
         let loaded_definition = manager.load_definition(&workflow_id).await.unwrap();

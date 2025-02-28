@@ -1,6 +1,5 @@
 use crate::patterns::event::types::{Event, EventError};
 use std::collections::VecDeque;
-use std::sync::Arc;
 use tokio::sync::RwLock;
 use tokio::time::Duration;
 

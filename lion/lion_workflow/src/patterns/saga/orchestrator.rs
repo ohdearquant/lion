@@ -1,7 +1,7 @@
 use crate::patterns::event::EventBroker;
 use crate::patterns::saga::definition::SagaDefinition;
-use crate::patterns::saga::execution::{FutureHelper, StepExecutor};
-use crate::patterns::saga::step::{SagaStep, SagaStepDefinition};
+use crate::patterns::saga::execution::FutureHelper;
+use crate::patterns::saga::step::SagaStep;
 use crate::patterns::saga::types::{
     AbortTask, CompensationHandler, CompensationTask, SagaError, SagaOrchestratorConfig,
     SagaStatus, StepHandler, StepResult, StepStatus,
@@ -966,7 +966,7 @@ impl Clone for SagaOrchestrator {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::Priority;
+    use crate::patterns::saga::SagaStepDefinition;
 
     // Helper function to create a boxed step handler that returns the provided value
     fn create_success_handler(value: serde_json::Value) -> StepHandler {

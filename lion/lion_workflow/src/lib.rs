@@ -109,7 +109,7 @@ mod tests {
 
     #[test]
     fn test_create_workflow() {
-        let mut builder = create_workflow("Test Workflow");
+        let builder = create_workflow("Test Workflow");
         let node1 = Node::new(NodeId::new(), "Node 1".to_string());
         let node2 = Node::new(NodeId::new(), "Node 2".to_string());
 

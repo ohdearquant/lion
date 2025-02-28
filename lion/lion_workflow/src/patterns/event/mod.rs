@@ -19,6 +19,5 @@ pub use types::EventBrokerConfig;
 #[cfg(test)]
 mod tests {
     // Import necessary items for testing
-    use super::*;
     // Add test modules here as needed
 }

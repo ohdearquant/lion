@@ -1,7 +1,6 @@
 use crate::patterns::event::types::Event;
 use async_trait::async_trait;
 use std::collections::HashMap;
-use std::sync::Arc;
 use tokio::sync::RwLock;
 
 /// Trait for event storage

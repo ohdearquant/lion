@@ -2,10 +2,8 @@
 
 #[cfg(test)]
 pub mod saga_tests {
-    use crate::model::Priority;
     use crate::patterns::saga::{
-        SagaDefinition, SagaError, SagaOrchestrator, SagaOrchestratorConfig, SagaStatus, SagaStep,
-        SagaStepDefinition, StepStatus,
+        SagaDefinition, SagaOrchestrator, SagaOrchestratorConfig, SagaStatus, SagaStepDefinition,
     };
     use std::sync::Arc;
     use std::time::Duration;
@@ -24,11 +22,16 @@ pub mod saga_tests {
             "inventory",
             "reserve",
             Arc::new(|_step| {
-                Box::pin(async move {
+                Box::new(Box::pin(async move {
                     // Simple mock handler that always succeeds
                     tokio::time::sleep(Duration::from_millis(50)).await;
                     Ok(serde_json::json!({"reservation_id": "123"}))
-                })
+                }))
+                    as Box<
+                        dyn std::future::Future<Output = Result<serde_json::Value, String>>
+                            + Send
+                            + Unpin,
+                    >
             }),
         )
         .await;
@@ -37,11 +40,16 @@ pub mod saga_tests {
             "payment",
             "process",
             Arc::new(|_step| {
-                Box::pin(async move {
+                Box::new(Box::pin(async move {
                     // Simple mock handler that takes longer to process
                     tokio::time::sleep(Duration::from_millis(150)).await;
                     Ok(serde_json::json!({"payment_id": "456"}))
-                })
+                }))
+                    as Box<
+                        dyn std::future::Future<Output = Result<serde_json::Value, String>>
+                            + Send
+                            + Unpin,
+                    >
             }),
         )
         .await;
@@ -50,10 +58,11 @@ pub mod saga_tests {
             "inventory",
             "cancel_reservation",
             Arc::new(|_step| {
-                Box::pin(async move {
+                Box::new(Box::pin(async move {
                     // Simple mock compensation that always succeeds
                     Ok(())
-                })
+                }))
+                    as Box<dyn std::future::Future<Output = Result<(), String>> + Send + Unpin>
             }),
         )
         .await;
@@ -126,10 +135,15 @@ pub mod saga_tests {
             "inventory",
             "reserve",
             Arc::new(|_step| {
-                Box::pin(async move {
+                Box::new(Box::pin(async move {
                     // This step succeeds
                     Ok(serde_json::json!({"reservation_id": "123"}))
-                })
+                }))
+                    as Box<
+                        dyn std::future::Future<Output = Result<serde_json::Value, String>>
+                            + Send
+                            + Unpin,
+                    >
             }),
         )
         .await;
@@ -138,10 +152,15 @@ pub mod saga_tests {
             "payment",
             "process",
             Arc::new(|_step| {
-                Box::pin(async move {
+                Box::new(Box::pin(async move {
                     // This step fails
                     Err("Payment declined".to_string())
-                })
+                }))
+                    as Box<
+                        dyn std::future::Future<Output = Result<serde_json::Value, String>>
+                            + Send
+                            + Unpin,
+                    >
             }),
         )
         .await;
@@ -150,10 +169,11 @@ pub mod saga_tests {
             "inventory",
             "cancel_reservation",
             Arc::new(|_step| {
-                Box::pin(async move {
+                Box::new(Box::pin(async move {
                     // Compensation also fails
                     Err("Failed to cancel reservation".to_string())
-                })
+                }))
+                    as Box<dyn std::future::Future<Output = Result<(), String>> + Send + Unpin>
             }),
         )
         .await;
@@ -219,7 +239,6 @@ pub mod saga_tests {
 pub mod event_tests {
     use crate::patterns::event::{
         DeliverySemantic, Event, EventAck, EventBroker, EventBrokerConfig, EventStatus,
-        InMemoryEventStore,
     };
     use std::sync::Arc;
     use std::time::Duration;
@@ -311,7 +330,7 @@ pub mod event_tests {
 
         // Publish many events to trigger backpressure
         let mut success_count = 0;
-        let mut failure_count = 0;
+        let mut _failure_count = 0;
 
         for i in 0..20 {
             let event = Event::new(
@@ -321,7 +340,7 @@ pub mod event_tests {
 
             match broker.publish(event).await {
                 Ok(_) => success_count += 1,
-                Err(_) => failure_count += 1,
+                Err(_) => _failure_count += 1,
             }
         }
 
