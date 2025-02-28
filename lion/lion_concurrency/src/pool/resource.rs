@@ -479,7 +479,6 @@ impl<R: Resource> ResourcePool<R> {
                     continue;
                 }
             }
-
             // Move to the next resource
             i += 1;
         }

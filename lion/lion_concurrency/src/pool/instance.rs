@@ -258,7 +258,7 @@ impl<T: Poolable> InstancePool<T> {
         // Check if the pool is full
         if instances.len() >= self.config.max_instances {
             // Pool is full, discard the oldest instance
-            if let Some(_) = instances.pop_front() {
+            if instances.pop_front().is_some() {
                 trace!("Discarding oldest instance to make room");
                 stats.total_recycled += 1;
             }

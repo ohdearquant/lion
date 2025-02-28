@@ -206,7 +206,6 @@ impl MessageCapability {
 fn topic_matches(pattern: &str, topic: &str) -> bool {
     // If pattern ends with #, it's a prefix match
     if let Some(prefix) = pattern.strip_suffix("#") {
-        let prefix = prefix;
         return topic.starts_with(prefix);
     }
 

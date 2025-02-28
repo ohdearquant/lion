@@ -311,7 +311,7 @@ where
     }
 }
 
-impl<'a, T> Drop for TrackedMutexGuard<'a, T> {
+impl<T> Drop for TrackedMutexGuard<'_, T> {
     fn drop(&mut self) {
         // Calculate how long the lock was held
         let hold_time = self.acquired_at.elapsed();
@@ -345,17 +345,17 @@ impl<'a, T> Drop for TrackedMutexGuard<'a, T> {
     }
 }
 
-impl<'a, T> std::ops::Deref for TrackedMutexGuard<'a, T> {
+impl<T> std::ops::Deref for TrackedMutexGuard<'_, T> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
-        &*self.guard
+        &self.guard
     }
 }
 
-impl<'a, T> std::ops::DerefMut for TrackedMutexGuard<'a, T> {
+impl<T> std::ops::DerefMut for TrackedMutexGuard<'_, T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut *self.guard
+        &mut self.guard
     }
 }
 
@@ -776,7 +776,7 @@ where
     }
 }
 
-impl<'a, T> Drop for TrackedRwLockReadGuard<'a, T> {
+impl<T> Drop for TrackedRwLockReadGuard<'_, T> {
     fn drop(&mut self) {
         // Calculate how long the lock was held
         let hold_time = self.acquired_at.elapsed();
@@ -810,15 +810,15 @@ impl<'a, T> Drop for TrackedRwLockReadGuard<'a, T> {
     }
 }
 
-impl<'a, T> std::ops::Deref for TrackedRwLockReadGuard<'a, T> {
+impl<T> std::ops::Deref for TrackedRwLockReadGuard<'_, T> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
-        &*self.guard
+        &self.guard
     }
 }
 
-impl<'a, T> Drop for TrackedRwLockWriteGuard<'a, T> {
+impl<T> Drop for TrackedRwLockWriteGuard<'_, T> {
     fn drop(&mut self) {
         // Calculate how long the lock was held
         let hold_time = self.acquired_at.elapsed();
@@ -852,17 +852,17 @@ impl<'a, T> Drop for TrackedRwLockWriteGuard<'a, T> {
     }
 }
 
-impl<'a, T> std::ops::Deref for TrackedRwLockWriteGuard<'a, T> {
+impl<T> std::ops::Deref for TrackedRwLockWriteGuard<'_, T> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
-        &*self.guard
+        &self.guard
     }
 }
 
-impl<'a, T> std::ops::DerefMut for TrackedRwLockWriteGuard<'a, T> {
+impl<T> std::ops::DerefMut for TrackedRwLockWriteGuard<'_, T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut *self.guard
+        &mut self.guard
     }
 }
 

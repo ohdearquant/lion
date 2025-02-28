@@ -115,7 +115,7 @@ impl Capability for CompositeCapability {
 
             constraint_groups
                 .entry(capability_type)
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push(constraint.clone());
         }
 

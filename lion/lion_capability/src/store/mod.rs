@@ -5,6 +5,9 @@ use lion_core::id::{CapabilityId, PluginId};
 
 use crate::model::{AccessRequest, Capability, CapabilityError};
 
+/// Type alias for a list of capabilities with their IDs
+pub type CapabilityList = Vec<(CapabilityId, Box<dyn Capability>)>;
+
 /// A store of capabilities, used to track which capabilities are assigned to each plugin
 pub trait CapabilityStore: Send + Sync {
     /// Add a capability to a plugin, returning the generated capability ID
@@ -37,10 +40,7 @@ pub trait CapabilityStore: Send + Sync {
     ) -> Result<(), CapabilityError>;
 
     /// List all capabilities for a plugin
-    fn list_capabilities(
-        &self,
-        plugin_id: &PluginId,
-    ) -> Result<Vec<(CapabilityId, Box<dyn Capability>)>, CapabilityError>;
+    fn list_capabilities(&self, plugin_id: &PluginId) -> Result<CapabilityList, CapabilityError>;
 
     /// Clear all capabilities for a plugin
     fn clear_plugin_capabilities(&self, plugin_id: &PluginId) -> Result<(), CapabilityError>;
