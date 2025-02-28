@@ -55,11 +55,20 @@ impl ShutdownHandle {
 
     /// Wait for shutdown signal
     pub async fn wait_for_shutdown(&mut self) -> Result<()> {
-        self.receiver
-            .lock()
-            .recv()
-            .await
-            .map_err(|e| anyhow::anyhow!("Shutdown signal error: {}", e))
+        // Get our own copy of the receiver before awaiting
+        // This is necessary because we can't hold the mutex lock across an await point
+        // as it would make the future not Send
+        let mut local_rx = {
+            // Create a new receiver by cloning from the existing one
+            // The lock is dropped at the end of this block
+            let mut guard = self.receiver.lock();
+            let rx = guard.resubscribe();
+            // Return the newly created receiver
+            rx
+        };
+        
+        // Now await on the local receiver without holding the lock
+        local_rx.recv().await.map_err(|e| anyhow::anyhow!("Shutdown signal error: {}", e))
     }
 
     /// Signal that shutdown is complete
