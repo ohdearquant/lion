@@ -594,7 +594,7 @@ impl Config {
     /// # Examples
     ///
     /// ```
-    /// use lion_core::utils::Config;
+    /// use lion_core::utils::config::Config;
     ///
     /// let mut config = Config::new_map();
     /// config.set("a.b.c", 42).expect("Failed to set value");

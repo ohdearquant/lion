@@ -366,7 +366,6 @@ fn calculate_sha256(data: &[u8]) -> String {
 mod tests {
     use super::*;
     use crate::model::{Edge, EdgeId, Node, NodeId};
-    use tempfile::TempDir;
 
     // Helper to create a simple test workflow
     fn create_test_workflow() -> WorkflowDefinition {

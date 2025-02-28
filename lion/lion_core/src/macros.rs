@@ -152,15 +152,15 @@ macro_rules! with_capability {
 /// # Examples
 ///
 /// ```
-/// use lion_core::{wrap_err, error::PluginError};
+/// use lion_core::{wrap_err, error::Error};
 /// use std::io;
 ///
 /// fn load_plugin(path: &str) -> lion_core::Result<()> {
 ///     let result = std::fs::read(path);
 ///     
-///     // This will log the error and wrap it in a PluginError
+///     // This will log the error and wrap it in an Error
 ///     let content = wrap_err!(result,
-///                           PluginError::LoadFailed(format!("Failed to read plugin file: {}", path)));
+///                           Error::Io(format!("Failed to read plugin file: {}", path)));
 ///     
 ///     // Continue with the operation if successful
 ///     Ok(())

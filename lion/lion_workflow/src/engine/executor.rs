@@ -735,19 +735,20 @@ mod tests {
         let _ = state_manager.schedule_next_nodes(instance_id).await;
 
         // Check scheduler status
-        let running_count = scheduler.get_running_task_count().await;
+        let _running_count = scheduler.get_running_task_count().await;
 
         // Sleep a bit to allow tasks to be picked up
         tokio::time::sleep(Duration::from_millis(20)).await;
     }
 
+    #[allow(unreachable_code)]
     #[tokio::test]
     async fn test_executor_basic_workflow() {
         // Create dependencies
 
         // SKIP: This test hangs in CI environments - skip it to prevent CI failures
         println!("SKIPPING test_executor_basic_workflow - test is known to hang");
-        return;
+        return; //
         let scheduler = Arc::new(WorkflowScheduler::new(SchedulerConfig::default()));
         let state_manager = Arc::new(crate::state::StateMachineManager::<MemoryStorage>::new());
 
@@ -939,13 +940,14 @@ mod tests {
         }
     }
 
+    #[allow(unreachable_code)]
     #[tokio::test]
     async fn test_executor_node_failure() {
         // Create dependencies
 
         // SKIP: This test hangs in CI environments - skip it to prevent CI failures
         println!("SKIPPING test_executor_node_failure - test is known to hang");
-        return;
+        return; //
         let scheduler = Arc::new(WorkflowScheduler::new(SchedulerConfig::default()));
 
         println!("Setting up test_executor_node_failure");

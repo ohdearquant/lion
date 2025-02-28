@@ -115,7 +115,7 @@ mod tests {
         let manager = Arc::new(CapabilityManager::new().unwrap());
 
         // Grant some capabilities
-        let cap_id = manager
+        let _cap_id = manager
             .grant_capability(
                 "subject1".to_string(),
                 "object1".to_string(),
@@ -152,7 +152,7 @@ mod tests {
         let manager = Arc::new(CapabilityManager::new().unwrap());
 
         // Grant some capabilities
-        let cap_id = manager
+        let _cap_id = manager
             .grant_capability(
                 "subject1".to_string(),
                 "object1".to_string(),
@@ -191,7 +191,7 @@ mod tests {
         let manager = Arc::new(CapabilityManager::new().unwrap());
 
         // Grant some capabilities
-        let cap_id = manager
+        let _cap_id = manager
             .grant_capability(
                 "subject1".to_string(),
                 "object1".to_string(),

@@ -327,7 +327,7 @@ mod tests {
         let manager = CapabilityManager::new().unwrap();
 
         // Grant a capability
-        let cap_id = manager
+        let _cap_id = manager
             .grant_capability(
                 "subject1".to_string(),
                 "object1".to_string(),
@@ -382,7 +382,7 @@ mod tests {
             .unwrap();
 
         // Derive a child capability with only read
-        let child_id = manager
+        let _child_id = manager
             .attenuate_capability(
                 parent_id.clone(),
                 "subject2".to_string(),

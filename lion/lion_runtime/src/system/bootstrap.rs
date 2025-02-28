@@ -241,7 +241,7 @@ mod tests {
 
         // Set up a component that will cleanly shut down
         tokio::task::spawn({
-            let mut handle = handle.clone();
+            let handle = handle.clone();
             async move {
                 handle.shutdown_complete();
             }

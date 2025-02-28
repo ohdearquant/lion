@@ -349,9 +349,6 @@ impl WorkflowManager {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use lion_workflow::model::definition::WorkflowBuilder;
-    use lion_workflow::model::node::NodeId;
 
     #[tokio::test]
     async fn test_workflow_manager() {
