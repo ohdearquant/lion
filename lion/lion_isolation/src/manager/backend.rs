@@ -341,7 +341,7 @@ mod tests {
     use crate::resource::DefaultResourceLimiter;
 
     fn create_test_backend() -> DefaultIsolationBackend {
-        let engine = Arc::new(WasmEngine::default().unwrap());
+        let engine = Arc::new(WasmEngine::create_default().unwrap());
         let resource_limiter = Arc::new(DefaultResourceLimiter::default());
 
         DefaultIsolationBackend::new(engine, resource_limiter).unwrap()

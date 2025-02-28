@@ -703,7 +703,7 @@ mod tests {
         cap_interface.set_capability_checker(Box::new(checker));
 
         // Create a memory and set it
-        let engine = crate::wasm::WasmEngine::default().unwrap();
+        let engine = crate::wasm::WasmEngine::create_default().unwrap();
         let mut store =
             wasmtime::Store::new(engine.engine(), HostCallContext::new("test".to_string()));
         let memory = engine.create_memory(&mut store, 1, None).unwrap();

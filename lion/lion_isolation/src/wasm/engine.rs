@@ -77,7 +77,7 @@ impl WasmEngine {
     /// # Returns
     ///
     /// A new WebAssembly engine with a default resource limiter.
-    pub fn default() -> Result<Self> {
+    pub fn create_default() -> Result<Self> {
         let resource_limiter = Arc::new(crate::resource::DefaultResourceLimiter::default());
         Self::new(resource_limiter)
     }

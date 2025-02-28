@@ -176,7 +176,7 @@ mod tests {
     #[test]
     fn test_read_write_memory() {
         // Create an engine
-        let engine = WasmEngine::default().unwrap();
+        let engine = WasmEngine::create_default().unwrap();
 
         // Create a host context
         let host_context = HostCallContext::new("test".to_string());
@@ -205,7 +205,7 @@ mod tests {
     #[test]
     fn test_read_write_string() {
         // Create an engine
-        let engine = WasmEngine::default().unwrap();
+        let engine = WasmEngine::create_default().unwrap();
 
         // Create a host context
         let host_context = HostCallContext::new("test".to_string());
@@ -231,7 +231,7 @@ mod tests {
     #[test]
     fn test_read_null_terminated_string() {
         // Create an engine
-        let engine = WasmEngine::default().unwrap();
+        let engine = WasmEngine::create_default().unwrap();
 
         // Create a host context
         let host_context = HostCallContext::new("test".to_string());
