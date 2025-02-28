@@ -374,10 +374,13 @@ mod tests {
         // Create a temporary directory for checkpoints
         let temp_dir = TempDir::new().unwrap();
         let base_dir = temp_dir.path().to_path_buf();
-        std::fs::create_dir_all(&base_dir).unwrap();
+
+        // Create a dedicated checkpoints directory inside temp_dir
+        let checkpoints_dir = base_dir.join("checkpoints");
+        std::fs::create_dir_all(&checkpoints_dir).unwrap();
 
         let manager: CheckpointManager<crate::state::storage::FileStorage> =
-            CheckpointManager::with_file_storage(base_dir, "1.0.0").unwrap();
+            CheckpointManager::with_file_storage(checkpoints_dir, "1.0.0").unwrap();
 
         // Create a test workflow
         let workflow = create_test_workflow();
@@ -401,10 +404,13 @@ mod tests {
         // Create a temporary directory for checkpoints
         let temp_dir = TempDir::new().unwrap();
         let base_dir = temp_dir.path().to_path_buf();
-        std::fs::create_dir_all(&base_dir).unwrap();
+
+        // Create a dedicated checkpoints directory inside temp_dir
+        let checkpoints_dir = base_dir.join("checkpoints");
+        std::fs::create_dir_all(&checkpoints_dir).unwrap();
 
         let manager: CheckpointManager<crate::state::storage::FileStorage> =
-            CheckpointManager::with_file_storage(base_dir, "1.0.0").unwrap();
+            CheckpointManager::with_file_storage(checkpoints_dir, "1.0.0").unwrap();
 
         // Create a test workflow
         let workflow = create_test_workflow();
@@ -429,10 +435,13 @@ mod tests {
         // Create a temporary directory for checkpoints
         let temp_dir = TempDir::new().unwrap();
         let base_dir = temp_dir.path().to_path_buf();
-        std::fs::create_dir_all(&base_dir).unwrap();
+
+        // Create a dedicated checkpoints directory inside temp_dir
+        let checkpoints_dir = base_dir.join("checkpoints");
+        std::fs::create_dir_all(&checkpoints_dir).unwrap();
 
         let manager: CheckpointManager<crate::state::storage::FileStorage> =
-            CheckpointManager::with_file_storage(base_dir, "1.0.0").unwrap();
+            CheckpointManager::with_file_storage(checkpoints_dir, "1.0.0").unwrap();
 
         // Create a test workflow
         let mut workflow = create_test_workflow();
@@ -462,10 +471,13 @@ mod tests {
         // Create a temporary directory for checkpoints
         let temp_dir = TempDir::new().unwrap();
         let base_dir = temp_dir.path().to_path_buf();
-        std::fs::create_dir_all(&base_dir).unwrap();
+
+        // Create a dedicated checkpoints directory inside temp_dir
+        let checkpoints_dir = base_dir.join("checkpoints");
+        std::fs::create_dir_all(&checkpoints_dir).unwrap();
 
         let manager: CheckpointManager<crate::state::storage::FileStorage> =
-            CheckpointManager::with_file_storage(base_dir, "1.0.0").unwrap();
+            CheckpointManager::with_file_storage(checkpoints_dir, "1.0.0").unwrap();
 
         // Create a test workflow
         let workflow = create_test_workflow();

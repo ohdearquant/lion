@@ -5,6 +5,7 @@ pub mod saga_tests {
     use crate::patterns::saga::{
         SagaDefinition, SagaOrchestrator, SagaOrchestratorConfig, SagaStatus, SagaStepDefinition,
     };
+    use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::Arc;
     use std::time::Duration;
     use tokio::time::sleep;
@@ -24,7 +25,8 @@ pub mod saga_tests {
             Arc::new(|_step| {
                 Box::new(Box::pin(async move {
                     // Simple mock handler that always succeeds
-                    tokio::time::sleep(Duration::from_millis(50)).await;
+                    println!("Executing inventory reserve handler");
+                    tokio::time::sleep(Duration::from_millis(200)).await;
                     Ok(serde_json::json!({"reservation_id": "123"}))
                 }))
                     as Box<
@@ -36,13 +38,19 @@ pub mod saga_tests {
         )
         .await;
 
+        // Shared signal to indicate that the first step is complete
+        // Use a static atomic for thread-safe signaling
+        static FIRST_STEP_COMPLETE: AtomicBool = AtomicBool::new(false);
+        FIRST_STEP_COMPLETE.store(false, Ordering::SeqCst);
+
         orch.register_step_handler(
             "payment",
             "process",
             Arc::new(|_step| {
-                Box::new(Box::pin(async move {
-                    // Simple mock handler that takes longer to process
-                    tokio::time::sleep(Duration::from_millis(150)).await;
+                Box::new(Box::pin(async {
+                    // Signal that we've reached the second step
+                    FIRST_STEP_COMPLETE.store(true, Ordering::SeqCst);
+                    tokio::time::sleep(Duration::from_millis(1000)).await; // Long enough to abort
                     Ok(serde_json::json!({"payment_id": "456"}))
                 }))
                     as Box<
@@ -59,7 +67,9 @@ pub mod saga_tests {
             "cancel_reservation",
             Arc::new(|_step| {
                 Box::new(Box::pin(async move {
-                    // Simple mock compensation that always succeeds
+                    // Simple mock compensation with confirmation
+                    println!("Executing compensation handler for inventory");
+                    tokio::time::sleep(Duration::from_millis(100)).await;
                     Ok(())
                 }))
                     as Box<dyn std::future::Future<Output = Result<(), String>> + Send + Unpin>
@@ -96,16 +106,32 @@ pub mod saga_tests {
         saga_def.add_step(step2).unwrap();
 
         // Create and start a saga
+        println!("Creating saga");
         let saga_id = orch.create_saga(saga_def).await.unwrap();
+        println!("Starting saga: {}", saga_id);
         orch.start_saga(&saga_id).await.unwrap();
 
-        // Wait a bit for the first step to complete
-        sleep(Duration::from_millis(200)).await;
+        // Wait for first step to complete and second step to start
+        println!("Waiting for step1 to complete and step2 to start");
+        let mut second_step_started = false;
+        for _ in 0..20 {
+            if FIRST_STEP_COMPLETE.load(Ordering::SeqCst) {
+                second_step_started = true;
+                break;
+            }
+            sleep(Duration::from_millis(100)).await;
+        }
 
-        // Abort the saga midway (after step1 completes but before step2 finishes)
+        assert!(second_step_started, "Step2 (payment) did not start in time");
+        println!("Step1 completed, step2 started");
+
+        // Now abort the saga while step2 is still running
+        println!("Aborting saga");
         orch.abort_saga(&saga_id, "Testing abort").await.unwrap();
 
-        // Wait for saga to complete with abort or compensation
+        println!("Waiting for saga to complete abort/compensation");
+
+        // Wait for saga to complete abortion or compensation
         let mut saga_aborted = false;
         let timeout = Duration::from_secs(3);
         let start = std::time::Instant::now();
@@ -301,8 +327,8 @@ pub mod event_tests {
             track_processed_events: true,
             delivery_semantic: DeliverySemantic::AtLeastOnce,
             max_retries: 3,
-            ack_timeout: Duration::from_millis(100),
-            retry_delay_ms: Some(50), // Make retries happen quickly for the test
+            ack_timeout: Duration::from_millis(200),
+            retry_delay_ms: Some(100), // Make retries happen quickly but not too quickly
             ..Default::default()
         };
 
@@ -329,59 +355,62 @@ pub mod event_tests {
         // Send failure acknowledgment to trigger retry
         let ack = EventAck::failure(&event_id, "test_subscriber", "Test failure");
         ack_tx.send(ack).await.unwrap();
+        println!("Sent failure acknowledgment");
 
-        // Function to check if an event is in the retry queue
-        let is_in_retry_queue = || async { broker.get_retry_queue_size().await > 0 };
-
-        // Wait for the event to appear in the retry queue with timeout
-        let mut retry_success = false;
+        // Wait for the event to be added to the retry queue
         let start = std::time::Instant::now();
-        let timeout = Duration::from_secs(3);
+        let timeout = Duration::from_secs(2);
 
-        // Wait a bit before checking retry queue to allow the timeout to happen
-        tokio::time::sleep(Duration::from_millis(200)).await;
-
-        while !retry_success {
-            if is_in_retry_queue().await {
-                retry_success = true;
+        let mut in_retry_queue = false;
+        while start.elapsed() < timeout {
+            // Check if event is in retry queue
+            if broker.get_retry_queue_size().await > 0 {
+                in_retry_queue = true;
+                println!("Event was added to retry queue");
                 break;
             }
-
             if start.elapsed() > timeout {
-                // Force processing of retry acknowledgment
-                broker.process_retry_queue().await.unwrap();
                 break;
             }
+            tokio::time::sleep(Duration::from_millis(50)).await;
         }
 
-        assert!(
-            retry_success,
-            "Event was not added to retry queue after multiple checks"
-        );
+        assert!(in_retry_queue, "Event was not added to retry queue");
 
         // Process the retry queue
-        broker.process_retry_queue().await.unwrap();
+        let processed = broker.process_retry_queue().await.unwrap();
+        println!("Processed {} events from retry queue", processed);
+        assert!(processed > 0, "No events were processed from retry queue");
 
         // Receive the retried event
         match event_rx.recv().await {
             Some(retried) => {
                 assert_eq!(retried.id, event_id);
                 assert_eq!(retried.retry_count, 1);
+                println!(
+                    "Received retried event with retry_count={}",
+                    retried.retry_count
+                );
 
                 // Send success acknowledgment
                 let ack = EventAck::success(&event_id, "test_subscriber");
                 ack_tx.send(ack).await.unwrap();
+                println!("Sent success acknowledgment");
             }
             None => {
                 panic!("Expected to receive retried event, but got none");
             }
         }
 
-        // Wait for processing
-        sleep(Duration::from_millis(200)).await;
-
-        // Check if event was marked as processed
-        assert!(broker.is_event_processed(&event_id).await);
+        // Poll for event to be processed with a longer timeout
+        for _ in 0..30 {
+            if broker.is_event_processed(&event_id).await {
+                println!("Event processed successfully after retry");
+                return; // Test passes
+            }
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+        panic!("Event was not processed after retry and acknowledgment");
     }
 
     #[tokio::test]

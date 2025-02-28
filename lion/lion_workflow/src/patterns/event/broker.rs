@@ -494,10 +494,13 @@ mod tests {
     async fn test_event_broker_publish_subscribe() {
         let config = EventBrokerConfig {
             delivery_semantic: DeliverySemantic::AtLeastOnce,
-            track_processed_events: true, // Ensure processed events are tracked
+            track_processed_events: true,
             retry_delay_ms: Some(100),
+            ack_timeout: Duration::from_millis(500), // Increased timeout
             ..Default::default()
         };
+
+        println!("Creating broker");
 
         let broker = EventBroker::new(config);
 
@@ -507,14 +510,16 @@ mod tests {
             .await
             .unwrap();
 
+        println!("Subscription created");
+
         // Create and publish an event
         let event = Event::new("test_event", serde_json::json!({"data": "test"}));
         let event_id = event.id.clone();
 
-        // Make sure event requires acknowledgment
+        // Make sure event explicitly requires acknowledgment
         let mut event = event;
         event.requires_ack = true;
-
+        println!("Publishing event: {}", event_id);
         let status = broker.publish(event).await.unwrap();
         assert_eq!(status, EventStatus::Sent);
 
@@ -522,32 +527,21 @@ mod tests {
         let received = event_rx.recv().await.unwrap();
         assert_eq!(received.id, event_id);
 
-        // Send acknowledgment
+        // Send acknowledgment and ensure it's received
         let ack = EventAck::success(&event_id, "test_subscriber");
+        println!("Sending acknowledgment for event: {}", event_id);
         ack_tx.send(ack).await.unwrap();
 
-        // Wait for processing with a timeout
-        let start = std::time::Instant::now();
-        let timeout = Duration::from_secs(3);
-
-        let mut processed = false;
-        while !processed {
-            processed = broker.is_event_processed(&event_id).await;
-
-            if processed {
-                break; // Event was processed successfully
+        // Poll with a longer timeout to ensure acknowledgment is processed
+        for _ in 0..30 {
+            if broker.is_event_processed(&event_id).await {
+                println!("Event processed successfully");
+                return; // Test passes
             }
-
-            if start.elapsed() > timeout {
-                break; // Timeout reached
-            }
-
-            tokio::time::sleep(Duration::from_millis(100)).await;
+            tokio::time::sleep(Duration::from_millis(50)).await;
         }
-
-        assert!(processed, "Event was not processed after waiting");
+        panic!("Event was not processed after waiting");
     }
-
     #[tokio::test]
     async fn test_event_broker_retry_queue() {
         // Create a broker with retry capability

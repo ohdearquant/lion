@@ -599,6 +599,8 @@ where
             task_ids.push(task_id);
         }
 
+        println!("Scheduled {} ready nodes for execution", task_ids.len());
+
         Ok(task_ids)
     }
 
@@ -742,6 +744,8 @@ mod tests {
             .register_node_handler(
                 "start",
                 Arc::new(move |ctx| {
+                    println!("Start handler registered");
+
                     Box::pin(async move {
                         if let Some(node_id) = ctx.current_node_id.clone() {
                             println!("Start node handler executing: {}", node_id);
@@ -763,6 +767,8 @@ mod tests {
             .register_node_handler(
                 "process",
                 Arc::new(move |ctx| {
+                    println!("Process handler registered");
+
                     Box::pin(async move {
                         if let Some(node_id) = ctx.current_node_id.clone() {
                             println!("Process node handler executing: {}", node_id);
@@ -788,6 +794,8 @@ mod tests {
             .register_node_handler(
                 "end",
                 Arc::new(move |ctx| {
+                    println!("End handler registered");
+
                     Box::pin(async move {
                         if let Some(node_id) = ctx.current_node_id.clone() {
                             println!("End node handler executing: {}", node_id);
@@ -807,12 +815,14 @@ mod tests {
 
         // Start the executor
         executor.start().await.unwrap();
+        println!("Executor started");
 
         // Execute a workflow
         let workflow = create_test_workflow();
+        println!("Workflow created, executing...");
         let instance_id = executor.execute_workflow(workflow).await.unwrap();
+        println!("Workflow instance created: {}", instance_id);
 
-        // Wait for workflow to complete
         let mut completed = false;
         for i in 0..50 {
             // Increase timeout attempts
@@ -867,6 +877,9 @@ mod tests {
     async fn test_executor_node_failure() {
         // Create dependencies
         let scheduler = Arc::new(WorkflowScheduler::new(SchedulerConfig::default()));
+
+        println!("Setting up test_executor_node_failure");
+
         let state_manager = Arc::new(crate::state::StateMachineManager::<MemoryStorage>::new());
 
         // Create an executor config with shorter timeouts for testing
