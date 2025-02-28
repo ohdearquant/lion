@@ -236,7 +236,7 @@ impl PartialOrd for PriorityTask {
 impl Ord for PriorityTask {
     fn cmp(&self, other: &Self) -> Ordering {
         // Higher priority first
-        let priority_ord = other.0.priority.cmp(&self.0.priority);
+        let priority_ord = self.0.priority.cmp(&other.0.priority);
 
         match priority_ord {
             Ordering::Equal => {

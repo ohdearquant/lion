@@ -395,7 +395,14 @@ impl SagaOrchestrator {
                         if let Some(task) = orch.dequeue_abort_task().await {
                             if let Some(saga_lock) = orch.get_saga(&task.saga_id).await {
                                 let mut saga = saga_lock.write().await;
-                                if saga.status == SagaStatus::Running || saga.status == SagaStatus::Created {
+                                // Abort can happen in any active state - Running, Created,
+                                // or even during normal processing as long as it's not
+                                // already in a terminal state like Compensated or Failed
+                                if saga.status != SagaStatus::Completed
+                                   && saga.status != SagaStatus::Compensated
+                                   && saga.status != SagaStatus::Failed
+                                   && saga.status != SagaStatus::Aborted
+                                   && saga.status != SagaStatus::FailedWithErrors {
                                     saga.mark_aborted(&task.reason);
                                     drop(saga);
 

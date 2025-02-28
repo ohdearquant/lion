@@ -338,15 +338,18 @@ pub mod event_tests {
         let start = std::time::Instant::now();
         let timeout = Duration::from_secs(3);
 
-        while !retry_success {
-            sleep(Duration::from_millis(100)).await;
+        // Wait a bit before checking retry queue to allow the timeout to happen
+        tokio::time::sleep(Duration::from_millis(200)).await;
 
+        while !retry_success {
             if is_in_retry_queue().await {
                 retry_success = true;
                 break;
             }
 
             if start.elapsed() > timeout {
+                // Force processing of retry acknowledgment
+                broker.process_retry_queue().await.unwrap();
                 break;
             }
         }

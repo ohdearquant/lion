@@ -205,7 +205,7 @@ impl EventBroker {
         let ack_result = timeout(ack_timeout, self.wait_for_acknowledgment(&event_id)).await;
 
         match ack_result {
-            Ok(Ok(ack)) => {
+            Ok(Ok(ack)) if ack.event_id == event_id => {
                 // Process acknowledgment
                 match ack.status {
                     EventStatus::Acknowledged => {
@@ -253,6 +253,10 @@ impl EventBroker {
                         self.remove_in_flight(&event_id).await;
                     }
                 }
+            }
+            Ok(Ok(_)) => {
+                // Received an ack for a different event, ignore and continue
+                log::debug!("Received acknowledgment for different event, ignoring");
             }
             Ok(Err(e)) => {
                 // Error waiting for ack
@@ -452,18 +456,27 @@ impl EventBroker {
 
 impl Clone for EventBroker {
     fn clone(&self) -> Self {
+        // Create new RwLocks with cloned data
+        let subscriptions = {
+            let guard = futures::executor::block_on(self.subscriptions.read());
+            RwLock::new(guard.clone())
+        };
+
+        let in_flight = {
+            let guard = futures::executor::block_on(self.in_flight.read());
+            RwLock::new(guard.clone())
+        };
+
+        let processed_events = {
+            let guard = futures::executor::block_on(self.processed_events.read());
+            RwLock::new(guard.clone())
+        };
+
         EventBroker {
-            // Use Arc::clone to avoid blocking reads on RwLock
             config: Arc::clone(&self.config),
-
-            // Create new empty RwLocks for the rest
-            // This avoids blocking_read() while still making a functional clone
-            // In tests, we create fresh EventBroker instances, so this is fine
-            subscriptions: RwLock::new(HashMap::new()),
-            in_flight: RwLock::new(HashMap::new()),
-            processed_events: RwLock::new(HashSet::new()),
-
-            // These can be cloned normally
+            subscriptions,
+            in_flight,
+            processed_events,
             event_store: self.event_store.clone(),
             retry_manager: self.retry_manager.clone(),
         }

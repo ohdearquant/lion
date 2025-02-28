@@ -374,6 +374,7 @@ mod tests {
         // Create a temporary directory for checkpoints
         let temp_dir = TempDir::new().unwrap();
         let base_dir = temp_dir.path().to_path_buf();
+        std::fs::create_dir_all(&base_dir).unwrap();
 
         let manager: CheckpointManager<crate::state::storage::FileStorage> =
             CheckpointManager::with_file_storage(base_dir, "1.0.0").unwrap();
@@ -400,6 +401,7 @@ mod tests {
         // Create a temporary directory for checkpoints
         let temp_dir = TempDir::new().unwrap();
         let base_dir = temp_dir.path().to_path_buf();
+        std::fs::create_dir_all(&base_dir).unwrap();
 
         let manager: CheckpointManager<crate::state::storage::FileStorage> =
             CheckpointManager::with_file_storage(base_dir, "1.0.0").unwrap();
@@ -427,6 +429,7 @@ mod tests {
         // Create a temporary directory for checkpoints
         let temp_dir = TempDir::new().unwrap();
         let base_dir = temp_dir.path().to_path_buf();
+        std::fs::create_dir_all(&base_dir).unwrap();
 
         let manager: CheckpointManager<crate::state::storage::FileStorage> =
             CheckpointManager::with_file_storage(base_dir, "1.0.0").unwrap();
@@ -459,6 +462,7 @@ mod tests {
         // Create a temporary directory for checkpoints
         let temp_dir = TempDir::new().unwrap();
         let base_dir = temp_dir.path().to_path_buf();
+        std::fs::create_dir_all(&base_dir).unwrap();
 
         let manager: CheckpointManager<crate::state::storage::FileStorage> =
             CheckpointManager::with_file_storage(base_dir, "1.0.0").unwrap();

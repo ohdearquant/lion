@@ -427,10 +427,17 @@ where
 
                         // Update state machine
                         if let Err(e) = state_manager_clone
-                            .set_node_completed(&instance_id, &node_id, node_result.output.clone())
+                            .set_node_completed(&instance_id, &node_id, node_result.output)
                             .await
                         {
                             log::error!("Failed to mark node as completed: {:?}", e);
+                        } else {
+                            // Schedule next nodes immediately after completing this one
+                            if let Err(e) =
+                                state_manager_clone.schedule_next_nodes(&instance_id).await
+                            {
+                                log::error!("Failed to schedule next nodes: {:?}", e);
+                            }
                         }
                     }
                     Err(e) => {

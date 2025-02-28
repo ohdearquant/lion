@@ -585,6 +585,37 @@ impl<S: StorageBackend> StateMachineManager<S> {
         let mut state = state_lock.write().await;
         state.set_node_failed(node_id, error)
     }
+
+    /// Schedule next nodes for execution in a workflow instance
+    pub async fn schedule_next_nodes(
+        &self,
+        instance_id: &str,
+    ) -> Result<Vec<NodeId>, StateMachineError> {
+        // Get ready nodes from the workflow instance
+        let ready_nodes = self.get_ready_nodes(instance_id).await?;
+
+        // If there are ready nodes, mark them as ready for execution
+        let state_lock = match self.get_instance(instance_id).await {
+            Some(state) => state,
+            None => {
+                return Err(StateMachineError::Other(format!(
+                    "Instance not found: {}",
+                    instance_id
+                )))
+            }
+        };
+
+        let mut state = state_lock.write().await;
+
+        // Update status for each ready node
+        for node_id in &ready_nodes {
+            if let Some(status) = state.node_status.get_mut(node_id) {
+                *status = NodeStatus::Ready;
+            }
+        }
+
+        Ok(ready_nodes)
+    }
 }
 
 impl<S: StorageBackend> Default for StateMachineManager<S> {
