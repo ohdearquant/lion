@@ -38,6 +38,12 @@ impl TaskId {
     }
 }
 
+impl Default for TaskId {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl std::fmt::Display for TaskId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0)
@@ -60,11 +66,12 @@ pub enum TaskStatus {
 }
 
 /// Scheduling policy types
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum SchedulingPolicy {
     /// First in, first out
     FIFO,
     /// Strict priority-based (higher priority first)
+    #[default]
     Priority,
     /// Multi-level feedback queue (favor short tasks)
     MLFQ,
@@ -74,12 +81,6 @@ pub enum SchedulingPolicy {
     RoundRobin,
     /// Fair scheduling (balanced CPU time)
     Fair,
-}
-
-impl Default for SchedulingPolicy {
-    fn default() -> Self {
-        SchedulingPolicy::Priority
-    }
 }
 
 /// Task for execution
@@ -492,7 +493,7 @@ impl WorkflowScheduler {
             task_registry
                 .get(&task_id)
                 .cloned()
-                .ok_or_else(|| SchedulerError::TaskNotFound(task_id))?
+                .ok_or(SchedulerError::TaskNotFound(task_id))?
         };
 
         // Create a new task with updated status
@@ -542,7 +543,7 @@ impl WorkflowScheduler {
             task_registry
                 .get(&task_id)
                 .cloned()
-                .ok_or_else(|| SchedulerError::TaskNotFound(task_id))?
+                .ok_or(SchedulerError::TaskNotFound(task_id))?
         };
 
         // Create a new task with updated status
@@ -592,7 +593,7 @@ impl WorkflowScheduler {
             task_registry
                 .get(&task_id)
                 .cloned()
-                .ok_or_else(|| SchedulerError::TaskNotFound(task_id))?
+                .ok_or(SchedulerError::TaskNotFound(task_id))?
         };
 
         // Create a new task with updated status
@@ -642,7 +643,7 @@ impl WorkflowScheduler {
             task_registry
                 .get(&task_id)
                 .cloned()
-                .ok_or_else(|| SchedulerError::TaskNotFound(task_id))?
+                .ok_or(SchedulerError::TaskNotFound(task_id))?
         };
 
         // Create a new task with updated status

@@ -95,19 +95,14 @@ pub enum StepStatus {
 }
 
 /// Saga coordination strategy
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum SagaStrategy {
     /// Orchestration: central coordinator issues commands
+    #[default]
     Orchestration,
 
     /// Choreography: events trigger next steps
     Choreography,
-}
-
-impl Default for SagaStrategy {
-    fn default() -> Self {
-        SagaStrategy::Orchestration
-    }
 }
 
 /// Result of a saga step execution

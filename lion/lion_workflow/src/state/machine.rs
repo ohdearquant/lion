@@ -184,7 +184,7 @@ impl WorkflowState {
         // Update status
         self.node_status
             .insert(node_id.clone(), NodeStatus::Running);
-        self.ready_nodes.remove(&node_id);
+        self.ready_nodes.remove(node_id);
         self.updated_at = chrono::Utc::now();
 
         Ok(())
@@ -273,7 +273,7 @@ impl WorkflowState {
         // Update status and store error
         self.node_status.insert(node_id.clone(), NodeStatus::Failed);
         self.node_results.insert(node_id.clone(), error);
-        self.ready_nodes.remove(&node_id);
+        self.ready_nodes.remove(node_id);
         self.has_failed = true;
         self.updated_at = chrono::Utc::now();
 

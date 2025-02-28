@@ -132,7 +132,7 @@ impl SagaDefinition {
         // Check for cycles using DFS
         for step in &self.steps {
             if !visited.contains(&step.id)
-                && self.has_cycle_dfs(&step.id, &graph, &mut visited, &mut path)
+                && Self::has_cycle_dfs(&step.id, &graph, &mut visited, &mut path)
             {
                 return Err(SagaError::DefinitionError(
                     "Dependency cycle detected".to_string(),
@@ -145,7 +145,6 @@ impl SagaDefinition {
 
     // Helper for cycle detection
     fn has_cycle_dfs(
-        &self,
         step_id: &str,
         graph: &HashMap<String, Vec<String>>,
         visited: &mut HashSet<String>,
@@ -157,7 +156,7 @@ impl SagaDefinition {
         if let Some(deps) = graph.get(step_id) {
             for dep in deps {
                 if !visited.contains(dep) {
-                    if self.has_cycle_dfs(dep, graph, visited, path) {
+                    if Self::has_cycle_dfs(dep, graph, visited, path) {
                         return true;
                     }
                 } else if path.contains(dep) {
@@ -198,16 +197,12 @@ impl SagaDefinition {
         // Add edges (reversed because dependencies)
         for step in &self.steps {
             for dep in &step.dependencies {
-                graph
-                    .entry(dep.clone())
-                    .or_insert_with(Vec::new)
-                    .push(step.id.clone());
+                graph.entry(dep.clone()).or_default().push(step.id.clone());
             }
         }
 
         // Topological sort
-        while !zero_degree.is_empty() {
-            let step_id = zero_degree.pop().unwrap();
+        while let Some(step_id) = zero_degree.pop() {
             result.push(step_id.clone());
 
             if let Some(dependents) = graph.get(&step_id) {

@@ -9,8 +9,9 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 pub type NodeId = Id<Node>;
 
 /// Status of a workflow node
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Hash, Default)]
 pub enum NodeStatus {
+    #[default]
     /// Node is waiting for dependencies to complete
     Pending,
     /// Node is ready for execution (all dependencies met)
@@ -25,12 +26,6 @@ pub enum NodeStatus {
     Skipped,
     /// Node execution has been cancelled
     Cancelled,
-}
-
-impl Default for NodeStatus {
-    fn default() -> Self {
-        NodeStatus::Pending
-    }
 }
 
 impl std::fmt::Display for NodeStatus {
@@ -48,18 +43,15 @@ impl std::fmt::Display for NodeStatus {
 }
 
 /// Priority level for node execution
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, PartialOrd, Ord, Hash)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, PartialOrd, Ord, Hash, Default,
+)]
 pub enum Priority {
     Low = 0,
+    #[default]
     Normal = 1,
     High = 2,
     Critical = 3,
-}
-
-impl Default for Priority {
-    fn default() -> Self {
-        Priority::Normal
-    }
 }
 
 /// A node in the workflow graph

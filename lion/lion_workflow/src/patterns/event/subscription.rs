@@ -39,7 +39,7 @@ impl Clone for EventSubscription {
             event_type: self.event_type.clone(),
             subscriber_id: self.subscriber_id.clone(),
             created_at: self.created_at,
-            required_capability: self.required_capability.clone(),
+            required_capability: self.required_capability,
             sender: self.sender.clone(),
             ack_receiver: ack_rx,
         }
@@ -72,7 +72,7 @@ impl From<&EventSubscription> for SerializableSubscription {
             event_type: sub.event_type.clone(),
             subscriber_id: sub.subscriber_id.clone(),
             created_at: sub.created_at,
-            required_capability: sub.required_capability.clone(),
+            required_capability: sub.required_capability,
         }
     }
 }

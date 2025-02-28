@@ -148,7 +148,7 @@ impl<S: StorageBackend> CheckpointManager<S> {
 
         // Serialize the workflow
         let checkpoint_data =
-            serde_json::to_vec(workflow).map_err(|e| CheckpointError::SerializationError(e))?;
+            serde_json::to_vec(workflow).map_err(CheckpointError::SerializationError)?;
 
         // Calculate checksum
         let checksum = calculate_sha256(&checkpoint_data);
@@ -176,7 +176,7 @@ impl<S: StorageBackend> CheckpointManager<S> {
         // Store metadata
         let metadata_key = format!("{}.meta", checkpoint_id);
         let metadata_data =
-            serde_json::to_vec(&metadata).map_err(|e| CheckpointError::SerializationError(e))?;
+            serde_json::to_vec(&metadata).map_err(CheckpointError::SerializationError)?;
 
         self.storage
             .store(&metadata_key, &metadata_data)
@@ -245,8 +245,8 @@ impl<S: StorageBackend> CheckpointManager<S> {
             CheckpointError::StorageError(format!("Failed to load metadata: {}", e))
         })?;
 
-        let metadata: CheckpointMetadata = serde_json::from_slice(&metadata_data)
-            .map_err(|e| CheckpointError::SerializationError(e))?;
+        let metadata: CheckpointMetadata =
+            serde_json::from_slice(&metadata_data).map_err(CheckpointError::SerializationError)?;
 
         // Check schema version
         if metadata.version != self.schema_version {
@@ -272,7 +272,7 @@ impl<S: StorageBackend> CheckpointManager<S> {
 
         // Deserialize the workflow
         let workflow: WorkflowDefinition = serde_json::from_slice(&checkpoint_data)
-            .map_err(|e| CheckpointError::SerializationError(e))?;
+            .map_err(CheckpointError::SerializationError)?;
 
         Ok(workflow)
     }
@@ -313,7 +313,7 @@ impl<S: StorageBackend> CheckpointManager<S> {
                 })?;
 
                 let metadata: CheckpointMetadata = serde_json::from_slice(&metadata_data)
-                    .map_err(|e| CheckpointError::SerializationError(e))?;
+                    .map_err(CheckpointError::SerializationError)?;
 
                 // Check if this is for the requested workflow
                 if metadata.workflow_id == *workflow_id {
