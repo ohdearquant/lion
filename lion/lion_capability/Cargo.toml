@@ -1,0 +1,23 @@
+[package]
+name = "lion_capability"
+version = "0.1.0"
+edition = "2021"
+description = "Capability-based security system for the Lion microkernel"
+authors = ["Haiyang Li"]
+license = "Apache-2.0"
+
+[dependencies]
+lion_core = { path = "../lion_core" }
+thiserror = "2.0"
+dashmap = "6.1"
+smallvec = "1.10"
+bitflags = "2.4"
+indexmap = "2.0"
+tracing = "0.1"
+atomic = "0.6"
+ahash = "0.8"
+uuid = { version = "1.0", features = ["v4"] }
+
+[dev-dependencies]
+proptest = "1.2"
+criterion = "0.5"
