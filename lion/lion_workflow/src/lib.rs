@@ -100,6 +100,9 @@ pub fn create_workflow(name: &str) -> WorkflowBuilder {
 }
 
 #[cfg(test)]
+pub mod integration_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use crate::model::{Edge, EdgeId, Node, NodeId};
