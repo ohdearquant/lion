@@ -5,14 +5,12 @@
 
 use std::collections::{HashMap, HashSet};
 use std::fmt;
-use std::sync::Arc;
 
 use anyhow::Result;
 use lion_core::CapabilityId;
 use parking_lot::RwLock;
 use thiserror::Error;
-use tracing::{debug, error, info, warn};
-use uuid::Uuid;
+use tracing::{error, info};
 
 /// Operation on a capability
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -50,7 +48,7 @@ pub enum CapabilityError {
 #[derive(Debug, Clone)]
 struct CapabilityEntry {
     /// Unique identifier for this capability
-    id: CapabilityId,
+    _id: CapabilityId,
 
     /// The subject that holds this capability
     subject: String,
@@ -65,7 +63,7 @@ struct CapabilityEntry {
     valid: bool,
 
     /// Parent capability, if this was derived from another
-    parent: Option<CapabilityId>,
+    _parent: Option<CapabilityId>,
 
     /// Child capabilities derived from this one
     children: Vec<CapabilityId>,
@@ -87,8 +85,10 @@ struct CapabilityStore {
 }
 
 /// Simplified PolicyEvaluator for now
+#[allow(dead_code)]
 struct PolicyEvaluator;
 
+#[allow(dead_code)]
 impl PolicyEvaluator {
     fn new() -> Result<Self> {
         Ok(Self)
@@ -131,12 +131,12 @@ impl CapabilityManager {
 
         // Create a new capability entry
         let entry = CapabilityEntry {
-            id: cap_id.clone(),
+            _id: cap_id.clone(),
             subject: subject.clone(),
             object: object.clone(),
             rights: rights_set,
             valid: true,
-            parent: None,
+            _parent: None,
             children: Vec::new(),
         };
 
@@ -221,12 +221,12 @@ impl CapabilityManager {
 
         // Create a new capability entry
         let entry = CapabilityEntry {
-            id: cap_id.clone(),
+            _id: cap_id.clone(),
             subject: subject.clone(),
             object: parent_object,
             rights: rights_set,
             valid: true,
-            parent: Some(parent_id.clone()),
+            _parent: Some(parent_id.clone()),
             children: Vec::new(),
         };
 

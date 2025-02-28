@@ -36,8 +36,8 @@ pub struct SagaOrchestrator {
     /// Cancellation channel
     cancel_tx: mpsc::Sender<()>,
 
-    /// Cancellation receiver
-    cancel_rx: Mutex<mpsc::Receiver<()>>,
+    /// Cancellation receiver (kept for cleanup)
+    _cancel_rx: Mutex<mpsc::Receiver<()>>,
 
     /// Queue for saga compensations
     compensation_queue: RwLock<VecDeque<CompensationTask>>,
@@ -262,7 +262,7 @@ impl SagaOrchestrator {
             event_broker: None,
             is_running: RwLock::new(false),
             cancel_tx: tx,
-            cancel_rx: Mutex::new(rx),
+            _cancel_rx: Mutex::new(rx),
             compensation_queue: RwLock::new(VecDeque::new()),
             abort_queue: RwLock::new(VecDeque::new()),
         }
@@ -1028,7 +1028,7 @@ impl Clone for SagaOrchestrator {
             // Initialize other fields with default values
             is_running: RwLock::new(false),
             cancel_tx: tx,
-            cancel_rx: Mutex::new(rx),
+            _cancel_rx: Mutex::new(rx),
             compensation_queue: RwLock::new(VecDeque::new()),
             abort_queue: RwLock::new(VecDeque::new()),
         }

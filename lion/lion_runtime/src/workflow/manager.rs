@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use anyhow::Result;
-use lion_core::id::{Id, PluginId, WorkflowId, WorkflowMarker};
+use lion_core::id::{PluginId, WorkflowId};
 use lion_core::types::workflow::ExecutionStatus;
 use lion_workflow::model::definition::WorkflowDefinition;
 use lion_workflow::model::definition::WorkflowId as DefWorkflowId;
@@ -40,6 +40,7 @@ fn def_to_core_id(def_id: &DefWorkflowId) -> WorkflowId {
 }
 
 /// Convert a core workflow ID to a workflow definition ID
+#[allow(dead_code)]
 fn core_to_def_id(core_id: &WorkflowId) -> DefWorkflowId {
     DefWorkflowId::from_uuid(core_id.uuid())
 }
@@ -53,13 +54,13 @@ pub struct WorkflowManager {
     executor: WorkflowExecutor,
 
     /// Capability manager
-    capability_manager: Arc<CapabilityManager>,
+    _capability_manager: Arc<CapabilityManager>,
 
     /// Plugin manager
-    plugin_manager: Arc<PluginManager>,
+    _plugin_manager: Arc<PluginManager>,
 
     /// Runtime configuration
-    config: RuntimeConfig,
+    _config: RuntimeConfig,
 }
 
 impl WorkflowManager {
@@ -75,9 +76,9 @@ impl WorkflowManager {
         Ok(Self {
             workflows: RwLock::new(HashMap::new()),
             executor,
-            capability_manager,
-            plugin_manager,
-            config,
+            _capability_manager: capability_manager,
+            _plugin_manager: plugin_manager,
+            _config: config,
         })
     }
 

@@ -5,12 +5,12 @@
 
 use std::sync::Arc;
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use lion_core::id::PluginId;
 use lion_core::types::plugin::PluginState;
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, info};
 
 /// Plugin metadata
 #[derive(Debug, Clone, Serialize, Deserialize)]

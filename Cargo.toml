@@ -8,6 +8,7 @@ members = [
     "lion/lion_policy",
     "lion/lion_runtime",
     "lion/lion_workflow",
+    "lion/lion_cli",
     "plugins/calculator"
 ]
 resolver = "2"

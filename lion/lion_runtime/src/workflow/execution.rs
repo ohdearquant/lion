@@ -7,7 +7,7 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use anyhow::Result;
-use lion_core::id::{Id, NodeId, NodeMarker, PluginId, WorkflowId};
+use lion_core::id::{NodeId, PluginId, WorkflowId};
 use lion_core::types::workflow::{ExecutionStatus, NodeStatus};
 use lion_workflow::model::definition::WorkflowDefinition;
 use lion_workflow::model::node::NodeId as ModelNodeId;
@@ -51,21 +51,25 @@ pub enum ExecutionError {
 #[derive(Debug, Clone)]
 struct WorkflowExecutionState {
     /// Workflow definition
+    #[allow(dead_code)]
     definition: WorkflowDefinition,
 
     /// Status of the workflow
     status: ExecutionStatus,
 
     /// Status of each node
+    #[allow(dead_code)]
     node_statuses: HashMap<NodeId, NodeStatus>,
 
     /// Node outputs
     node_outputs: HashMap<NodeId, serde_json::Value>,
 
     /// Workflow input data
+    #[allow(dead_code)]
     input: serde_json::Value,
 
     /// Start time
+    #[allow(dead_code)]
     start_time: Option<Instant>,
 
     /// End time
@@ -240,7 +244,7 @@ impl WorkflowExecutor {
         &self,
         workflow_id: &WorkflowId,
         node_id: &NodeId,
-        input: serde_json::Value,
+        _input: serde_json::Value,
     ) -> Result<()> {
         // This is a simplified placeholder for node execution
         // In a real implementation, this would execute the node logic

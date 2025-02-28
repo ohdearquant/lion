@@ -3,18 +3,16 @@
 //! Manages the loading, unloading, and lifecycle of plugins in the Lion system.
 
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::Arc;
 
 use crate::plugin::lifecycle::LifecycleManager;
-use anyhow::{Context, Result};
-use lion_capability::model::Capability;
+use anyhow::Result;
+use lion_core::id::PluginId;
 use lion_core::types::plugin::PluginState;
-use lion_core::{id::PluginId, CapabilityId};
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 use tracing::{debug, error, info, warn};
-use uuid::Uuid;
 
 use super::lifecycle::{PluginLifecycle, PluginMetadata};
 use super::registry::PluginRegistry;

@@ -133,7 +133,7 @@ impl Default for ExecutorConfig {
 /// Execution worker state
 struct Worker {
     /// Worker ID
-    id: usize,
+    _id: usize,
 
     /// Task currently being executed
     current_task: Option<TaskId>,
@@ -193,8 +193,8 @@ where
     /// Cancellation channel
     cancel_tx: mpsc::Sender<()>,
 
-    /// Cancellation receiver
-    cancel_rx: Mutex<mpsc::Receiver<()>>,
+    /// Cancellation receiver (kept for cleanup)
+    _cancel_rx: Mutex<mpsc::Receiver<()>>,
 }
 
 impl<S> WorkflowExecutor<S>
@@ -213,7 +213,7 @@ where
         let mut workers = Vec::with_capacity(config.worker_threads);
         for i in 0..config.worker_threads {
             workers.push(Worker {
-                id: i,
+                _id: i,
                 current_task: None,
                 is_busy: false,
                 last_completion: None,
@@ -230,7 +230,7 @@ where
             config: RwLock::new(config),
             is_running: RwLock::new(true),
             cancel_tx: tx,
-            cancel_rx: Mutex::new(rx),
+            _cancel_rx: Mutex::new(rx),
         }
     }
 
@@ -646,9 +646,10 @@ where
     }
 
     /// Get worker statistics
-    async fn get_worker_stats(&self) -> Vec<(usize, WorkerStats)> {
+    #[allow(dead_code)]
+    pub async fn get_worker_stats(&self) -> Vec<(usize, WorkerStats)> {
         let workers = self.workers.read().await;
-        workers.iter().map(|w| (w.id, w.stats.clone())).collect()
+        workers.iter().map(|w| (w._id, w.stats.clone())).collect()
     }
 
     /// Get the number of busy workers
