@@ -775,24 +775,27 @@ mod tests {
         let high_task = create_test_task(Priority::High);
 
         // Schedule tasks in order of increasing priority
-        let low_id = scheduler.schedule_task(low_task).await.unwrap();
-        let normal_id = scheduler.schedule_task(normal_task).await.unwrap();
-        let high_id = scheduler.schedule_task(high_task).await.unwrap();
+        // (We don't actually need to store the IDs since we're not comparing them)
+        scheduler.schedule_task(low_task).await.unwrap();
+        scheduler.schedule_task(normal_task).await.unwrap();
+        scheduler.schedule_task(high_task).await.unwrap();
 
-        // Tasks should be dequeued in order of decreasing priority
+        // Tasks should be dequeued in decreasing priority order (High -> Normal -> Low)
         let task1 = scheduler.next_task().await.unwrap();
         let task2 = scheduler.next_task().await.unwrap();
         let task3 = scheduler.next_task().await.unwrap();
 
-        // Instead of comparing IDs directly (which are random),
-        // verify that tasks are ordered by priority
+        // Verify task ordering by priority
         assert_eq!(task1.priority, Priority::High);
         assert_eq!(task2.priority, Priority::Normal);
         assert_eq!(task3.priority, Priority::Low);
-        
+
         // Also verify that we got all tasks (no more left in queue)
         let next_task = scheduler.next_task().await;
-        assert!(next_task.is_none(), "Queue should be empty after dequeueing all tasks");
+        assert!(
+            next_task.is_none(),
+            "Queue should be empty after dequeueing all tasks"
+        );
     }
 
     #[tokio::test]
@@ -885,10 +888,17 @@ mod tests {
         assert_eq!(task.id, task_id);
         assert_eq!(task.status, TaskStatus::Pending);
 
+        // Create a separate task reference so we're not holding onto the Arc when marking it running
+        let task_id = task.id;
+        std::mem::drop(task); // Release the Arc to avoid Rc cycles
+
         // Mark as running
         scheduler.mark_task_running(task_id).await.unwrap();
         let task = scheduler.get_task(task_id).await.unwrap();
         assert_eq!(task.status, TaskStatus::Running);
+
+        // Release the Arc again before marking completed
+        std::mem::drop(task);
 
         // Mark as completed
         scheduler.mark_task_completed(task_id).await.unwrap();

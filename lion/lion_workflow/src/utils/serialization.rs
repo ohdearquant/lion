@@ -1,8 +1,8 @@
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde::ser::SerializeMap;
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::collections::HashMap;
-use std::hash::Hash;
 use std::fmt;
+use std::hash::Hash;
 
 /// Serialize a HashMap with Id<T> keys as strings to fix "key must be a string" JSON serialization errors
 pub fn serialize_id_map<K, V, S>(map: &HashMap<K, V>, serializer: S) -> Result<S::Ok, S::Error>
@@ -29,13 +29,13 @@ where
 {
     // First deserialize to a HashMap<String, V>
     let string_map: HashMap<String, V> = HashMap::deserialize(deserializer)?;
-    
+
     // Then convert the keys back to Id<T>
     let mut id_map = HashMap::with_capacity(string_map.len());
     for (k_str, v) in string_map {
         let k = K::from_str(&k_str).map_err(serde::de::Error::custom)?;
         id_map.insert(k, v);
     }
-    
+
     Ok(id_map)
 }

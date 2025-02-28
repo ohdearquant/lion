@@ -1,5 +1,6 @@
 use crate::model::edge::{Edge, EdgeId};
 use crate::model::node::{Node, NodeId, NodeStatus};
+use crate::utils::serialization::{deserialize_id_map, serialize_id_map};
 use lion_core::error::Error as CoreError;
 use lion_core::id::Id;
 use lion_core::CapabilityId;
@@ -90,9 +91,17 @@ pub struct WorkflowDefinition {
     pub version: Version,
 
     /// Nodes in this workflow (adjacency list representation)
+    #[serde(
+        serialize_with = "serialize_id_map",
+        deserialize_with = "deserialize_id_map"
+    )]
     pub nodes: HashMap<NodeId, Node>,
 
     /// Edges in this workflow
+    #[serde(
+        serialize_with = "serialize_id_map",
+        deserialize_with = "deserialize_id_map"
+    )]
     pub edges: HashMap<EdgeId, Edge>,
 
     /// Map of node IDs with no incoming edges (start nodes)

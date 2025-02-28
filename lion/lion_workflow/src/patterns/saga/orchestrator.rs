@@ -939,16 +939,16 @@ impl Clone for SagaOrchestrator {
         SagaOrchestrator {
             // Use Arc::clone for the config to avoid blocking reads
             config: Arc::clone(&self.config),
-            
+
             // Create new empty RwLocks for these fields
             // This avoids blocking_read() while still making a functional clone
             sagas: RwLock::new(HashMap::new()),
             step_handlers: RwLock::new(HashMap::new()),
             compensation_handlers: RwLock::new(HashMap::new()),
-            
+
             // Clone option and Arc fields normally
             event_broker: self.event_broker.clone(),
-            
+
             // Initialize other fields with default values
             is_running: RwLock::new(false),
             cancel_tx: tx,

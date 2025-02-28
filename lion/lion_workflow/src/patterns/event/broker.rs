@@ -447,14 +447,14 @@ impl Clone for EventBroker {
         EventBroker {
             // Use Arc::clone to avoid blocking reads on RwLock
             config: Arc::clone(&self.config),
-            
+
             // Create new empty RwLocks for the rest
             // This avoids blocking_read() while still making a functional clone
             // In tests, we create fresh EventBroker instances, so this is fine
             subscriptions: RwLock::new(HashMap::new()),
             in_flight: RwLock::new(HashMap::new()),
             processed_events: RwLock::new(HashSet::new()),
-            
+
             // These can be cloned normally
             event_store: self.event_store.clone(),
             retry_manager: self.retry_manager.clone(),

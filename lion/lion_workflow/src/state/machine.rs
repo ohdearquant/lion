@@ -1,7 +1,7 @@
 use crate::model::{EdgeId, NodeId, NodeStatus, WorkflowDefinition, WorkflowId};
 use crate::state::checkpoint::{CheckpointError, CheckpointManager};
 use crate::state::storage::StorageBackend;
-use crate::utils::serialization::{serialize_id_map, deserialize_id_map};
+use crate::utils::serialization::{deserialize_id_map, serialize_id_map};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -63,19 +63,31 @@ pub struct WorkflowState {
     pub instance_id: String,
 
     /// Current status of each node
-    #[serde(serialize_with = "serialize_id_map", deserialize_with = "deserialize_id_map")]
+    #[serde(
+        serialize_with = "serialize_id_map",
+        deserialize_with = "deserialize_id_map"
+    )]
     pub node_status: HashMap<NodeId, NodeStatus>,
 
     /// Current in-degree (incomplete dependencies) of each node
-    #[serde(serialize_with = "serialize_id_map", deserialize_with = "deserialize_id_map")]
+    #[serde(
+        serialize_with = "serialize_id_map",
+        deserialize_with = "deserialize_id_map"
+    )]
     pub node_in_degree: HashMap<NodeId, usize>,
 
     /// Results/outputs for completed nodes
-    #[serde(serialize_with = "serialize_id_map", deserialize_with = "deserialize_id_map")]
+    #[serde(
+        serialize_with = "serialize_id_map",
+        deserialize_with = "deserialize_id_map"
+    )]
     pub node_results: HashMap<NodeId, serde_json::Value>,
 
     /// Evaluation results for edge conditions
-    #[serde(serialize_with = "serialize_id_map", deserialize_with = "deserialize_id_map")]
+    #[serde(
+        serialize_with = "serialize_id_map",
+        deserialize_with = "deserialize_id_map"
+    )]
     pub edge_conditions: HashMap<EdgeId, ConditionResult>,
 
     /// Set of nodes that are currently ready (in-degree = 0, status = Pending)
@@ -619,7 +631,6 @@ mod tests {
     #[tokio::test]
     async fn test_state_machine_basic_flow() {
         let workflow = create_test_workflow();
-        
 
         // Create manager
         let manager = StateMachineManager::<MemoryStorage>::new();
@@ -635,9 +646,10 @@ mod tests {
         let node_mapping: Vec<(String, NodeId)> = {
             let state = instance.read().await;
             if let Some(def) = &state.definition {
-                def.nodes.iter()
-                   .map(|(id, node)| (node.name.clone(), id.clone()))
-                   .collect()
+                def.nodes
+                    .iter()
+                    .map(|(id, node)| (node.name.clone(), id.clone()))
+                    .collect()
             } else {
                 panic!("Missing workflow definition in state");
             }
@@ -647,19 +659,27 @@ mod tests {
         // Get ready nodes (should be just the start node)
         let ready_nodes = manager.get_ready_nodes(&instance_id).await.unwrap();
         assert_eq!(ready_nodes.len(), 1);
-        
+
         // Find the "Start" node by name instead of assuming a specific order
-        let start_node_id = node_mapping.iter().find(|(name, _)| name == "Start").unwrap().1.clone();
-        
+        let start_node_id = node_mapping
+            .iter()
+            .find(|(name, _)| name == "Start")
+            .unwrap()
+            .1
+            .clone();
+
         // Verify the ready node is the start node
-        assert!(ready_nodes.contains(&start_node_id), "Start node should be ready");
+        assert!(
+            ready_nodes.contains(&start_node_id),
+            "Start node should be ready"
+        );
 
         // Mark start node as running
         manager
             .set_node_running(&instance_id, &start_node_id)
             .await
             .unwrap();
-        
+
         // Mark the start node as completed
         let newly_ready = manager
             .set_node_completed(&instance_id, &start_node_id, serde_json::json!({}))
@@ -668,12 +688,20 @@ mod tests {
 
         // Middle node should now be ready
         assert_eq!(newly_ready.len(), 1);
-        
+
         // Find the "Middle" node by name
-        let middle_node_id = node_mapping.iter().find(|(name, _)| name == "Middle").unwrap().1.clone();
-        
+        let middle_node_id = node_mapping
+            .iter()
+            .find(|(name, _)| name == "Middle")
+            .unwrap()
+            .1
+            .clone();
+
         // Verify the newly ready node is the middle node
-        assert!(newly_ready.contains(&middle_node_id), "Middle node should be ready after completing Start node");
+        assert!(
+            newly_ready.contains(&middle_node_id),
+            "Middle node should be ready after completing Start node"
+        );
 
         // Mark middle node as running
         manager
@@ -689,8 +717,16 @@ mod tests {
 
         // End node should now be ready
         assert_eq!(newly_ready.len(), 1);
-        let end_node_id = node_mapping.iter().find(|(name, _)| name == "End").unwrap().1.clone();
-        assert!(newly_ready.contains(&end_node_id), "End node should be ready after completing Middle node");
+        let end_node_id = node_mapping
+            .iter()
+            .find(|(name, _)| name == "End")
+            .unwrap()
+            .1
+            .clone();
+        assert!(
+            newly_ready.contains(&end_node_id),
+            "End node should be ready after completing Middle node"
+        );
 
         // Mark end node as running
         manager
@@ -706,7 +742,7 @@ mod tests {
 
         // No more nodes should be ready
         assert_eq!(newly_ready.len(), 0);
-        
+
         // Get the instance again to check completion status
         let instance = manager.get_instance(&instance_id).await.unwrap();
         let state = instance.read().await; // Read the state to check completion status
@@ -717,9 +753,14 @@ mod tests {
     #[tokio::test]
     async fn test_state_machine_node_failure() {
         let workflow = create_test_workflow();
-        
+
         // Clone workflow before using it to avoid ownership issues
-        let start_node_id = workflow.nodes.iter().find(|(_, node)| node.name == "Start").map(|(id, _)| id.clone()).unwrap();
+        let start_node_id = workflow
+            .nodes
+            .iter()
+            .find(|(_, node)| node.name == "Start")
+            .map(|(id, _)| id.clone())
+            .unwrap();
 
         // Create manager
         let manager = StateMachineManager::<MemoryStorage>::new();
