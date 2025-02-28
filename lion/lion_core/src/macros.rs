@@ -154,13 +154,17 @@ macro_rules! with_capability {
 /// ```
 /// use lion_core::{wrap_err, error::Error};
 /// use std::io;
+/// use std::path::PathBuf;
 ///
 /// fn load_plugin(path: &str) -> lion_core::Result<()> {
 ///     let result = std::fs::read(path);
 ///     
 ///     // This will log the error and wrap it in an Error
 ///     let content = wrap_err!(result,
-///                           Error::Io(format!("Failed to read plugin file: {}", path)));
+///                           Error::Io(std::io::Error::new(
+///                               std::io::ErrorKind::NotFound,
+///                               format!("Failed to read plugin file: {}", path)
+///                           )));
 ///     
 ///     // Continue with the operation if successful
 ///     Ok(())

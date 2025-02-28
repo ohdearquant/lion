@@ -139,24 +139,25 @@ pub trait Capability: Send + Sync {
     ///         match constraint {
     ///             Constraint::FilePath(path) => {
     ///                 // Ensure the new path is a subpath of the original path
-    ///                 if !path.starts_with(&self.path) {
+    ///                 let path_buf = std::path::PathBuf::from(path);
+    ///                 if !path_buf.starts_with(&self.path) {
     ///                     return Err(lion_core::Error::Capability(CapabilityError::ConstraintError(
     ///                         "Cannot expand path beyond original capability".into()
-    ///                     ));
+    ///                     )));
     ///                 }
-    ///                 new_cap.path = path.clone();
+    ///                 new_cap.path = path_buf;
     ///             },
     ///             Constraint::FileOperation { read, write, .. } => {
     ///                 // Can only revoke permissions, not add new ones
     ///                 if *read && !self.read {
     ///                     return Err(lion_core::Error::Capability(CapabilityError::ConstraintError(
     ///                         "Cannot add read permission".into()
-    ///                     ));
+    ///                     )));
     ///                 }
     ///                 if *write && !self.write {
     ///                     return Err(lion_core::Error::Capability(CapabilityError::ConstraintError(
     ///                         "Cannot add write permission".into()
-    ///                     ));
+    ///                     )));
     ///                 }
     ///                 
     ///                 new_cap.read = *read && self.read;
@@ -164,7 +165,7 @@ pub trait Capability: Send + Sync {
     ///             },
     ///             _ => return Err(lion_core::Error::Capability(CapabilityError::ConstraintError(
     ///                 "Unsupported constraint type".into()
-    ///             )),
+    ///             ))),
     ///         }
     ///     }
     ///     
@@ -282,12 +283,12 @@ pub trait Capability: Send + Sync {
     ///     if !self.can_join_with(other) {
     ///         return Err(lion_core::Error::Capability(CapabilityError::CompositionError(
     ///             "Cannot join capabilities of different types".into()
-    ///         ));
+    ///         )));
     ///     }
     ///     
     ///     // In a real implementation, we would downcast the other capability
     // For this example, we'll just create a new capability
-    ///     let other_path = "/tmp"///        ;
+    ///     let other_path = std::path::PathBuf::from("/tmp");
     ///     
     ///     // If the paths are the same, we can combine the permissions
     ///     if self.path == other_path {
@@ -298,9 +299,9 @@ pub trait Capability: Send + Sync {
     ///         }));
     ///     }
     ///     
-    ///     Err(CapabilityError::CompositionError(
+    ///     return Err(lion_core::Error::Capability(CapabilityError::CompositionError(
     ///         "Cannot join capabilities with different paths".into()
-    ///     ))
+    ///     )))
     /// }
     /// #
     /// # fn as_any(&self) -> &dyn std::any::Any { self }
