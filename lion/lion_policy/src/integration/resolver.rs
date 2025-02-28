@@ -329,7 +329,19 @@ where
                     }
 
                     // Get constraints from the policy
-                    return Ok(EvaluationResult::from(&policy.action));
+                    // Only return a result if the request path matches the policy object path or if it's PolicyObject::Any
+                    match &policy.object {
+                        PolicyObject::Any => return Ok(EvaluationResult::from(&policy.action)),
+                        PolicyObject::File(file_obj) => {
+                            if let AccessRequest::File { path, .. } = request {
+                                let path_str = path.to_string_lossy();
+                                if path_str.starts_with(&file_obj.path) {
+                                    return Ok(EvaluationResult::from(&policy.action));
+                                }
+                            }
+                        }
+                        _ => {}
+                    }
                 }
                 PolicyAction::TransformToConstraints(_constraints) => {
                     // For file operations, check if the request is compatible with the constraints
@@ -375,7 +387,19 @@ where
                     }
 
                     // Get constraints from the policy
-                    return Ok(EvaluationResult::from(&policy.action));
+                    // Only return a result if the request path matches the policy object path or if it's PolicyObject::Any
+                    match &policy.object {
+                        PolicyObject::Any => return Ok(EvaluationResult::from(&policy.action)),
+                        PolicyObject::File(file_obj) => {
+                            if let AccessRequest::File { path, .. } = request {
+                                let path_str = path.to_string_lossy();
+                                if path_str.starts_with(&file_obj.path) {
+                                    return Ok(EvaluationResult::from(&policy.action));
+                                }
+                            }
+                        }
+                        _ => {}
+                    }
                 }
                 PolicyAction::Audit => {
                     // Continue checking other policies

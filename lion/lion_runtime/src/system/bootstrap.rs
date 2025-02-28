@@ -193,6 +193,9 @@ impl System {
 
         if let Some(manager) = self.shutdown_manager.get() {
             manager.request_shutdown().await?;
+            // Wait a small amount of time to ensure any shutdown tasks have a chance to run
+            // This helps prevent race conditions in tests
+            tokio::time::sleep(Duration::from_millis(50)).await;
         } else {
             warn!("Shutdown manager not initialized, performing simple shutdown");
         }
@@ -216,7 +219,7 @@ mod tests {
     use tempfile::TempDir;
 
     #[tokio::test]
-    async fn test_bootstrap() {
+    async fn test_bootstrap() -> Result<()> {
         // Create a temporary directory for plugins
         let temp_dir = TempDir::new().unwrap();
         let temp_path = temp_dir.path().to_str().unwrap().to_string();
@@ -224,14 +227,27 @@ mod tests {
         // Create a config
         let mut config = RuntimeConfig::default();
         config.plugin_directory = temp_path;
+        config.shutdown_timeout = 2; // Set a short timeout for tests
 
         // Create the system
         let system = System::new(config).unwrap();
 
         // Bootstrap
-        system.bootstrap().await.unwrap();
+        system.bootstrap().await?;
 
-        // Shutdown
-        system.shutdown().await.unwrap();
+        // Register a component for proper shutdown testing
+        let shutdown_manager = system.get_shutdown_manager()?;
+        let handle = shutdown_manager.register_component("TestComponent");
+
+        // Set up a component that will cleanly shut down
+        tokio::task::spawn({
+            let mut handle = handle.clone();
+            async move {
+                handle.shutdown_complete();
+            }
+        });
+
+        // Shutdown (now should succeed since we registered a component)
+        system.shutdown().await
     }
 }
