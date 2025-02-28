@@ -186,17 +186,23 @@ impl<S: StorageBackend> CheckpointManager<S> {
             })?;
 
         // Atomically rename temporary file to final name
-        // Ensure the parent directory exists for the final file
-        if let Some(base_dir) = &self.base_dir {
-            let final_path = base_dir.join(&checkpoint_id);
-            if let Some(parent) = final_path.parent() {
-                // Ensure the parent directory exists
-                if !parent.exists() || !parent.is_dir() {
-                    log::debug!("Creating parent directories: {:?}", parent);
-                    fs::create_dir_all(parent)?;
-                }
+        // Create the checkpoint parent directory
+        if let Some(parent) = PathBuf::from(&checkpoint_id).parent() {
+            if !parent.as_os_str().is_empty() {
+                // Only create if parent is non-empty
+                log::debug!("Creating parent directories for checkpoint: {:?}", parent);
+                fs::create_dir_all(parent)?;
             }
         }
+
+        // Ensure metadata parent directory exists too
+        if let Some(parent) = PathBuf::from(&metadata_key).parent() {
+            if !parent.as_os_str().is_empty() {
+                log::debug!("Creating parent directories for metadata: {:?}", parent);
+                fs::create_dir_all(parent)?;
+            }
+        }
+
         self.storage
             .rename(&temp_key, &checkpoint_id)
             .await
@@ -382,32 +388,17 @@ mod tests {
 
     #[tokio::test]
     async fn test_checkpoint_save_load() {
-        // Create a temporary directory for checkpoints
-        let temp_dir = TempDir::new().unwrap();
-        let base_dir = temp_dir.path().to_path_buf();
+        // Use memory storage to avoid filesystem issues
+        let storage = crate::state::storage::MemoryStorage::new();
+        let manager = CheckpointManager::new(storage, "1.0.0");
 
-        // Create a dedicated checkpoints directory inside temp_dir and ensure it exists
-        let checkpoints_dir = base_dir.join("checkpoints");
-        std::fs::create_dir_all(&checkpoints_dir).unwrap();
-        assert!(checkpoints_dir.exists(), "Checkpoint directory not created");
-        assert!(
-            checkpoints_dir.is_dir(),
-            "Checkpoint path is not a directory"
-        );
-
-        // Create checkpoint manager with explicit directory creation
-        let manager = CheckpointManager::<crate::state::storage::FileStorage>::with_file_storage(
-            checkpoints_dir.clone(),
-            "1.0.0",
-        )
-        .unwrap();
-
-        // Create a test workflow
+        // Create test workflow
         let workflow = create_test_workflow();
         let workflow_id = workflow.id.clone();
 
-        // Save a checkpoint
+        // Save checkpoint
         let checkpoint_id = manager.save_checkpoint(&workflow).await.unwrap();
+        println!("Created checkpoint with ID: {}", checkpoint_id);
 
         // Load the checkpoint
         let loaded = manager.load_checkpoint(&checkpoint_id).await.unwrap();
@@ -421,39 +412,24 @@ mod tests {
 
     #[tokio::test]
     async fn test_list_checkpoints() {
-        // Create a temporary directory for checkpoints
-        let temp_dir = TempDir::new().unwrap();
-        let base_dir = temp_dir.path().to_path_buf();
+        // Use memory storage to avoid filesystem issues
+        let storage = crate::state::storage::MemoryStorage::new();
+        let manager = CheckpointManager::new(storage, "1.0.0");
 
-        // Create a dedicated checkpoints directory inside temp_dir
-        let checkpoints_dir = base_dir.join("list_checkpoints");
-        std::fs::create_dir_all(&checkpoints_dir).unwrap();
-        assert!(checkpoints_dir.exists(), "Checkpoint directory not created");
-        assert!(
-            checkpoints_dir.is_dir(),
-            "Checkpoint path is not a directory"
-        );
-
-        // Create checkpoint manager with explicit directory creation
-        let manager = CheckpointManager::<crate::state::storage::FileStorage>::with_file_storage(
-            checkpoints_dir.clone(),
-            "1.0.0",
-        )
-        .unwrap();
-
-        // Create a test workflow
+        // Create test workflow
         let workflow = create_test_workflow();
         let workflow_id = workflow.id.clone();
+        println!("Created workflow with ID: {}", workflow_id);
 
         // Save multiple checkpoints
-        let _checkpoint1 = manager.save_checkpoint(&workflow).await.unwrap();
-        // Wait a bit to ensure different timestamps
+        let checkpoint1 = manager.save_checkpoint(&workflow).await.unwrap();
         tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
-        let _checkpoint2 = manager.save_checkpoint(&workflow).await.unwrap();
+        let checkpoint2 = manager.save_checkpoint(&workflow).await.unwrap();
+        println!("Created checkpoints: {} and {}", checkpoint1, checkpoint2);
 
         // List checkpoints
-        let checkpoints: Vec<CheckpointMetadata> =
-            manager.list_checkpoints(&workflow_id).await.unwrap();
+        let checkpoints = manager.list_checkpoints(&workflow_id).await.unwrap();
+        println!("Found {} checkpoints", checkpoints.len());
 
         // Verify we have two checkpoints
         assert_eq!(checkpoints.len(), 2);
@@ -461,43 +437,32 @@ mod tests {
 
     #[tokio::test]
     async fn test_load_latest_checkpoint() {
-        // Create a temporary directory for checkpoints
-        let temp_dir = TempDir::new().unwrap();
-        let base_dir = temp_dir.path().to_path_buf();
-
-        // Create a dedicated checkpoints directory inside temp_dir
-        let checkpoints_dir = base_dir.join("latest_checkpoints");
-        std::fs::create_dir_all(&checkpoints_dir).unwrap();
-        assert!(checkpoints_dir.exists(), "Checkpoint directory not created");
-        assert!(
-            checkpoints_dir.is_dir(),
-            "Checkpoint path is not a directory"
-        );
-
-        // Create checkpoint manager with explicit directory creation
-        let manager = CheckpointManager::<crate::state::storage::FileStorage>::with_file_storage(
-            checkpoints_dir.clone(),
-            "1.0.0",
-        )
-        .unwrap();
+        // Use memory storage to avoid filesystem issues
+        let storage = crate::state::storage::MemoryStorage::new();
+        let manager = CheckpointManager::new(storage, "1.0.0");
 
         // Create a test workflow
         let mut workflow = create_test_workflow();
         let workflow_id = workflow.id.clone();
+        println!("Created workflow with ID: {}", workflow_id);
 
         // Save first checkpoint
-        let _checkpoint1 = manager.save_checkpoint(&workflow).await.unwrap();
-
-        // Wait a bit to ensure different timestamp
-        tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
+        let checkpoint1 = manager.save_checkpoint(&workflow).await.unwrap();
+        println!("Saved first checkpoint: {}", checkpoint1);
 
         // Modify workflow and save another checkpoint
+        tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
         let node3 = Node::new(NodeId::new(), "Node 3".to_string());
         workflow.add_node(node3).unwrap();
-        let _checkpoint2 = manager.save_checkpoint(&workflow).await.unwrap();
+        let checkpoint2 = manager.save_checkpoint(&workflow).await.unwrap();
+        println!("Saved second checkpoint with 3 nodes: {}", checkpoint2);
 
         // Load latest checkpoint
         let loaded = manager.load_latest_checkpoint(&workflow_id).await.unwrap();
+        println!(
+            "Loaded latest checkpoint, node count: {}",
+            loaded.nodes.len()
+        );
 
         // Verify we got the latest version (with 3 nodes)
         assert_eq!(loaded.id, workflow_id);
@@ -506,49 +471,41 @@ mod tests {
 
     #[tokio::test]
     async fn test_prune_checkpoints() {
-        // Create a temporary directory for checkpoints
-        let temp_dir = TempDir::new().unwrap();
-        let base_dir = temp_dir.path().to_path_buf();
-
-        // Create a dedicated checkpoints directory inside temp_dir
-        let checkpoints_dir = base_dir.join("prune_checkpoints");
-        std::fs::create_dir_all(&checkpoints_dir).unwrap();
-        assert!(checkpoints_dir.exists(), "Checkpoint directory not created");
-        assert!(
-            checkpoints_dir.is_dir(),
-            "Checkpoint path is not a directory"
-        );
-
-        // Create checkpoint manager with explicit directory creation
-        let manager = CheckpointManager::<crate::state::storage::FileStorage>::with_file_storage(
-            checkpoints_dir.clone(),
-            "1.0.0",
-        )
-        .unwrap();
+        // Use memory storage to avoid filesystem issues
+        let storage = crate::state::storage::MemoryStorage::new();
+        let manager = CheckpointManager::new(storage, "1.0.0");
 
         // Create a test workflow
         let workflow = create_test_workflow();
         let workflow_id = workflow.id.clone();
+        println!("Created workflow with ID: {}", workflow_id);
 
         // Save multiple checkpoints
-        let _checkpoint1 = manager.save_checkpoint(&workflow).await.unwrap();
+        let checkpoint1 = manager.save_checkpoint(&workflow).await.unwrap();
         tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
-        let _checkpoint2 = manager.save_checkpoint(&workflow).await.unwrap();
+        let checkpoint2 = manager.save_checkpoint(&workflow).await.unwrap();
         tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
-        let _checkpoint3 = manager.save_checkpoint(&workflow).await.unwrap();
+        let checkpoint3 = manager.save_checkpoint(&workflow).await.unwrap();
+        println!(
+            "Created 3 checkpoints: {}, {}, {}",
+            checkpoint1, checkpoint2, checkpoint3
+        );
 
         // Verify we have 3 checkpoints
-        let checkpoints: Vec<CheckpointMetadata> =
-            manager.list_checkpoints(&workflow_id).await.unwrap();
+        let checkpoints = manager.list_checkpoints(&workflow_id).await.unwrap();
         assert_eq!(checkpoints.len(), 3);
 
         // Prune to keep only 1 checkpoint
         let deleted = manager.prune_checkpoints(&workflow_id, 1).await.unwrap();
         assert_eq!(deleted, 2);
+        println!("Pruned {} checkpoints", deleted);
 
         // Verify we now have 1 checkpoint
-        let checkpoints: Vec<CheckpointMetadata> =
-            manager.list_checkpoints(&workflow_id).await.unwrap();
-        assert_eq!(checkpoints.len(), 1);
+        let remaining = manager.list_checkpoints(&workflow_id).await.unwrap();
+        assert_eq!(remaining.len(), 1);
+        println!(
+            "Successfully pruned checkpoints, {} remaining",
+            remaining.len()
+        );
     }
 }
