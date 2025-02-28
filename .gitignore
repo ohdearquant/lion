@@ -23,3 +23,4 @@ dev/
 *data/
 .env
 .venv/
+*.DS_Store
