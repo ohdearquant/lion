@@ -11,8 +11,7 @@ use std::sync::Arc;
 use thread_local::ThreadLocal;
 
 /// Static thread-local storage for the current context
-static CURRENT_CONTEXT: Lazy<ThreadLocal<RwLock<Option<Context>>>> =
-    Lazy::new(|| ThreadLocal::new());
+static CURRENT_CONTEXT: Lazy<ThreadLocal<RwLock<Option<Context>>>> = Lazy::new(ThreadLocal::new);
 
 /// Span context for tracing
 #[derive(Debug, Clone, PartialEq, Eq)]

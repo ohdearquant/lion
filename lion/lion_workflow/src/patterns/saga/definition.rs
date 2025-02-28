@@ -131,12 +131,12 @@ impl SagaDefinition {
 
         // Check for cycles using DFS
         for step in &self.steps {
-            if !visited.contains(&step.id) {
-                if self.has_cycle_dfs(&step.id, &graph, &mut visited, &mut path) {
-                    return Err(SagaError::DefinitionError(
-                        "Dependency cycle detected".to_string(),
-                    ));
-                }
+            if !visited.contains(&step.id)
+                && self.has_cycle_dfs(&step.id, &graph, &mut visited, &mut path)
+            {
+                return Err(SagaError::DefinitionError(
+                    "Dependency cycle detected".to_string(),
+                ));
             }
         }
 

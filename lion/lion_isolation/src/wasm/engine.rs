@@ -21,6 +21,17 @@ pub struct WasmEngine {
     resource_limiter: Arc<dyn ResourceLimiter>,
 }
 
+impl Default for WasmEngine {
+    /// Creates a default WasmEngine with default resource limiter
+    fn default() -> Self {
+        let resource_limiter = Arc::new(crate::resource::DefaultResourceLimiter::default());
+        match Self::new(resource_limiter) {
+            Ok(engine) => engine,
+            Err(e) => panic!("Failed to create default WasmEngine: {}", e),
+        }
+    }
+}
+
 impl WasmEngine {
     /// Create a new WebAssembly engine.
     ///

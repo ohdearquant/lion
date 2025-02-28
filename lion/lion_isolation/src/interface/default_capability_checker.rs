@@ -18,6 +18,12 @@ pub struct DefaultCapabilityChecker {
     allowed_operations: RwLock<HashMap<String, Vec<String>>>,
 }
 
+impl Default for DefaultCapabilityChecker {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl DefaultCapabilityChecker {
     /// Create a new default capability checker.
     pub fn new() -> Self {
@@ -35,7 +41,7 @@ impl DefaultCapabilityChecker {
     pub fn grant_capability(&self, plugin_id: &str, operation: &str) {
         let mut map = self.allowed_operations.write().unwrap();
 
-        let operations = map.entry(plugin_id.to_string()).or_insert_with(Vec::new);
+        let operations = map.entry(plugin_id.to_string()).or_default();
 
         if !operations.contains(&operation.to_string()) {
             operations.push(operation.to_string());

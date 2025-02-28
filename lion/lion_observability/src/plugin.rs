@@ -305,7 +305,7 @@ impl PluginObservability {
     /// Create a context with the plugin ID
     pub fn create_context(&self) -> Context {
         // Create a context with plugin ID and a root span
-        let span_context = SpanContext::new_root(&format!("root-{}", self.plugin_id));
+        let span_context = SpanContext::new_root(format!("root-{}", self.plugin_id));
         Context::new()
             .with_plugin_id(self.plugin_id.clone())
             .with_span_context(span_context)
