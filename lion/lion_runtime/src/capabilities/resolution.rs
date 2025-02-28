@@ -5,8 +5,8 @@
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
-use lion_capability::model::CapabilityId;
-use lion_core::traits::capability::CapabilityOperation;
+use lion_core::CapabilityId;
+use super::manager::CapabilityOperation;
 use thiserror::Error;
 use tracing::{debug, error, info, warn};
 

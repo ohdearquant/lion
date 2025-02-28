@@ -7,8 +7,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
-use lion_capability::model::{Capability, CapabilityId};
-use lion_core::traits::capability::CapabilityOperation;
+use lion_core::CapabilityId;
 use lion_policy::engine::evaluator::PolicyEvaluator;
 use parking_lot::RwLock;
 use thiserror::Error;
@@ -16,6 +15,14 @@ use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
 /// Errors that can occur in capability operations
+/// Simple replacement for the moved CapabilityOperation
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CapabilityOperation(String);
+
+impl From<String> for CapabilityOperation {
+    fn from(s: String) -> Self { Self(s) }
+}
+
 #[derive(Debug, Error)]
 pub enum CapabilityError {
     #[error("Capability {0} not found")]
@@ -106,7 +113,7 @@ impl CapabilityManager {
         let rights_set: HashSet<String> = rights.into_iter().collect();
 
         // Generate a new capability ID
-        let cap_id = CapabilityId(Uuid::new_v4().to_string());
+        let cap_id = CapabilityId::from_uuid(Uuid::new_v4());
 
         // Create a new capability entry
         let entry = CapabilityEntry {
@@ -197,7 +204,7 @@ impl CapabilityManager {
         }
 
         // Generate a new capability ID
-        let cap_id = CapabilityId(Uuid::new_v4().to_string());
+        let cap_id = CapabilityId::from_uuid(Uuid::new_v4());
 
         // Create a new capability entry
         let entry = CapabilityEntry {
