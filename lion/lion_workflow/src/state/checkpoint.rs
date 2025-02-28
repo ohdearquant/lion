@@ -115,6 +115,13 @@ impl<S: StorageBackend> CheckpointManager<S> {
         &self,
         workflow: &WorkflowDefinition,
     ) -> Result<String, CheckpointError> {
+        // Ensure base directory exists if using file storage
+        if let Some(base_dir) = &self.base_dir {
+            if !base_dir.exists() {
+                fs::create_dir_all(base_dir)?;
+            }
+        }
+
         // Get or create a lock for this workflow
         let mut locks = self.locks.lock().await;
         let lock = locks
@@ -366,8 +373,10 @@ mod tests {
     async fn test_checkpoint_save_load() {
         // Create a temporary directory for checkpoints
         let temp_dir = TempDir::new().unwrap();
+        let base_dir = temp_dir.path().to_path_buf();
+
         let manager: CheckpointManager<crate::state::storage::FileStorage> =
-            CheckpointManager::with_file_storage(temp_dir.path().to_path_buf(), "1.0.0").unwrap();
+            CheckpointManager::with_file_storage(base_dir, "1.0.0").unwrap();
 
         // Create a test workflow
         let workflow = create_test_workflow();
@@ -390,8 +399,10 @@ mod tests {
     async fn test_list_checkpoints() {
         // Create a temporary directory for checkpoints
         let temp_dir = TempDir::new().unwrap();
+        let base_dir = temp_dir.path().to_path_buf();
+
         let manager: CheckpointManager<crate::state::storage::FileStorage> =
-            CheckpointManager::with_file_storage(temp_dir.path().to_path_buf(), "1.0.0").unwrap();
+            CheckpointManager::with_file_storage(base_dir, "1.0.0").unwrap();
 
         // Create a test workflow
         let workflow = create_test_workflow();
@@ -415,8 +426,10 @@ mod tests {
     async fn test_load_latest_checkpoint() {
         // Create a temporary directory for checkpoints
         let temp_dir = TempDir::new().unwrap();
+        let base_dir = temp_dir.path().to_path_buf();
+
         let manager: CheckpointManager<crate::state::storage::FileStorage> =
-            CheckpointManager::with_file_storage(temp_dir.path().to_path_buf(), "1.0.0").unwrap();
+            CheckpointManager::with_file_storage(base_dir, "1.0.0").unwrap();
 
         // Create a test workflow
         let mut workflow = create_test_workflow();
@@ -445,8 +458,10 @@ mod tests {
     async fn test_prune_checkpoints() {
         // Create a temporary directory for checkpoints
         let temp_dir = TempDir::new().unwrap();
+        let base_dir = temp_dir.path().to_path_buf();
+
         let manager: CheckpointManager<crate::state::storage::FileStorage> =
-            CheckpointManager::with_file_storage(temp_dir.path().to_path_buf(), "1.0.0").unwrap();
+            CheckpointManager::with_file_storage(base_dir, "1.0.0").unwrap();
 
         // Create a test workflow
         let workflow = create_test_workflow();

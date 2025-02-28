@@ -1,6 +1,5 @@
 use crate::patterns::event::EventBroker;
 use crate::patterns::saga::definition::SagaDefinition;
-use crate::patterns::saga::execution::FutureHelper;
 use crate::patterns::saga::step::SagaStep;
 use crate::patterns::saga::types::{
     AbortTask, CompensationHandler, CompensationTask, SagaError, SagaOrchestratorConfig,
@@ -967,31 +966,30 @@ mod tests {
     // Helper function to create a boxed step handler that returns the provided value
     fn create_success_handler(value: serde_json::Value) -> StepHandler {
         Arc::new(move |_step| {
-            let result = value.clone();
-            FutureHelper::box_step_handler(async move { Ok(result) })
+            let result_value = value.clone();
+            Box::new(Box::pin(async move { Ok(result_value) }))
         })
     }
 
     // Helper function to create a boxed step handler that returns an error
     fn create_failure_handler(error: &str) -> StepHandler {
-        let error_str = error.to_string();
+        let error_string = error.to_string();
         Arc::new(move |_step| {
-            let err = error_str.clone();
-            FutureHelper::box_step_handler(async move { Err(err) })
+            let err = error_string.clone();
+            Box::new(Box::pin(async move { Err(err) }))
         })
     }
 
     // Helper function to create a boxed compensation handler
     fn create_compensation_handler(success: bool) -> CompensationHandler {
         Arc::new(move |_step| {
-            let will_succeed = success;
-            FutureHelper::box_compensation_handler(async move {
-                if will_succeed {
+            Box::new(Box::pin(async move {
+                if success {
                     Ok(())
                 } else {
                     Err("Compensation failed".to_string())
                 }
-            })
+            }))
         })
     }
 
@@ -999,6 +997,11 @@ mod tests {
     async fn test_saga_orchestrator() {
         // Create an orchestrator
         let orch = SagaOrchestrator::new(SagaOrchestratorConfig::default());
+
+        // Create a modified config with shorter timeouts for testing
+        let mut config = SagaOrchestratorConfig::default();
+        config.check_interval_ms = 50; // Faster interval for testing
+        let orch = SagaOrchestrator::new(config);
 
         // Start the orchestrator
         orch.start().await.unwrap();
@@ -1060,7 +1063,14 @@ mod tests {
 
         // Wait for saga to complete or timeout
         let mut saga_completed = false;
-        for _ in 0..30 {
+        let timeout = Duration::from_secs(5);
+        let start = std::time::Instant::now();
+
+        while !saga_completed {
+            if start.elapsed() > timeout {
+                break;
+            }
+
             // Increase the number of attempts
             if let Some(saga_lock) = orch.get_saga(&saga_id).await {
                 let saga = saga_lock.read().await;
@@ -1072,7 +1082,7 @@ mod tests {
                     break;
                 }
                 // Print status to help with debugging
-                log::debug!(
+                println!(
                     "Saga status: {:?}, step1: {:?}, step2: {:?}",
                     saga.status,
                     saga.steps.get("step1").map(|s| s.status),
