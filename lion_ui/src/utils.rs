@@ -1,23 +1,23 @@
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 use std::{error::Error, fmt};
 use uuid::Uuid;
-use serde::{Deserialize, Serialize};
-use chrono::{DateTime, Utc};
 
 /// Custom error type for lion_ui operations
 #[derive(Debug)]
 pub enum LionUiError {
     /// Runtime error
     Runtime(String),
-    
+
     /// Configuration error
     Config(String),
-    
+
     /// Validation error
     Validation(String),
-    
+
     /// Not found error
     NotFound(String),
-    
+
     /// Plugin error
     Plugin(String),
 }
@@ -44,13 +44,13 @@ pub type LionUiResult<T> = Result<T, LionUiError>;
 pub struct TraceContext {
     /// Trace ID
     pub trace_id: Uuid,
-    
+
     /// Span ID
     pub span_id: Uuid,
-    
+
     /// Parent span ID
     pub parent_span_id: Option<Uuid>,
-    
+
     /// Trace start time
     pub start_time: DateTime<Utc>,
 }
@@ -65,7 +65,7 @@ impl TraceContext {
             start_time: Utc::now(),
         }
     }
-    
+
     /// Create a child span from this trace context
     pub fn create_child_span(&self) -> Self {
         Self {
@@ -88,10 +88,10 @@ impl Default for TraceContext {
 pub struct PaginationParams {
     /// Page number (1-based)
     pub page: Option<usize>,
-    
+
     /// Items per page
     pub per_page: Option<usize>,
-    
+
     /// Continuation token for cursor-based pagination
     pub cursor: Option<String>,
 }
@@ -101,13 +101,13 @@ pub struct PaginationParams {
 pub struct HealthStatus {
     /// Overall status
     pub status: String,
-    
+
     /// Version
     pub version: String,
-    
+
     /// Uptime in seconds
     pub uptime: u64,
-    
+
     /// Subsystem statuses
     pub subsystems: serde_json::Value,
 }

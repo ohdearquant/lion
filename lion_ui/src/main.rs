@@ -15,19 +15,19 @@ use tower_http::{
 use tracing::{info, Level};
 use tracing_subscriber::FmtSubscriber;
 
-mod state;
+mod agents;
 mod events;
 mod logs;
-mod agents;
 mod plugins;
+mod state;
 mod utils;
 mod wasm;
 
-use state::AppState;
+use agents::*;
 use events::sse_handler;
 use logs::{search_logs_handler, LogEntry};
-use agents::*;
 use plugins::*;
+use state::AppState;
 
 #[tokio::main]
 async fn main() {
@@ -41,10 +41,10 @@ async fn main() {
 
     // Create broadcast channel for logs with 1000 capacity
     let (logs_tx, _logs_rx) = broadcast::channel::<LogEntry>(1000);
-    
+
     // Create in-memory log buffer with 10,000 capacity for log search
     let log_buffer = Arc::new(RwLock::new(Vec::with_capacity(10000)));
-    
+
     // Initialize shared application state
     let app_state = Arc::new(AppState::new(logs_tx.clone(), log_buffer.clone()));
 
@@ -56,7 +56,7 @@ async fn main() {
             // Add to searchable buffer with a cap
             let mut buffer = buffer_state.log_buffer.write().await;
             buffer.push(log);
-            
+
             // If buffer exceeds max size, remove oldest entries
             if buffer.len() > 10000 {
                 *buffer = buffer.drain(1000..).collect();

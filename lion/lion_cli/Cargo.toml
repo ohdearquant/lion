@@ -19,6 +19,25 @@ log = "0.4"
 anyhow = "1.0"
 thiserror = "2.0"
 toml = "0.8"
+colored = "2.0"
+
+# Optional dependencies for real integrations
+lion_runtime = { path = "../lion_runtime", optional = true }
+lion_policy = { path = "../lion_policy", optional = true }
+lion_capability = { path = "../lion_capability", optional = true }
+lion_workflow = { path = "../lion_workflow", optional = true }
+lion_isolation = { path = "../lion_isolation", optional = true }
+lion_observability = { path = "../lion_observability", optional = true }
+
+[features]
+default = []
+runtime-integration = ["dep:lion_runtime"]
+policy-integration = ["dep:lion_policy"]
+capability-integration = ["dep:lion_capability"]
+workflow-integration = ["dep:lion_workflow"]
+isolation-integration = ["dep:lion_isolation"]
+observability-integration = ["dep:lion_observability"]
+all-integrations = ["runtime-integration", "policy-integration", "capability-integration", "workflow-integration", "isolation-integration", "observability-integration"]
 
 [dev-dependencies]
 assert_cmd = "2.0"

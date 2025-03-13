@@ -1,3 +1,4 @@
+use crate::state::AppState;
 use axum::{
     extract::{Query, State},
     response::Json,
@@ -6,7 +7,6 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use uuid::Uuid;
-use crate::state::AppState;
 
 /// Log severity levels
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -30,25 +30,25 @@ impl Default for LogLevel {
 pub struct LogEntry {
     /// Timestamp when the log was created
     pub timestamp: DateTime<Utc>,
-    
+
     /// Severity level of the log
     pub level: LogLevel,
-    
+
     /// The message content
     pub message: String,
-    
+
     /// Source of the log (agent, plugin, system, etc.)
     pub source: String,
-    
+
     /// Optional agent ID if the log is from an agent
     pub agent_id: Option<Uuid>,
-    
+
     /// Optional plugin ID if the log is from a plugin
     pub plugin_id: Option<Uuid>,
-    
+
     /// Optional correlation ID for tracking related logs
     pub correlation_id: Option<Uuid>,
-    
+
     /// Additional metadata as key-value pairs
     pub metadata: serde_json::Value,
 }
@@ -67,25 +67,25 @@ impl LogEntry {
             metadata: serde_json::Value::Null,
         }
     }
-    
+
     /// Add an agent ID to this log entry
     pub fn with_agent_id(mut self, agent_id: Uuid) -> Self {
         self.agent_id = Some(agent_id);
         self
     }
-    
+
     /// Add a plugin ID to this log entry
     pub fn with_plugin_id(mut self, plugin_id: Uuid) -> Self {
         self.plugin_id = Some(plugin_id);
         self
     }
-    
+
     /// Add a correlation ID to this log entry
     pub fn with_correlation_id(mut self, correlation_id: Uuid) -> Self {
         self.correlation_id = Some(correlation_id);
         self
     }
-    
+
     /// Add metadata to this log entry
     pub fn with_metadata(mut self, metadata: serde_json::Value) -> Self {
         self.metadata = metadata;
@@ -98,25 +98,25 @@ impl LogEntry {
 pub struct LogFilter {
     /// Filter by log level (minimum level to include)
     pub level: Option<LogLevel>,
-    
+
     /// Text search in the message field
     pub text: Option<String>,
-    
+
     /// Filter by source
     pub source: Option<String>,
-    
+
     /// Filter by agent ID
     pub agent_id: Option<Uuid>,
-    
+
     /// Filter by plugin ID
     pub plugin_id: Option<Uuid>,
-    
+
     /// Filter by correlation ID
     pub correlation_id: Option<Uuid>,
-    
+
     /// Maximum number of logs to return
     pub limit: Option<usize>,
-    
+
     /// Starting from (for pagination)
     pub offset: Option<usize>,
 }
@@ -128,7 +128,7 @@ pub async fn search_logs_handler(
 ) -> Json<Vec<LogEntry>> {
     // Get a read lock on the log buffer
     let buffer = state.log_buffer.read().await;
-    
+
     // Apply filters
     let filtered_logs = buffer.iter()
         // Filter by minimum log level if specified
@@ -178,15 +178,16 @@ pub async fn search_logs_handler(
         })
         .cloned()
         .collect::<Vec<_>>();
-    
+
     // Apply pagination
     let offset = filter.offset.unwrap_or(0);
     let limit = filter.limit.unwrap_or(100);
-    
-    let paginated_logs = filtered_logs.into_iter()
+
+    let paginated_logs = filtered_logs
+        .into_iter()
         .skip(offset)
         .take(limit)
         .collect::<Vec<_>>();
-    
+
     Json(paginated_logs)
 }

@@ -8,18 +8,18 @@ use std::sync::Arc;
 use tracing::{info, warn};
 use uuid::Uuid;
 
-use crate::state::AppState;
 use crate::logs::{LogEntry, LogLevel};
+use crate::state::AppState;
 
 /// Request to spawn a new agent
 #[derive(Debug, Deserialize)]
 pub struct SpawnAgentRequest {
     /// Name of the agent
     pub name: String,
-    
+
     /// Agent type
     pub agent_type: String,
-    
+
     /// Configuration
     pub config: serde_json::Value,
 }
@@ -29,10 +29,10 @@ pub struct SpawnAgentRequest {
 pub struct SpawnAgentResponse {
     /// Agent ID
     pub id: Uuid,
-    
+
     /// Name of the agent
     pub name: String,
-    
+
     /// Status message
     pub status: String,
 }
@@ -46,24 +46,25 @@ pub async fn spawn_agent(
 
     // For now, just create a placeholder agent
     let agent_id = Uuid::new_v4();
-    
+
     // Add agent to our state
     {
         let mut agents = state.agents.write().await;
         agents.insert(agent_id, request.name.clone());
     }
-    
+
     // Log the agent creation
     let log_entry = LogEntry::new(
         LogLevel::Info,
         format!("Agent '{}' spawned", request.name),
         "system",
-    ).with_agent_id(agent_id);
-    
+    )
+    .with_agent_id(agent_id);
+
     state.log(log_entry).await;
-    
+
     info!("Agent '{}' spawned with ID {}", request.name, agent_id);
-    
+
     // Return success
     (
         StatusCode::CREATED,
@@ -76,12 +77,11 @@ pub async fn spawn_agent(
 }
 
 /// Lists all agents
-pub async fn list_agents(
-    State(state): State<Arc<AppState>>,
-) -> impl IntoResponse {
+pub async fn list_agents(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let agents = state.agents.read().await;
-    
-    let response: Vec<_> = agents.iter()
+
+    let response: Vec<_> = agents
+        .iter()
         .map(|(id, name)| {
             serde_json::json!({
                 "id": id,
@@ -89,6 +89,6 @@ pub async fn list_agents(
             })
         })
         .collect();
-    
+
     Json(response)
 }
