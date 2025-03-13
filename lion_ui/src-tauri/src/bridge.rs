@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use std::process::Command;
+use std::path::PathBuf;
 use tauri::{command, Window};
 use uuid::Uuid;
 
@@ -26,6 +26,13 @@ pub struct PluginRequest {
     path: String,
     name: Option<String>,
     description: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PluginCallRequest {
+    plugin_id: String,
+    function: String,
+    args: Option<String>,
 }
 
 /// Simple ping command to test if bridge is working
@@ -94,36 +101,78 @@ pub async fn spawn_agent(window: Window, request: AgentRequest) -> Result<String
 
 /// Load a plugin through the Lion UI backend
 #[command]
-pub async fn load_plugin(window: Window, request: PluginRequest) -> Result<String, String> {
-    // In a real implementation, this would make a request to the Lion UI server
-    // For now, we just print the plugin details and return a mock ID
+pub async fn load_plugin_integrated(window: Window, request: PluginRequest) -> Result<String, String> {
+    let path_buf = PathBuf::from(&request.path);
     
-    let plugin_name = request.name.unwrap_or_else(|| {
-        request
-            .path
-            .split('/')
-            .last()
-            .unwrap_or("unknown")
-            .to_string()
-    });
+    // Call the CLI library function directly
+    let plugin_id = lion_cli::commands::plugin::load_plugin(&path_buf, None)
+        .map_err(|e| format!("Failed to load plugin: {}", e))?;
     
-    println!("Loading plugin: {} from {}", plugin_name, request.path);
+    let plugin_name = path_buf
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("unknown")
+        .to_string();
     
-    let plugin_id = Uuid::new_v4().to_string();
-    
-    // Emit an event to the frontend about the plugin loading
-    window
-        .emit(
-            "plugin-loaded",
-            serde_json::json!({
-                "id": plugin_id,
-                "name": plugin_name,
-                "path": request.path,
-                "description": request.description.unwrap_or_default(),
-                "version": "0.1.0" // Default version
-            }),
-        )
-        .map_err(|e| e.to_string())?;
+    // Emit the event to inform frontend
+    window.emit(
+        "plugin-loaded",
+        serde_json::json!({
+            "id": plugin_id,
+            "path": request.path,
+            "name": plugin_name,
+            "description": request.description.unwrap_or_default(),
+            "status": "loaded"
+        }),
+    ).map_err(|e| e.to_string())?;
     
     Ok(plugin_id)
+}
+
+/// List all loaded plugins
+#[command]
+pub async fn list_plugins_integrated(window: Window) -> Result<Vec<serde_json::Value>, String> {
+    let (status, plugin_ids) = lion_cli::interfaces::runtime::get_runtime_status_and_plugins()
+        .map_err(|e| format!("Failed to list plugins: {}", e))?;
+    
+    let mut plugins = Vec::new();
+    
+    for plugin_id in plugin_ids {
+        let metadata = lion_cli::interfaces::runtime::get_plugin_metadata(&plugin_id)
+            .map_err(|e| format!("Failed to get plugin metadata: {}", e))?;
+        
+        plugins.push(serde_json::json!({
+            "id": plugin_id,
+            "name": metadata.name,
+            "status": "loaded"
+        }));
+    }
+    
+    window.emit(
+        "plugins-listed",
+        serde_json::json!({
+            "count": plugins.len(),
+            "plugins": plugins.clone()
+        }),
+    ).map_err(|e| e.to_string())?;
+    
+    Ok(plugins)
+}
+
+/// Call a plugin function
+#[command]
+pub async fn call_plugin_integrated(window: Window, request: PluginCallRequest) -> Result<String, String> {
+    let result = lion_cli::commands::plugin::call_plugin(
+        &request.plugin_id,
+        &request.function,
+        request.args.as_deref()
+    ).map_err(|e| format!("Failed to call plugin function: {}", e))?;
+    
+    window.emit("plugin-call-completed", serde_json::json!({
+        "plugin_id": request.plugin_id,
+        "function": request.function,
+        "result": result
+    })).map_err(|e| e.to_string())?;
+    
+    Ok(result)
 }

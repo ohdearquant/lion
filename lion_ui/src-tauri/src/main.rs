@@ -87,7 +87,10 @@ fn main() {
             bridge::ping,
             bridge::create_log,
             bridge::spawn_agent,
-            bridge::load_plugin
+            bridge::load_plugin,
+            bridge::load_plugin_integrated,
+            bridge::list_plugins_integrated,
+            bridge::call_plugin_integrated
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -17,6 +17,7 @@ path = "src/lib.rs"
 lion_core = { path = "../lion/lion_core" }
 lion_runtime = { path = "../lion/lion_runtime" }
 lion_capability = { path = "../lion/lion_capability" }
+lion_cli = { path = "../lion/lion_cli" }
 lion_workflow = { path = "../lion/lion_workflow" }
 lion_observability = { path = "../lion/lion_observability" }
 
