@@ -3,10 +3,10 @@
     windows_subsystem = "windows"
 )]
 
-use std::sync::Arc;
+use tauri::menu::{MenuId, MenuItemId};
 use tauri::{
-    CustomMenuItem, Manager, SystemTray, SystemTrayEvent, SystemTrayMenu, SystemTrayMenuItem,
-    WindowBuilder, WindowEvent, WindowUrl,
+    CustomMenuItem, Manager, SystemTrayMenu, SystemTrayMenuItem, TrayIcon, Window, WindowEvent,
+    WindowUrl,
 };
 
 mod bridge;
@@ -14,83 +14,85 @@ mod utils;
 
 fn main() {
     // Configure the system tray
-    let quit = CustomMenuItem::new("quit".to_string(), "Quit");
-    let hide = CustomMenuItem::new("hide".to_string(), "Hide");
-    let show = CustomMenuItem::new("show".to_string(), "Show");
-    let logs = CustomMenuItem::new("logs".to_string(), "Open Logs");
-    
+    let quit = CustomMenuItem::new(MenuItemId::new("quit"), "Quit");
+    let hide = CustomMenuItem::new(MenuItemId::new("hide"), "Hide");
+    let show = CustomMenuItem::new(MenuItemId::new("show"), "Show");
+    let logs = CustomMenuItem::new(MenuItemId::new("logs"), "Open Logs");
+
     let tray_menu = SystemTrayMenu::new()
         .add_item(show)
         .add_item(hide)
         .add_item(logs)
         .add_native_item(SystemTrayMenuItem::Separator)
         .add_item(quit);
-    
-    let system_tray = SystemTray::new().with_menu(tray_menu);
-    
+
+    let tray_icon = TrayIcon::new()
+        .with_menu(tray_menu)
+        .on_menu_event(|app, event| match event.id().as_ref() {
+            "quit" => {
+                std::process::exit(0);
+            }
+            "hide" => {
+                if let Some(window) = app.get_window("main") {
+                    let _ = window.hide();
+                }
+            }
+            "show" => {
+                if let Some(window) = app.get_window("main") {
+                    let _ = window.show();
+                    let _ = window.set_focus();
+                }
+            }
+            "logs" => {
+                if let Some(window) = app.get_window("logs") {
+                    let _ = window.show();
+                    let _ = window.set_focus();
+                } else {
+                    let _ = Window::new(app.handle(), "logs", WindowUrl::App("logs.html".into()))
+                        .title("Lion UI - Log Viewer")
+                        .inner_size(900.0, 600.0)
+                        .build();
+                }
+            }
+            _ => {}
+        });
+
     // Spawn the backend server as a separate process
     std::thread::spawn(|| {
         // In a real implementation, we would start the Lion UI server here
-        // For now, we just print a message
         println!("Lion UI server would start here in a separate process");
     });
 
     tauri::Builder::default()
-        .system_tray(system_tray)
-        .on_system_tray_event(|app, event| match event {
-            SystemTrayEvent::MenuItemClick { id, .. } => match id.as_str() {
-                "quit" => {
-                    std::process::exit(0);
-                }
-                "hide" => {
-                    if let Some(window) = app.get_window("main") {
-                        window.hide().unwrap();
-                    }
-                }
-                "show" => {
-                    if let Some(window) = app.get_window("main") {
-                        window.show().unwrap();
-                        window.set_focus().unwrap();
-                    }
-                }
-                "logs" => {
-                    if let Some(window) = app.get_window("logs") {
-                        window.show().unwrap();
-                        window.set_focus().unwrap();
-                    } else {
-                        let logs_window = WindowBuilder::new(
-                            app,
-                            "logs".to_string(),
-                            WindowUrl::App("logs.html".into()),
-                        )
-                        .title("Lion UI - Log Viewer")
-                        .inner_size(900.0, 600.0)
-                        .build()
-                        .unwrap();
-                    }
-                }
-                _ => {}
-            },
-            _ => {}
-        })
+        .plugin(tray_icon)
         .on_window_event(|event| match event.event() {
             WindowEvent::CloseRequested { api, .. } => {
                 if event.window().label() == "main" {
                     // Hide the window instead of closing it
-                    event.window().hide().unwrap();
+                    let _ = event.window().hide();
                     api.prevent_close();
                 }
             }
             _ => {}
         })
+        .plugin(
+            tauri::plugin::TauriPlugin::new().register_uri_scheme_protocol(
+                "lion",
+                |_app, _request| {
+                    // You can handle custom URI schemes here
+                    // For now, return an empty success response
+                    Ok(tauri::http::Response::new(200))
+                },
+            ),
+        )
         .invoke_handler(tauri::generate_handler![
             bridge::ping,
             bridge::create_log,
             bridge::spawn_agent,
-            bridge::load_plugin,
             bridge::load_plugin_integrated,
             bridge::list_plugins_integrated,
-            bridge::call_plugin_integrated
+            bridge::call_plugin_integrated,
+            bridge::get_recent_logs
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

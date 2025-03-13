@@ -1,20 +1,59 @@
 {
-  "identifier": "com.lion.ui",
+  "$schema": "https://cdn.jsdelivr.net/gh/tauri-apps/tauri@dev/tooling/cli/schema.json",
   "build": {
     "beforeBuildCommand": "",
-    "beforeDevCommand": ""
+    "beforeDevCommand": "",
+    "devPath": "../frontend/dist",
+    "distDir": "../frontend/dist"
   },
-  "ui": {
+  "package": {
+    "productName": "Lion UI",
+    "version": "0.0.1-stage2-phase5"
+  },
+  "tauri": {
     "bundle": {
-      "identifier": "com.lion.ui"
+      "active": true,
+      "category": "DeveloperTool",
+      "copyright": "",
+      "deb": {
+        "depends": []
+      },
+      "externalBin": [],
+      "identifier": "com.lion.ui",
+      "icon": [
+        "icons/32x32.png",
+        "icons/128x128.png",
+        "icons/128x128@2x.png",
+        "icons/icon.icns",
+        "icons/icon.ico"
+      ],
+      "longDescription": "Desktop UI for Lion runtime with advanced logging and monitoring",
+      "macOS": {
+        "entitlements": null,
+        "exceptionDomain": "",
+        "frameworks": [],
+        "providerShortName": null,
+        "signingIdentity": null
+      },
+      "shortDescription": "Lion UI",
+      "targets": "all",
+      "windows": {
+        "certificateThumbprint": null,
+        "digestAlgorithm": "sha256",
+        "timestampUrl": ""
+      }
+    },
+    "security": {
+      "csp": null
     },
     "windows": [
       {
-        "width": 800,
+        "fullscreen": false,
         "height": 600,
         "resizable": true,
-        "fullscreen": false,
-        "title": "Lion UI"
+        "title": "Lion UI",
+        "width": 800,
+        "label": "main"
       }
     ]
   }

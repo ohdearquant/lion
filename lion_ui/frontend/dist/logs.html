@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lion UI - Log Viewer</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            margin: 0;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+        }
+        h1 {
+            color: #333;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 10px;
+            margin-top: 0;
+        }
+        .controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        button, select {
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            background: white;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #f0f0f0;
+        }
+        .logs {
+            height: 500px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            padding: 10px;
+            border-radius: 4px;
+            background: #fafafa;
+        }
+        .log-entry {
+            margin-bottom: 8px;
+            padding: 8px;
+            border-radius: 4px;
+        }
+        .log-entry.info {
+            background-color: #e8f4f8;
+            border-left: 4px solid #4a9cc2;
+        }
+        .log-entry.warn {
+            background-color: #fff8e8;
+            border-left: 4px solid #e5b454;
+        }
+        .log-entry.error {
+            background-color: #fde8e8;
+            border-left: 4px solid #c24a4a;
+        }
+        .log-entry .timestamp {
+            color: #777;
+            font-size: 0.8em;
+        }
+        .log-entry .source {
+            background: #eee;
+            padding: 2px 5px;
+            border-radius: 3px;
+            font-size: 0.8em;
+            margin-left: 5px;
+        }
+        .log-entry .content {
+            margin-top: 5px;
+        }
+        .empty-state {
+            text-align: center;
+            color: #888;
+            margin-top: 200px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Lion UI - Log Viewer</h1>
+        
+        <div class="controls">
+            <select id="logLevel">
+                <option value="all">All Levels</option>
+                <option value="info">Info</option>
+                <option value="warn">Warning</option>
+                <option value="error">Error</option>
+            </select>
+            
+            <select id="logSource">
+                <option value="all">All Sources</option>
+                <option value="plugin">Plugins</option>
+                <option value="agent">Agents</option>
+                <option value="system">System</option>
+            </select>
+            
+            <button id="clearLogs">Clear Logs</button>
+            <button id="refreshLogs">Refresh</button>
+        </div>
+        
+        <div class="logs" id="logsContainer">
+            <div class="empty-state">
+                No logs available. Logs will appear here when activities occur.
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Listen for log events from the Tauri backend
+        window.__TAURI__.event.listen('log-created', (event) => {
+            addLogEntry(event.payload);
+        });
+        
+        // Function to add a log entry to the UI
+        function addLogEntry(log) {
+            // Remove empty state if present
+            const emptyState = document.querySelector('.empty-state');
+            if (emptyState) {
+                emptyState.remove();
+            }
+            
+            const logsContainer = document.getElementById('logsContainer');
+            
+            // Create log entry element
+            const logEntry = document.createElement('div');
+            logEntry.className = `log-entry ${log.level.toLowerCase()}`;
+            logEntry.dataset.level = log.level.toLowerCase();
+            logEntry.dataset.source = log.source.toLowerCase();
+            
+            // Create timestamp
+            const timestamp = document.createElement('span');
+            timestamp.className = 'timestamp';
+            timestamp.textContent = new Date(log.timestamp).toLocaleTimeString();
+            
+            // Create source badge
+            const source = document.createElement('span');
+            source.className = 'source';
+            source.textContent = log.source;
+            
+            // Create content
+            const content = document.createElement('div');
+            content.className = 'content';
+            content.textContent = log.message;
+            
+            // Assemble log entry
+            logEntry.appendChild(timestamp);
+            logEntry.appendChild(source);
+            logEntry.appendChild(content);
+            
+            // Add to container
+            logsContainer.appendChild(logEntry);
+            
+            // Scroll to bottom
+            logsContainer.scrollTop = logsContainer.scrollHeight;
+            
+            // Apply current filters
+            applyFilters();
+        }
+        
+        // Function to apply filters
+        function applyFilters() {
+            const levelFilter = document.getElementById('logLevel').value;
+            const sourceFilter = document.getElementById('logSource').value;
+            
+            const logEntries = document.querySelectorAll('.log-entry');
+            
+            logEntries.forEach(entry => {
+                const levelMatch = levelFilter === 'all' || entry.dataset.level === levelFilter;
+                const sourceMatch = sourceFilter === 'all' || entry.dataset.source.includes(sourceFilter);
+                
+                entry.style.display = levelMatch && sourceMatch ? 'block' : 'none';
+            });
+        }
+        
+        // Set up event listeners
+        document.getElementById('logLevel').addEventListener('change', applyFilters);
+        document.getElementById('logSource').addEventListener('change', applyFilters);
+        
+        document.getElementById('clearLogs').addEventListener('click', () => {
+            const logsContainer = document.getElementById('logsContainer');
+            logsContainer.innerHTML = '<div class="empty-state">No logs available. Logs will appear here when activities occur.</div>';
+        });
+        
+        document.getElementById('refreshLogs').addEventListener('click', async () => {
+            try {
+                // Call backend to fetch latest logs
+                const logs = await window.__TAURI__.invoke('get_recent_logs');
+                
+                // Clear current logs
+                document.getElementById('clearLogs').click();
+                
+                // Add fetched logs
+                if (logs && logs.length) {
+                    logs.forEach(log => addLogEntry(log));
+                }
+            } catch (error) {
+                console.error('Error fetching logs:', error);
+            }
+        });
+        
+        // Simulate some sample logs (for development only)
+        setTimeout(() => {
+            addLogEntry({
+                id: '1',
+                timestamp: new Date().toISOString(),
+                level: 'INFO',
+                message: 'System initialized successfully',
+                source: 'system'
+            });
+            
+            setTimeout(() => {
+                addLogEntry({
+                    id: '2',
+                    timestamp: new Date().toISOString(),
+                    level: 'INFO',
+                    message: 'Plugin "calculator" loaded',
+                    source: 'plugin'
+                });
+            }, 1000);
+            
+            setTimeout(() => {
+                addLogEntry({
+                    id: '3',
+                    timestamp: new Date().toISOString(),
+                    level: 'WARN',
+                    message: 'Agent "assistant" used high CPU resources',
+                    source: 'agent'
+                });
+            }, 2000);
+        }, 500);
+    </script>
+</body>
+</html>

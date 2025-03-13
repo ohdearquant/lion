@@ -12,7 +12,7 @@ pub fn is_server_running() -> bool {
 pub fn get_lion_ui_path() -> PathBuf {
     // In a real implementation, this would determine the path to the Lion UI server executable
     // based on the current executable location
-    
+
     // For now, just return a placeholder path
     if cfg!(windows) {
         PathBuf::from(r"C:\Program Files\Lion\lion_ui.exe")
@@ -29,15 +29,12 @@ pub fn ensure_server_running() -> Result<(), String> {
     if is_server_running() {
         return Ok(());
     }
-    
+
     // Get the path to the Lion UI executable
     let lion_ui_path = get_lion_ui_path();
-    
+
     // Start the server process
-    match Command::new(lion_ui_path)
-        .arg("--daemon")
-        .spawn()
-    {
+    match Command::new(lion_ui_path).arg("--daemon").spawn() {
         Ok(_) => {
             println!("Started Lion UI server");
             Ok(())

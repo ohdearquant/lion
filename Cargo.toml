@@ -9,6 +9,7 @@ members = [
     "lion/lion_policy",
     "lion/lion_runtime",
     "lion/lion_workflow",
-    "lion_ui"
+    "lion_ui",
+    "lion_ui/src-tauri"
 ]
 resolver = "2"

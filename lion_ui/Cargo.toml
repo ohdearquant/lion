@@ -46,11 +46,10 @@ anyhow = "1.0"
 
 # Tauri Dependencies
 [dependencies.tauri]
-version = "1.5"
+version = "2.0.0-beta.0"
 features = [
-  "api-all",
-  "system-tray",
-  "macos-private-api",
+  "api",
+  "tray-icon",
 ]
 optional = true
 
@@ -59,4 +58,4 @@ default = []
 tauri-app = ["tauri"]
 
 [build-dependencies]
-tauri-build = { version = "1.5", features = [], optional = true }
+tauri-build = { version = "2.0.0-beta.0", features = [], optional = true }

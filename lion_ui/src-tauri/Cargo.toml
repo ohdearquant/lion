@@ -10,22 +10,23 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [build-dependencies]
-tauri-build = { version = "1.5", features = [] }
+tauri-build = { version = "2.0.0-beta.0" }
 
 [dependencies]
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-tauri = { version = "1.5", features = ["api-all", "system-tray", "macos-private-api"] }
-reqwest = { version = "0.11", features = ["json"] }
+tauri = { version = "2.0.0-beta.0", features = [
+    "api",
+    "tray-icon"
+] }
+reqwest = { version = "0.12", features = ["json"] }
 tokio = { version = "1.0", features = ["full"] }
 uuid = { version = "1.5", features = ["v4", "serde"] }
 chrono = { version = "0.4", features = ["serde"] }
 lion_cli = { path = "../../lion/lion_cli" }
+lion_ui = { path = "../" }
 
 [features]
 # this feature is used for production builds or when `devPath` points to the filesystem
 # DO NOT REMOVE!!
 custom-protocol = ["tauri/custom-protocol"]
-
-# Add the Lion UI core for direct integration
-lion_ui = { path = ".." }
