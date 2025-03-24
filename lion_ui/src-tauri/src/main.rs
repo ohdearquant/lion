@@ -3,32 +3,30 @@
     windows_subsystem = "windows"
 )]
 
-use tauri::menu::{MenuId, MenuItemId};
-use tauri::{
-    CustomMenuItem, Manager, SystemTrayMenu, SystemTrayMenuItem, TrayIcon, Window, WindowEvent,
-    WindowUrl,
-};
+use tauri::menu::{Menu, MenuId, MenuItem};
+use tauri::tray::{MenuId as TrayMenuId, TrayIconBuilder};
+use tauri::{Manager, Window, WindowEvent, WindowUrl};
 
 mod bridge;
 mod utils;
 
 fn main() {
     // Configure the system tray
-    let quit = CustomMenuItem::new(MenuItemId::new("quit"), "Quit");
-    let hide = CustomMenuItem::new(MenuItemId::new("hide"), "Hide");
-    let show = CustomMenuItem::new(MenuItemId::new("show"), "Show");
-    let logs = CustomMenuItem::new(MenuItemId::new("logs"), "Open Logs");
+    let quit = MenuItem::new("quit", "Quit", None, None);
+    let hide = MenuItem::new("hide", "Hide", None, None);
+    let show = MenuItem::new("show", "Show", None, None);
+    let logs = MenuItem::new("logs", "Open Logs", None, None);
 
-    let tray_menu = SystemTrayMenu::new()
+    let tray_menu = Menu::new()
         .add_item(show)
         .add_item(hide)
         .add_item(logs)
-        .add_native_item(SystemTrayMenuItem::Separator)
+        .add_separator()
         .add_item(quit);
 
-    let tray_icon = TrayIcon::new()
-        .with_menu(tray_menu)
-        .on_menu_event(|app, event| match event.id().as_ref() {
+    let tray_icon = TrayIconBuilder::new()
+        .menu(tray_menu)
+        .on_menu_event(|app, id| match id.as_ref() {
             "quit" => {
                 std::process::exit(0);
             }
@@ -64,7 +62,7 @@ fn main() {
     });
 
     tauri::Builder::default()
-        .plugin(tray_icon)
+        .tray_icon(tray_icon.build().unwrap())
         .on_window_event(|event| match event.event() {
             WindowEvent::CloseRequested { api, .. } => {
                 if event.window().label() == "main" {
@@ -75,16 +73,13 @@ fn main() {
             }
             _ => {}
         })
-        .plugin(
-            tauri::plugin::TauriPlugin::new().register_uri_scheme_protocol(
-                "lion",
-                |_app, _request| {
-                    // You can handle custom URI schemes here
-                    // For now, return an empty success response
-                    Ok(tauri::http::Response::new(200))
-                },
-            ),
-        )
+        .register_uri_scheme_protocol("lion", |app, request| {
+            // You can handle custom URI schemes here
+            // For now, return an empty success response
+            Ok(tauri::http::ResponseBuilder::new()
+                .status(200)
+                .body(Vec::new()))
+        })
         .invoke_handler(tauri::generate_handler![
             bridge::ping,
             bridge::create_log,
@@ -94,6 +89,6 @@ fn main() {
             bridge::call_plugin_integrated,
             bridge::get_recent_logs
         ])
-        .run(tauri::generate_context!())
+        .run(tauri::generate_context!("tauri.conf.json"))
         .expect("error while running tauri application");
 }

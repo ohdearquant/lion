@@ -53,7 +53,8 @@ pub async fn create_log(window: Window, request: LogRequest) -> Result<String, S
     );
 
     // Emit an event to the frontend about the log creation
-    let _ = window.emit(
+    let _ = window.emit_to(
+        &window.label(),
         "log-created",
         serde_json::json!({
             "id": Uuid::new_v4().to_string(),
@@ -82,7 +83,8 @@ pub async fn spawn_agent(window: Window, request: AgentRequest) -> Result<String
     let agent_id = Uuid::new_v4().to_string();
 
     // Emit an event to the frontend about the agent creation
-    let _ = window.emit(
+    let _ = window.emit_to(
+        &window.label(),
         "agent-spawned",
         serde_json::json!({
             "id": agent_id,
@@ -114,7 +116,8 @@ pub async fn load_plugin_integrated(
         .to_string();
 
     // Emit the event to inform frontend
-    let _ = window.emit(
+    let _ = window.emit_to(
+        &window.label(),
         "plugin-loaded",
         serde_json::json!({
             "id": plugin_id,
@@ -147,7 +150,8 @@ pub async fn list_plugins_integrated(window: Window) -> Result<Vec<serde_json::V
         }));
     }
 
-    let _ = window.emit(
+    let _ = window.emit_to(
+        &window.label(),
         "plugins-listed",
         serde_json::json!({
             "count": plugins.len(),
@@ -171,7 +175,8 @@ pub async fn call_plugin_integrated(
     )
     .map_err(|e| format!("Failed to call plugin function: {}", e))?;
 
-    let _ = window.emit(
+    let _ = window.emit_to(
+        &window.label(),
         "plugin-call-completed",
         serde_json::json!({
             "plugin_id": request.plugin_id,

@@ -46,11 +46,7 @@ anyhow = "1.0"
 
 # Tauri Dependencies
 [dependencies.tauri]
-version = "2.0.0-beta.0"
-features = [
-  "api",
-  "tray-icon",
-]
+version = "^2.0"
 optional = true
 
 [features]
@@ -58,4 +54,4 @@ default = []
 tauri-app = ["tauri"]
 
 [build-dependencies]
-tauri-build = { version = "2.0.0-beta.0", features = [], optional = true }
+tauri-build = { version = "^2.0", features = [], optional = true }
