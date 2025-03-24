@@ -1,0 +1,29 @@
+[package]
+name = "lion-ui-tauri"
+version = "0.0.1-stage2-phase4"
+description = "Desktop UI for Lion runtime with advanced logging and monitoring"
+authors = ["Lion Team"]
+license = ""
+repository = ""
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[build-dependencies]
+tauri-build = { version = "^2.0", features = [] }
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tauri = { version = "^2.0" }
+reqwest = { version = "0.12", features = ["json"] }
+tokio = { version = "1.0", features = ["full"] }
+uuid = { version = "1.5", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+lion_cli = { path = "../../lion/lion_cli" }
+lion_ui = { path = "../" }
+
+[features]
+# this feature is used for production builds or when `devPath` points to the filesystem
+# DO NOT REMOVE!!
+custom-protocol = ["tauri/custom-protocol"]

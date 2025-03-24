@@ -1,0 +1,9 @@
+{
+  "build": {
+    "beforeBuildCommand": "",
+    "frontendDist": "../frontend/dist"
+  },
+  "productName": "Lion UI",
+  "version": "0.1.0",
+  "identifier": "com.lion.ui"
+}

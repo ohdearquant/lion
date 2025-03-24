@@ -1,0 +1,57 @@
+[package]
+name = "lion_ui"
+version = "0.0.1-stage2-phase5"
+edition = "2021"
+
+# Define both a binary and library target
+[[bin]]
+name = "lion_ui"
+path = "src/main.rs"
+
+[lib]
+name = "lion_ui"
+path = "src/lib.rs"
+
+[dependencies]
+# Lion Core Dependencies
+lion_core = { path = "../lion/lion_core" }
+lion_runtime = { path = "../lion/lion_runtime" }
+lion_capability = { path = "../lion/lion_capability" }
+lion_cli = { path = "../lion/lion_cli" }
+lion_workflow = { path = "../lion/lion_workflow" }
+lion_observability = { path = "../lion/lion_observability" }
+
+# Web Server & SSE Dependencies
+axum = { version = "0.7", features = ["ws", "multipart"] }
+tokio = { version = "1.0", features = ["full"] }
+tokio-stream = { version = "0.1", features = ["sync"] }
+tower-http = { version = "0.5", features = ["fs", "trace", "cors"] }
+tower = { version = "0.4", features = ["util"] }
+hyper = { version = "0.14", features = ["server", "http1", "http2", "tcp"] }
+http = "0.2"
+
+# Serialization & Utility
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+uuid = { version = "1.5", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+futures = "0.3"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+async-trait = "0.1"
+
+# WebAssembly
+wasmtime = { version = "14.0", features = ["async"] }
+anyhow = "1.0"
+
+# Tauri Dependencies
+[dependencies.tauri]
+version = "^2.0"
+optional = true
+
+[features]
+default = []
+tauri-app = ["tauri"]
+
+[build-dependencies]
+tauri-build = { version = "^2.0", features = [], optional = true }
