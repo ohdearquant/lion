@@ -1,22 +1,33 @@
 # Lion Workflow Engine
 
-A capability-based workflow engine for the Lion microkernel architecture. This crate provides a secure, fault-tolerant, and efficient workflow system with support for directed acyclic graphs (DAGs), event-driven patterns, and distributed sagas.
+A capability-based workflow engine for the Lion microkernel architecture. This
+crate provides a secure, fault-tolerant, and efficient workflow system with
+support for directed acyclic graphs (DAGs), event-driven patterns, and
+distributed sagas.
 
 ## Features
 
-- **Capability-Based Security**: Workflows and steps require specific capabilities to execute, ensuring strong isolation and security.
-- **Fault Tolerance**: Robust error handling with checkpointing, at-least-once event delivery, saga compensation, and more.
-- **Efficient Execution**: Prioritized scheduling, cooperative preemption, and backpressure for high performance.
-- **DAG Workflows**: Define and execute workflows as directed acyclic graphs with conditional edges.
-- **Event-Driven Patterns**: Publish-subscribe with at-least-once or exactly-once delivery semantics.
-- **Saga Pattern**: Distributed transactions with compensation actions for partial failures.
-- **State Persistence**: Checkpoint and restore workflow state with atomic guarantees.
+- **Capability-Based Security**: Workflows and steps require specific
+  capabilities to execute, ensuring strong isolation and security.
+- **Fault Tolerance**: Robust error handling with checkpointing, at-least-once
+  event delivery, saga compensation, and more.
+- **Efficient Execution**: Prioritized scheduling, cooperative preemption, and
+  backpressure for high performance.
+- **DAG Workflows**: Define and execute workflows as directed acyclic graphs
+  with conditional edges.
+- **Event-Driven Patterns**: Publish-subscribe with at-least-once or
+  exactly-once delivery semantics.
+- **Saga Pattern**: Distributed transactions with compensation actions for
+  partial failures.
+- **State Persistence**: Checkpoint and restore workflow state with atomic
+  guarantees.
 
 ## Architecture
 
 The Lion Workflow Engine is structured around several key components:
 
-1. **Model**: Core workflow definitions including nodes, edges, and graph structures.
+1. **Model**: Core workflow definitions including nodes, edges, and graph
+   structures.
 2. **Engine**: Execution context, scheduler, and executor for running workflows.
 3. **State**: State management, checkpointing, and storage backends.
 4. **Patterns**: Higher-level workflow patterns like events and sagas.
@@ -218,24 +229,38 @@ scheduler.change_policy(SchedulingPolicy::Priority).await.unwrap();
 
 ## Security Model
 
-The Lion Workflow Engine uses Lion's capability-based security model to ensure that workflows only access resources they have explicit permission to use. Each workflow node requires specific capabilities to execute, and cross-component communication is mediated by capability tokens.
+The Lion Workflow Engine uses Lion's capability-based security model to ensure
+that workflows only access resources they have explicit permission to use. Each
+workflow node requires specific capabilities to execute, and cross-component
+communication is mediated by capability tokens.
 
-For example, a workflow step that needs to access a database would require a specific database capability, which must be explicitly granted. This follows the principle of least privilege, minimizing the potential damage from compromised components.
+For example, a workflow step that needs to access a database would require a
+specific database capability, which must be explicitly granted. This follows the
+principle of least privilege, minimizing the potential damage from compromised
+components.
 
 ## Performance Considerations
 
-The engine is designed for high performance while maintaining security and fault tolerance:
+The engine is designed for high performance while maintaining security and fault
+tolerance:
 
-- **Efficient Scheduling**: Priority-based, MLFQ, or EDF scheduling with backpressure
-- **Cooperative Preemption**: Tasks yield periodically to prevent CPU monopolization
-- **Memory Efficiency**: Adjacency list representation for workflow graphs minimizes memory usage
-- **Concurrency**: Actor-based model prevents lock contention and enables parallelism
-- **Zero-Copy Messaging**: When possible, avoids unnecessary data copying between components
+- **Efficient Scheduling**: Priority-based, MLFQ, or EDF scheduling with
+  backpressure
+- **Cooperative Preemption**: Tasks yield periodically to prevent CPU
+  monopolization
+- **Memory Efficiency**: Adjacency list representation for workflow graphs
+  minimizes memory usage
+- **Concurrency**: Actor-based model prevents lock contention and enables
+  parallelism
+- **Zero-Copy Messaging**: When possible, avoids unnecessary data copying
+  between components
 
 ## Contributing
 
-Contributions to the Lion Workflow Engine are welcome! Please see our [contribution guidelines](../CONTRIBUTING.md) for more information.
+Contributions to the Lion Workflow Engine are welcome! Please see our
+[contribution guidelines](../CONTRIBUTING.md) for more information.
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](../LICENSE) file for details.
+This project is licensed under the MIT License - see the [LICENSE](../LICENSE)
+file for details.

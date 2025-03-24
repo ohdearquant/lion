@@ -1,268 +1,336 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
+  <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Lion UI</title>
     <style>
-        body { 
-            font-family: Arial, sans-serif; 
-            padding: 20px;
-            background-color: #f5f5f5;
-            color: #333;
-        }
-        .container {
-            max-width: 1000px;
-            margin: 0 auto;
-            background: white;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-        }
-        h1 {
-            border-bottom: 1px solid #eee;
-            padding-bottom: 10px;
-            margin-top: 0;
-        }
-        .section {
-            margin-bottom: 20px;
-            padding: 15px;
-            background: #fafafa;
-            border-radius: 4px;
-            border-left: 4px solid #4a9cc2;
-        }
-        .section h2 {
-            margin-top: 0;
-            font-size: 1.2em;
-        }
-        button { 
-            margin: 5px; 
-            padding: 8px 15px; 
-            background: #4a9cc2;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-        }
-        button:hover {
-            background: #3d8db3;
-        }
-        input, select {
-            margin: 5px;
-            padding: 8px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            width: 250px;
-        }
-        pre { 
-            background: #f5f5f5; 
-            padding: 15px; 
-            border-radius: 4px;
-            overflow-x: auto;
-        }
+      body {
+        font-family: Arial, sans-serif;
+        padding: 20px;
+        background-color: #f5f5f5;
+        color: #333;
+      }
+      .container {
+        max-width: 1000px;
+        margin: 0 auto;
+        background: white;
+        padding: 20px;
+        border-radius: 8px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+      }
+      h1 {
+        border-bottom: 1px solid #eee;
+        padding-bottom: 10px;
+        margin-top: 0;
+      }
+      .section {
+        margin-bottom: 20px;
+        padding: 15px;
+        background: #fafafa;
+        border-radius: 4px;
+        border-left: 4px solid #4a9cc2;
+      }
+      .section h2 {
+        margin-top: 0;
+        font-size: 1.2em;
+      }
+      button {
+        margin: 5px;
+        padding: 8px 15px;
+        background: #4a9cc2;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+      }
+      button:hover {
+        background: #3d8db3;
+      }
+      input, select {
+        margin: 5px;
+        padding: 8px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        width: 250px;
+      }
+      pre {
+        background: #f5f5f5;
+        padding: 15px;
+        border-radius: 4px;
+        overflow-x: auto;
+      }
     </style>
-</head>
-<body>
+  </head>
+  <body>
     <div class="container">
-        <h1>Lion UI - CLI Integration</h1>
-        
-        <div class="section">
-            <h2>Plugin Management</h2>
-            <input type="text" id="pluginPath" value="../../plugins/calculator/calculator_plugin.wasm" placeholder="Plugin Path">
-            <button id="loadPlugin">Load Plugin</button>
-            <button id="listPlugins">List Plugins</button>
-            <div>
-                <select id="pluginSelect">
-                    <option value="">Select Plugin</option>
-                </select>
-                <input type="text" id="functionName" value="calculate" placeholder="Function Name">
-                <input type="text" id="functionArgs" value='{"x": 5, "y": 3, "operation": "add"}' placeholder="Arguments (JSON)">
-                <button id="callPlugin">Call Function</button>
-            </div>
+      <h1>Lion UI - CLI Integration</h1>
+
+      <div class="section">
+        <h2>Plugin Management</h2>
+        <input
+          type="text"
+          id="pluginPath"
+          value="../../plugins/calculator/calculator_plugin.wasm"
+          placeholder="Plugin Path"
+        >
+        <button id="loadPlugin">Load Plugin</button>
+        <button id="listPlugins">List Plugins</button>
+        <div>
+          <select id="pluginSelect">
+            <option value="">Select Plugin</option>
+          </select>
+          <input
+            type="text"
+            id="functionName"
+            value="calculate"
+            placeholder="Function Name"
+          >
+          <input
+            type="text"
+            id="functionArgs"
+            value='{"x": 5, "y": 3, "operation": "add"}'
+            placeholder="Arguments (JSON)"
+          >
+          <button id="callPlugin">Call Function</button>
         </div>
-        
-        <div class="section">
-            <h2>Agent Management</h2>
-            <input type="text" id="agentName" value="calculator_agent" placeholder="Agent Name">
-            <select id="agentType">
-                <option value="calculator">Calculator</option>
-                <option value="assistant">Assistant</option>
-                <option value="processor">Processor</option>
-            </select>
-            <button id="spawnAgent">Spawn Agent</button>
-        </div>
-        
-        <div class="section">
-            <h2>Logging</h2>
-            <select id="logLevel">
-                <option value="INFO">Info</option>
-                <option value="WARN">Warning</option>
-                <option value="ERROR">Error</option>
-                <option value="DEBUG">Debug</option>
-            </select>
-            <input type="text" id="logMessage" placeholder="Log Message">
-            <input type="text" id="logSource" value="ui" placeholder="Source">
-            <button id="createLog">Create Log</button>
-            <button id="openLogs">Open Log Viewer</button>
-        </div>
-        
-        <pre id="output">Results will appear here...</pre>
+      </div>
+
+      <div class="section">
+        <h2>Agent Management</h2>
+        <input
+          type="text"
+          id="agentName"
+          value="calculator_agent"
+          placeholder="Agent Name"
+        >
+        <select id="agentType">
+          <option value="calculator">Calculator</option>
+          <option value="assistant">Assistant</option>
+          <option value="processor">Processor</option>
+        </select>
+        <button id="spawnAgent">Spawn Agent</button>
+      </div>
+
+      <div class="section">
+        <h2>Logging</h2>
+        <select id="logLevel">
+          <option value="INFO">Info</option>
+          <option value="WARN">Warning</option>
+          <option value="ERROR">Error</option>
+          <option value="DEBUG">Debug</option>
+        </select>
+        <input type="text" id="logMessage" placeholder="Log Message">
+        <input type="text" id="logSource" value="ui" placeholder="Source">
+        <button id="createLog">Create Log</button>
+        <button id="openLogs">Open Log Viewer</button>
+      </div>
+
+      <pre id="output">Results will appear here...</pre>
     </div>
 
     <script>
-        // Plugin Management
-        document.getElementById('loadPlugin').addEventListener('click', async () => {
-            try {
-                const path = document.getElementById('pluginPath').value;
-                const result = await window.__TAURI__.invoke('load_plugin_integrated', { 
-                    request: {
-                        path: path,
-                        name: path.split('/').pop().split('.')[0]
-                    }
-                });
-                document.getElementById('output').textContent = `Plugin loaded: ${result}`;
-                updatePluginList();
-            } catch (error) {
-                document.getElementById('output').textContent = `Error: ${error}`;
-            }
-        });
-        
-        async function updatePluginList() {
-            try {
-                const plugins = await window.__TAURI__.invoke('list_plugins_integrated');
-                const select = document.getElementById('pluginSelect');
-                // Clear options
-                while (select.options.length > 1) {
-                    select.remove(1);
-                }
-                
-                // Add new options
-                plugins.forEach(plugin => {
-                    const option = document.createElement('option');
-                    option.value = plugin.id;
-                    option.textContent = plugin.name || plugin.id;
-                    select.appendChild(option);
-                });
-                
-                return plugins;
-            } catch (error) {
-                document.getElementById('output').textContent = `Error loading plugins: ${error}`;
-                return [];
-            }
-        }
-        
-        document.getElementById('listPlugins').addEventListener('click', async () => {
-            try {
-                const plugins = await updatePluginList();
-                document.getElementById('output').textContent = `Plugins: ${JSON.stringify(plugins, null, 2)}`;
-            } catch (error) {
-                document.getElementById('output').textContent = `Error: ${error}`;
-            }
-        });
-        
-        document.getElementById('callPlugin').addEventListener('click', async () => {
-            try {
-                const pluginId = document.getElementById('pluginSelect').value;
-                const functionName = document.getElementById('functionName').value;
-                const args = document.getElementById('functionArgs').value;
-                
-                if (pluginId) {
-                    const result = await window.__TAURI__.invoke('call_plugin_integrated', {
-                        request: {
-                            plugin_id: pluginId,
-                            function: functionName,
-                            args: args
-                        }
-                    });
-                    document.getElementById('output').textContent = `Result: ${result}`;
-                } else {
-                    document.getElementById('output').textContent = "No plugin selected";
-                }
-            } catch (error) {
-                document.getElementById('output').textContent = `Error: ${error}`;
-            }
-        });
-        
-        // Agent Management
-        document.getElementById('spawnAgent').addEventListener('click', async () => {
-            try {
-                const name = document.getElementById('agentName').value;
-                const agentType = document.getElementById('agentType').value;
-                
-                const result = await window.__TAURI__.invoke('spawn_agent', {
-                    request: {
-                        name: name,
-                        agent_type: agentType,
-                        config: {}
-                    }
-                });
-                
-                document.getElementById('output').textContent = `Agent spawned with ID: ${result}`;
-            } catch (error) {
-                document.getElementById('output').textContent = `Error: ${error}`;
-            }
-        });
-        
-        // Logging
-        document.getElementById('createLog').addEventListener('click', async () => {
-            try {
-                const level = document.getElementById('logLevel').value;
-                const message = document.getElementById('logMessage').value;
-                const source = document.getElementById('logSource').value;
-                
-                if (!message) {
-                    document.getElementById('output').textContent = "Please enter a log message";
-                    return;
-                }
-                
-                const result = await window.__TAURI__.invoke('create_log', {
-                    request: {
-                        level: level,
-                        message: message,
-                        source: source,
-                        metadata: null
-                    }
-                });
-                
-                document.getElementById('output').textContent = `Log created: ${result}`;
-            } catch (error) {
-                document.getElementById('output').textContent = `Error: ${error}`;
-            }
-        });
-        
-        document.getElementById('openLogs').addEventListener('click', async () => {
-            try {
-                // Use Tauri window.getCurrent() API to get the window manager
-                const { WebviewWindow } = window.__TAURI__.window;
-                
-                // Check if logs window exists
-                const logsWindow = WebviewWindow.getByLabel('logs');
-                
-                if (logsWindow) {
-                    await logsWindow.show();
-                    await logsWindow.setFocus();
-                } else {
-                    // Create a new logs window
-                    const newWindow = new WebviewWindow('logs', {
-                        url: 'logs.html',
-                        title: 'Lion UI - Log Viewer',
-                        width: 900,
-                        height: 600,
-                    });
-                    
-                    newWindow.once('tauri://error', (e) => {
-                        document.getElementById('output').textContent = `Error opening logs: ${e}`;
-                    });
-                }
-            } catch (error) {
-                document.getElementById('output').textContent = `Error: ${error}`;
-            }
-        });
-        
-        // Initialize
-        document.addEventListener('DOMContentLoaded', () => {
+      // Plugin Management
+      document.getElementById("loadPlugin").addEventListener(
+        "click",
+        async () => {
+          try {
+            const path = document.getElementById("pluginPath").value;
+            const result = await window.__TAURI__.invoke(
+              "load_plugin_integrated",
+              {
+                request: {
+                  path: path,
+                  name: path.split("/").pop().split(".")[0],
+                },
+              },
+            );
+            document.getElementById("output").textContent =
+              `Plugin loaded: ${result}`;
             updatePluginList();
-        });
+          } catch (error) {
+            document.getElementById("output").textContent =
+              `Error: ${error}`;
+          }
+        },
+      );
+
+      async function updatePluginList() {
+        try {
+          const plugins = await window.__TAURI__.invoke(
+            "list_plugins_integrated",
+          );
+          const select = document.getElementById("pluginSelect");
+          // Clear options
+          while (select.options.length > 1) {
+            select.remove(1);
+          }
+
+          // Add new options
+          plugins.forEach((plugin) => {
+            const option = document.createElement("option");
+            option.value = plugin.id;
+            option.textContent = plugin.name || plugin.id;
+            select.appendChild(option);
+          });
+
+          return plugins;
+        } catch (error) {
+          document.getElementById("output").textContent =
+            `Error loading plugins: ${error}`;
+          return [];
+        }
+      }
+
+      document.getElementById("listPlugins").addEventListener(
+        "click",
+        async () => {
+          try {
+            const plugins = await updatePluginList();
+            document.getElementById("output").textContent = `Plugins: ${
+              JSON.stringify(plugins, null, 2)
+            }`;
+          } catch (error) {
+            document.getElementById("output").textContent =
+              `Error: ${error}`;
+          }
+        },
+      );
+
+      document.getElementById("callPlugin").addEventListener(
+        "click",
+        async () => {
+          try {
+            const pluginId =
+              document.getElementById("pluginSelect").value;
+            const functionName =
+              document.getElementById("functionName").value;
+            const args = document.getElementById("functionArgs").value;
+
+            if (pluginId) {
+              const result = await window.__TAURI__.invoke(
+                "call_plugin_integrated",
+                {
+                  request: {
+                    plugin_id: pluginId,
+                    function: functionName,
+                    args: args,
+                  },
+                },
+              );
+              document.getElementById("output").textContent =
+                `Result: ${result}`;
+            } else {
+              document.getElementById("output").textContent =
+                "No plugin selected";
+            }
+          } catch (error) {
+            document.getElementById("output").textContent =
+              `Error: ${error}`;
+          }
+        },
+      );
+
+      // Agent Management
+      document.getElementById("spawnAgent").addEventListener(
+        "click",
+        async () => {
+          try {
+            const name = document.getElementById("agentName").value;
+            const agentType =
+              document.getElementById("agentType").value;
+
+            const result = await window.__TAURI__.invoke(
+              "spawn_agent",
+              {
+                request: {
+                  name: name,
+                  agent_type: agentType,
+                  config: {},
+                },
+              },
+            );
+
+            document.getElementById("output").textContent =
+              `Agent spawned with ID: ${result}`;
+          } catch (error) {
+            document.getElementById("output").textContent =
+              `Error: ${error}`;
+          }
+        },
+      );
+
+      // Logging
+      document.getElementById("createLog").addEventListener(
+        "click",
+        async () => {
+          try {
+            const level = document.getElementById("logLevel").value;
+            const message = document.getElementById("logMessage").value;
+            const source = document.getElementById("logSource").value;
+
+            if (!message) {
+              document.getElementById("output").textContent =
+                "Please enter a log message";
+              return;
+            }
+
+            const result = await window.__TAURI__.invoke("create_log", {
+              request: {
+                level: level,
+                message: message,
+                source: source,
+                metadata: null,
+              },
+            });
+
+            document.getElementById("output").textContent =
+              `Log created: ${result}`;
+          } catch (error) {
+            document.getElementById("output").textContent =
+              `Error: ${error}`;
+          }
+        },
+      );
+
+      document.getElementById("openLogs").addEventListener(
+        "click",
+        async () => {
+          try {
+            // Use Tauri window.getCurrent() API to get the window manager
+            const { WebviewWindow } = window.__TAURI__.window;
+
+            // Check if logs window exists
+            const logsWindow = WebviewWindow.getByLabel("logs");
+
+            if (logsWindow) {
+              await logsWindow.show();
+              await logsWindow.setFocus();
+            } else {
+              // Create a new logs window
+              const newWindow = new WebviewWindow("logs", {
+                url: "logs.html",
+                title: "Lion UI - Log Viewer",
+                width: 900,
+                height: 600,
+              });
+
+              newWindow.once("tauri://error", (e) => {
+                document.getElementById("output").textContent =
+                  `Error opening logs: ${e}`;
+              });
+            }
+          } catch (error) {
+            document.getElementById("output").textContent =
+              `Error: ${error}`;
+          }
+        },
+      );
+
+      // Initialize
+      document.addEventListener("DOMContentLoaded", () => {
+        updatePluginList();
+      });
     </script>
-</body>
+  </body>
 </html>

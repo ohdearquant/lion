@@ -1,16 +1,23 @@
 # Lion CLI
 
-The Lion Command Line Interface (CLI) provides a comprehensive set of commands for interacting with the Lion microkernel system. It allows users to manage plugins, define security policies, control the system, and orchestrate workflows.
+The Lion Command Line Interface (CLI) provides a comprehensive set of commands
+for interacting with the Lion microkernel system. It allows users to manage
+plugins, define security policies, control the system, and orchestrate
+workflows.
 
 ## Features
 
-- **Plugin Management**: Load, list, call, unload plugins, and grant specific capabilities
+- **Plugin Management**: Load, list, call, unload plugins, and grant specific
+  capabilities
 - **Policy Management**: Define, list, check, and remove security policies
-- **System Management**: Start, check status, view logs, and shutdown the microkernel
+- **System Management**: Start, check status, view logs, and shutdown the
+  microkernel
 - **Workflow Management**: Register, start, check status, and cancel workflows
-- **Enhanced UI**: Colored output for better readability and intuitive status indicators
+- **Enhanced UI**: Colored output for better readability and intuitive status
+  indicators
 - **Guided Experience**: Suggests relevant next commands after each operation
-- **Real Microkernel Integration**: Optional feature flags to connect with the actual Lion components
+- **Real Microkernel Integration**: Optional feature flags to connect with the
+  actual Lion components
 
 ## Installation
 
@@ -26,13 +33,13 @@ cargo build --release --features all-integrations
 
 ### Feature Flags
 
-| Flag | Description |
-|------|-------------|
-| `runtime-integration` | Enables integration with the actual Lion runtime component |
-| `policy-integration` | Enables integration with the Lion policy engine |
-| `capability-integration` | Enables integration with the Lion capability system |
-| `workflow-integration` | Enables integration with the Lion workflow orchestrator |
-| `all-integrations` | Enables all integration features |
+| Flag                     | Description                                                |
+| ------------------------ | ---------------------------------------------------------- |
+| `runtime-integration`    | Enables integration with the actual Lion runtime component |
+| `policy-integration`     | Enables integration with the Lion policy engine            |
+| `capability-integration` | Enables integration with the Lion capability system        |
+| `workflow-integration`   | Enables integration with the Lion workflow orchestrator    |
+| `all-integrations`       | Enables all integration features                           |
 
 ## Usage
 
@@ -112,7 +119,8 @@ lion-cli workflow cancel <workflow-id>
 
 ## Architecture
 
-The Lion CLI is designed with a modular architecture that separates command handling from the actual implementation:
+The Lion CLI is designed with a modular architecture that separates command
+handling from the actual implementation:
 
 1. **Command Layer**: Parses user input and routes to appropriate handlers
 2. **Interface Layer**: Connects to the Lion microkernel components
@@ -122,8 +130,10 @@ The Lion CLI is designed with a modular architecture that separates command hand
 
 The CLI can operate in two modes:
 
-1. **Placeholder Mode (Default)**: Uses mock data and simulates operations for development
-2. **Real Integration Mode**: Connects to actual Lion microkernel components for production use
+1. **Placeholder Mode (Default)**: Uses mock data and simulates operations for
+   development
+2. **Real Integration Mode**: Connects to actual Lion microkernel components for
+   production use
 
 ## Development
 
@@ -169,7 +179,8 @@ cargo test --features runtime-integration
   - `src/interfaces/capability.rs`: Interface to the capability system
   - `src/interfaces/policy.rs`: Interface to the policy engine
   - `src/interfaces/workflow.rs`: Interface to the workflow orchestrator
-  - `src/interfaces/observability.rs`: Interface to logging, metrics, and tracing
+  - `src/interfaces/observability.rs`: Interface to logging, metrics, and
+    tracing
 
 - **Tests**:
   - `tests/command_integration_tests.rs`: End-to-end command tests

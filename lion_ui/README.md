@@ -1,91 +1,158 @@
 # Lion UI
 
-## Stage 2 - Phase 4: Advanced Logging & Tauri Integration
-
-This is the user interface component for the Lion runtime system. It provides
-both a web-based interface and a desktop application (via Tauri) for interacting
-with the Lion system.
+`lion_ui` provides a user interface for interacting with the Lion microkernel
+system, offering visualization and control of plugins, workflows, and system
+state.
 
 ## Features
 
-- **Advanced Logging System**
-  - Real-time log streaming via Server-Sent Events (SSE)
-  - Structured log entries with metadata
-  - Powerful filtering and search capabilities
-  - Log correlation tracking
-
-- **Agent Management**
-  - Spawn and monitor agents
-  - View agent status and logs
-  - Configure agent parameters
-
-- **Plugin System**
-  - Load and manage plugins
-  - Invoke plugin methods
-  - Monitor plugin activity
-
-- **Desktop Application**
-  - System tray integration
-  - Multiple windows support
-  - Native OS integration via Tauri
+- **Plugin Management**: Load, configure, and monitor plugins
+- **Workflow Visualization**: Interactive workflow graphs and status monitoring
+- **Event Monitoring**: Real-time event stream visualization
+- **Log Viewing**: Structured log viewing and filtering
+- **Agent Interaction**: Interface for interacting with Lion agents
+- **System Status**: System health and resource usage monitoring
 
 ## Architecture
 
-The Lion UI consists of two main components:
+The UI system is built around several key components:
 
-1. **Web Server & API** (`lion_ui/src/`)
-   - Built with Axum for high-performance async handling
-   - RESTful API for interacting with the Lion runtime
-   - Server-Sent Events for real-time updates
-   - In-memory log buffer for searching
+1. **Frontend**: User interface components
+   - React-based UI with TypeScript
+   - Interactive visualizations
+   - Responsive design
 
-2. **Desktop Application** (`lion_ui/src-tauri/`)
-   - Built with Tauri for native desktop integration
-   - System tray support
-   - Multiple windows for different functions (logs, agents, plugins)
-   - Bridge to the web server API
+2. **Backend**: Tauri-based native application
+   - Rust backend for system integration
+   - IPC bridge between UI and Lion system
+   - File system access and management
 
-## Development
+3. **Core Components**:
+   - Agents: Agent management and visualization
+   - Events: Event stream processing and display
+   - Logs: Log collection and structured viewing
+   - Plugins: Plugin management interface
+   - State: Application state management
+   - WASM: WebAssembly integration for plugin visualization
 
-### Prerequisites
+## Installation
 
-- Rust 1.75+
-- Node.js 18+ (for frontend development)
-- Tauri CLI
+### From Releases
 
-### Running the Web Server
+Download the latest release for your platform from the releases page.
 
-```bash
-cargo run --bin lion_ui
-```
-
-This will start the web server on `localhost:8080`.
-
-### Building the Desktop Application
+### Building from Source
 
 ```bash
-cd lion_ui
+# Clone the repository
+git clone https://github.com/yourusername/lion.git
+cd lion
+
+# Install dependencies
+npm install
+
+# Build the UI
+npm run build
+
+# Build the Tauri application
 cargo tauri build
 ```
 
-### Development Mode
+## Usage
+
+### Starting the UI
 
 ```bash
-cd lion_ui
-cargo tauri dev
+# Development mode
+npm run tauri dev
+
+# Run the built application
+./target/release/lion-ui
 ```
 
-## Integration with Lion Runtime
+### Plugin Management
 
-The Lion UI integrates with the core Lion runtime system through:
+The UI allows you to:
 
-1. Direct function calls via the Lion crate dependencies
-2. Event subscription for real-time updates
-3. Plugin and agent management interfaces
+- Browse available plugins
+- Load plugins into the system
+- Configure plugin parameters
+- Monitor plugin status and resource usage
+- Call plugin functions and view results
 
-## Future Improvements
+### Workflow Visualization
 
-- Full-featured dashboard with metrics visualization
-- Remote server management
-- Enhanced security controls
-- Theme support and customization options
+The workflow view provides:
+
+- Interactive graph visualization of workflows
+- Real-time status updates for workflow nodes
+- Ability to start, pause, and cancel workflows
+- Detailed view of workflow data flow
+
+### Log Viewing
+
+The log viewer offers:
+
+- Structured viewing of system logs
+- Filtering by log level, component, and time
+- Search functionality
+- Export options for log analysis
+
+## Development
+
+### Project Structure
+
+- `src/`: Rust backend code
+  - `main.rs`: Application entry point
+  - `agents.rs`: Agent management
+  - `events.rs`: Event handling
+  - `logs.rs`: Log processing
+  - `plugins.rs`: Plugin management
+  - `state.rs`: Application state
+  - `wasm.rs`: WebAssembly integration
+
+- `src-tauri/`: Tauri configuration and native code
+  - `src/`: Rust code for Tauri backend
+  - `tauri.conf.json`: Tauri configuration
+
+- `frontend/`: React frontend code
+  - `src/`: TypeScript source code
+  - `public/`: Static assets
+  - `index.html`: Main HTML template
+
+### Building for Development
+
+```bash
+# Start the development server
+npm run tauri dev
+```
+
+### Running Tests
+
+```bash
+# Run Rust tests
+cargo test -p lion_ui
+
+# Run frontend tests
+npm test
+```
+
+## Tauri Migration
+
+The UI is currently being migrated to Tauri. See
+[TAURI_MIGRATION.md](TAURI_MIGRATION.md) for details on the migration process
+and status.
+
+## Integration with Other Lion Crates
+
+The UI integrates with other Lion crates:
+
+- **lion_core**: For core types and interfaces
+- **lion_runtime**: For system control and management
+- **lion_observability**: For logs and metrics
+- **lion_workflow**: For workflow visualization
+
+## License
+
+Licensed under the Apache License, Version 2.0 - see the [LICENSE](../LICENSE)
+file for details.
