@@ -17,7 +17,7 @@ mod tests {
         println!("Plugin loaded with ID: {}", plugin_id);
 
         // List plugins
-        let (status, plugin_ids) = lion_cli::interfaces::runtime::get_runtime_status_and_plugins()
+        let (_status, plugin_ids) = lion_cli::interfaces::runtime::get_runtime_status_and_plugins()
             .expect("Failed to get plugins");
 
         println!("Found {} plugins", plugin_ids.len());

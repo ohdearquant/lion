@@ -11,7 +11,6 @@
 mod tests {
     use assert_cmd::Command;
     use predicates::prelude::*;
-    use std::path::PathBuf;
     use tempfile::tempdir;
 
     // Helper function to get the command

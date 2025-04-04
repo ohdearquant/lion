@@ -1,9 +1,58 @@
 {
+  "$schema": "https://tauri.app/v1/config-schema.json",
+  "productName": "LionForge IDE",
+  "version": "0.1.0",
+  "identifier": "com.lionforge.ide",
   "build": {
-    "beforeBuildCommand": "",
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build",
+    "devUrl": "http://localhost:1420",
     "frontendDist": "../frontend/dist"
   },
-  "productName": "Lion UI",
-  "version": "0.1.0",
-  "identifier": "com.lion.ui"
+  "app": {
+    "security": {
+      "csp": null
+    },
+    "windows": [
+      {
+        "fullscreen": false,
+        "resizable": true,
+        "title": "LionForge IDE",
+        "width": 1200,
+        "height": 800,
+        "minWidth": 800,
+        "minHeight": 600
+      }
+    ]
+  },
+  "bundle": {
+    "active": true,
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "targets": "all"
+  },
+  "plugins": {
+    "shell": {
+      "open": true
+    },
+    "dialog": {
+      "open": true,
+      "save": true
+    },
+    "fs": {
+      "readFile": true,
+      "writeFile": true,
+      "readDir": true,
+      "exists": true,
+      "scope": ["**"]
+    },
+    "path": {
+      "all": true
+    }
+  }
 }

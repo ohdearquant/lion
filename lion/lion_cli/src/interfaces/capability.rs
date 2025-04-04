@@ -4,10 +4,9 @@
 //! which is responsible for managing and checking capabilities that control
 //! what operations plugins are allowed to perform.
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use colored::Colorize;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 /// Grant a capability to a plugin
 pub fn grant_capability(plugin_id: &str, capability_type: &str, params: &str) -> Result<()> {

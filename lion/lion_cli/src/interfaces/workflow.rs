@@ -4,9 +4,8 @@
 //! which is responsible for orchestrating complex workflows with multiple steps
 //! and plugin calls.
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::path::Path;
 
 /// Register a workflow from a definition file

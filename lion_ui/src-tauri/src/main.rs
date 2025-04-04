@@ -1,93 +1,60 @@
-#![cfg_attr(
-    all(not(debug_assertions), target_os = "windows"),
-    windows_subsystem = "windows"
-)]
+// Prevents additional console window on Windows in release
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use tauri::menu::{Menu, MenuId, MenuItem};
-use tauri::tray::{MenuId as TrayMenuId, TrayIconBuilder};
-use tauri::{Manager, Window, WindowEvent, WindowUrl};
-
+mod agents;
 mod bridge;
-mod utils;
+mod commands;
+mod events;
+mod graph;
+mod logging;
+mod project;
+mod runtime;
+mod state;
+mod workflows;
+
+use agents::{load_agent, unload_agent, update_agent_state_command};
+use bridge::{
+    call_plugin_integrated, create_log, list_plugins_integrated, load_plugin_integrated, ping,
+    spawn_agent,
+};
+use commands::{
+    clear_logs, close_project, get_recent_logs, get_runtime_status, identify_project, list_agents,
+    open_project, update_agent_state,
+};
+use state::AppState;
 
 fn main() {
-    // Configure the system tray
-    let quit = MenuItem::new("quit", "Quit", None, None);
-    let hide = MenuItem::new("hide", "Hide", None, None);
-    let show = MenuItem::new("show", "Show", None, None);
-    let logs = MenuItem::new("logs", "Open Logs", None, None);
-
-    let tray_menu = Menu::new()
-        .add_item(show)
-        .add_item(hide)
-        .add_item(logs)
-        .add_separator()
-        .add_item(quit);
-
-    let tray_icon = TrayIconBuilder::new()
-        .menu(tray_menu)
-        .on_menu_event(|app, id| match id.as_ref() {
-            "quit" => {
-                std::process::exit(0);
-            }
-            "hide" => {
-                if let Some(window) = app.get_window("main") {
-                    let _ = window.hide();
-                }
-            }
-            "show" => {
-                if let Some(window) = app.get_window("main") {
-                    let _ = window.show();
-                    let _ = window.set_focus();
-                }
-            }
-            "logs" => {
-                if let Some(window) = app.get_window("logs") {
-                    let _ = window.show();
-                    let _ = window.set_focus();
-                } else {
-                    let _ = Window::new(app.handle(), "logs", WindowUrl::App("logs.html".into()))
-                        .title("Lion UI - Log Viewer")
-                        .inner_size(900.0, 600.0)
-                        .build();
-                }
-            }
-            _ => {}
-        });
-
-    // Spawn the backend server as a separate process
-    std::thread::spawn(|| {
-        // In a real implementation, we would start the Lion UI server here
-        println!("Lion UI server would start here in a separate process");
-    });
-
     tauri::Builder::default()
-        .tray_icon(tray_icon.build().unwrap())
-        .on_window_event(|event| match event.event() {
-            WindowEvent::CloseRequested { api, .. } => {
-                if event.window().label() == "main" {
-                    // Hide the window instead of closing it
-                    let _ = event.window().hide();
-                    api.prevent_close();
-                }
-            }
-            _ => {}
-        })
-        .register_uri_scheme_protocol("lion", |app, request| {
-            // You can handle custom URI schemes here
-            // For now, return an empty success response
-            Ok(tauri::http::ResponseBuilder::new()
-                .status(200)
-                .body(Vec::new()))
+        .manage(AppState::new())
+        // WorkflowManager is now part of AppState, no need to manage separately
+        .setup(|app| {
+            // Initialize application state
+            state::setup_state(app);
+            Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            bridge::ping,
-            bridge::create_log,
-            bridge::spawn_agent,
-            bridge::load_plugin_integrated,
-            bridge::list_plugins_integrated,
-            bridge::call_plugin_integrated,
-            bridge::get_recent_logs
+            // Runtime and system commands
+            get_runtime_status,
+            // Log commands
+            get_recent_logs,
+            clear_logs,
+            // Project commands
+            identify_project,
+            open_project,
+            close_project,
+            // Agent commands
+            list_agents,
+            update_agent_state,
+            update_agent_state_command,
+            load_agent,
+            unload_agent,
+            // Bridge commands
+            ping,
+            create_log,
+            spawn_agent,
+            load_plugin_integrated,
+            list_plugins_integrated,
+            call_plugin_integrated,
         ])
         .run(tauri::generate_context!("tauri.conf.json"))
         .expect("error while running tauri application");

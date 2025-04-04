@@ -1,5 +1,5 @@
-use std::{env, path::PathBuf, process::Command};
-use tauri::{AppHandle, Manager, Window, WindowBuilder, WindowUrl};
+use std::{path::PathBuf, process::Command};
+use tauri::{AppHandle, Manager, Window, WindowBuilder};
 
 /// Check if the Lion UI backend server is running
 pub fn is_server_running() -> bool {
@@ -54,7 +54,7 @@ pub fn open_logs_window(app: &AppHandle) -> Result<Window, tauri::Error> {
         window.set_focus()?;
         Ok(window)
     } else {
-        WindowBuilder::new(app, "logs", WindowUrl::App("logs.html".into()))
+        WindowBuilder::new(app, "logs")
             .title("Lion UI - Log Viewer")
             .inner_size(900.0, 600.0)
             .build()
@@ -68,7 +68,7 @@ pub fn open_agents_window(app: &AppHandle) -> Result<Window, tauri::Error> {
         window.set_focus()?;
         Ok(window)
     } else {
-        WindowBuilder::new(app, "agents", WindowUrl::App("agents.html".into()))
+        WindowBuilder::new(app, "agents")
             .title("Lion UI - Agent Manager")
             .inner_size(800.0, 600.0)
             .build()
@@ -82,7 +82,7 @@ pub fn open_plugins_window(app: &AppHandle) -> Result<Window, tauri::Error> {
         window.set_focus()?;
         Ok(window)
     } else {
-        WindowBuilder::new(app, "plugins", WindowUrl::App("plugins.html".into()))
+        WindowBuilder::new(app, "plugins")
             .title("Lion UI - Plugin Manager")
             .inner_size(800.0, 600.0)
             .build()
