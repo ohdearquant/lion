@@ -4,7 +4,7 @@
 //! which is responsible for defining and enforcing high-level security policies
 //! that control plugin permissions.
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
 /// Add a policy rule

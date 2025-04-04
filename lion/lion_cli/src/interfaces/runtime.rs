@@ -4,9 +4,9 @@
 //! which is responsible for managing the lifecycle of plugins, system
 //! bootstrap, and shutdown.
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
-use std::{path::Path, str::FromStr};
+use std::path::Path;
 
 /// Start the Lion microkernel runtime
 pub fn start_runtime() -> Result<()> {

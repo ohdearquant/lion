@@ -3,7 +3,7 @@
 //! This module provides functions to interact with the Lion observability system,
 //! which is responsible for logging, metrics, and tracing.
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 

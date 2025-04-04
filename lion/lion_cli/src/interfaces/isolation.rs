@@ -69,7 +69,7 @@ pub fn set_resource_limits(plugin_id: &str, limits: ResourceLimits) -> Result<()
 }
 
 /// Get resource usage for a plugin
-pub fn get_resource_usage(plugin_id: &str) -> Result<ResourceUsage> {
+pub fn get_resource_usage(_plugin_id: &str) -> Result<ResourceUsage> {
     // In a real implementation, this would call into lion_isolation::resource::usage
     #[cfg(feature = "isolation-integration")]
     {
@@ -101,7 +101,7 @@ pub fn get_resource_usage(plugin_id: &str) -> Result<ResourceUsage> {
 }
 
 /// Register a custom hostcall for plugins
-pub fn register_hostcall(name: &str, handler: fn(&[u8]) -> Result<Vec<u8>>) -> Result<()> {
+pub fn register_hostcall(name: &str, _handler: fn(&[u8]) -> Result<Vec<u8>>) -> Result<()> {
     // In a real implementation, this would call into lion_isolation::wasm::hostcall
     #[cfg(feature = "isolation-integration")]
     {
