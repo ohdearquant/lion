@@ -228,11 +228,23 @@ mod tests {
         // Check that the runtime graph has the expected structure
         assert_eq!(runtime_graph["id"], "test-workflow");
         assert_eq!(runtime_graph["name"], "Test Workflow");
-
         // Check nodes
         let nodes = runtime_graph["nodes"].as_array().unwrap();
         assert_eq!(nodes.len(), 2);
-        assert_eq!(nodes[0]["id"], "node-1");
+
+        // Find node-1 and node-2 in the nodes array (order may not be guaranteed)
+        let node1 = nodes
+            .iter()
+            .find(|n| n["id"] == "node-1")
+            .expect("Node-1 should exist");
+        let node2 = nodes
+            .iter()
+            .find(|n| n["id"] == "node-2")
+            .expect("Node-2 should exist");
+
+        // Verify node properties
+        assert_eq!(node1["type"], "task");
+        assert_eq!(node2["type"], "task");
         assert_eq!(nodes[0]["type"], "task");
 
         // Check connections
