@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
-use tauri::Window;
+use tauri::{Emitter, Window};
 use uuid::Uuid;
 
 /// Structure for creating a log entry
@@ -185,49 +185,5 @@ pub async fn call_plugin_integrated(
         }),
     );
 
-    Ok(result)
-}
-
-/// Get recent logs from the system
-#[tauri::command]
-pub async fn get_recent_logs() -> Result<Vec<serde_json::Value>, String> {
-    // In a real implementation, we would fetch logs from the Lion UI server
-    // For now, we'll return some mock data
-
-    let mock_logs = vec![
-        serde_json::json!({
-            "id": Uuid::new_v4().to_string(),
-            "timestamp": chrono::Utc::now().to_rfc3339(),
-            "level": "INFO",
-            "message": "System started",
-            "source": "system",
-            "metadata": null
-        }),
-        serde_json::json!({
-            "id": Uuid::new_v4().to_string(),
-            "timestamp": (chrono::Utc::now() - chrono::Duration::seconds(30)).to_rfc3339(),
-            "level": "INFO",
-            "message": "Plugin loaded: calculator",
-            "source": "plugin",
-            "metadata": null
-        }),
-        serde_json::json!({
-            "id": Uuid::new_v4().to_string(),
-            "timestamp": (chrono::Utc::now() - chrono::Duration::seconds(60)).to_rfc3339(),
-            "level": "WARN",
-            "message": "Memory usage high",
-            "source": "system",
-            "metadata": null
-        }),
-        serde_json::json!({
-            "id": Uuid::new_v4().to_string(),
-            "timestamp": (chrono::Utc::now() - chrono::Duration::minutes(5)).to_rfc3339(),
-            "level": "INFO",
-            "message": "Agent spawned: calculator_agent",
-            "source": "agent",
-            "metadata": null
-        }),
-    ];
-
-    Ok(mock_logs)
+    Ok("Success".to_string())
 }
