@@ -1,231 +1,293 @@
-Below is an **exhaustively detailed** plan for **Stage 2, Phase 5**, which aims
-to **finalize** the web-based and Tauri-based UI experiences with improved
-**user experience (UX), styling, and advanced multi-agent features**. This phase
-brings together everything you have built in the previous phases—real-time logs,
-agent management, plugin orchestration, search/filtering—and polishes the UI,
-performance, and distribution. By the end, you’ll have a cohesive, user-friendly
-interface, suitable for everyday use and demos.
+# **Stage 2, Phase 5 – CLI Feature Completeness: Advanced Patterns & Polish**
 
----
+**(Revised & Expanded: CLI Focus - Builds on Phase 4 Completion)**
 
-# **Stage 2, Phase 5 – UI Polishing, Advanced Multi-Agent Features & Finalizing**
+## 1. Essence & Value Proposition Refocus
 
-## 1. Objectives & Scope
+**Goal:** Finalize `lion_cli` by incorporating commands for Lion's **advanced
+orchestration patterns (Saga, Event Broker)** and **deep observability features
+(Metrics Querying, Trace Inspection)**. This phase also prioritizes
+**polishing** the entire CLI for a professional, consistent, and highly
+intuitive user experience, making it the definitive tool for interacting with
+the Lion system.
 
-1. **UI/UX Polish**
-   - Improve layout, navigation, and visuals so users can quickly navigate
-     between Agents, Plugins, and Logs.
-   - Enhance usability with better styling (possibly using a CSS framework or
-     custom design), ensuring both the web-based and Tauri-based versions feel
-     consistent.
-2. **Advanced Multi-Agent Features**
-   - Possibly introduce an **agent workflow** or “mini-graph” view if you want
-     to visualize dependencies or relationships among agents.
-   - Provide more robust agent status pages (show partial outputs, final
-     results, CPU usage, etc.) if your orchestrator captures that data.
-3. **Performance Tweaks & Larger-Scale Testing**
-   - If you expect many lines per second in the logs, verify the SSE or
-     WebSocket approach can handle it gracefully (e.g., buffering, chunking).
-   - Possibly add pagination or an infinite scroll approach in the UI for large
-     logs.
-4. **Completing Tauri Distribution & Mac Packaging**
-   - Ensure the `.app` is stable, well-labeled, with correct icons, and possibly
-     code-signed if distributing.
-   - Confirm the Docker approach is unaffected by styling changes or advanced UI
-     features.
+- **Value Proposition Addressed:**
+  - **Mastery over Complex Orchestration:** Grant users direct command-line
+    control over defining, executing, monitoring, and managing Sagas (handling
+    distributed consistency) and interacting with the event bus (for
+    event-driven architectures).
+  - **Deep Operational Insight:** Enable precise querying of performance metrics
+    (with labels) and detailed inspection of distributed traces (span
+    hierarchies, attributes) via the CLI, providing essential tools for advanced
+    performance analysis and debugging complex cross-component interactions.
+  - **Professional Developer/Operator Experience:** Deliver a highly polished
+    CLI featuring consistent formatting, clear status indicators, helpful error
+    messages, robust JSON output for automation, and usability enhancements like
+    shell completion.
+- **Essence Reinforced:** Phase 5 establishes `lion_cli` as a mature,
+  feature-complete interface reflecting the full power and sophistication of the
+  Lion system. It demonstrates Lion's capability to handle complex, resilient,
+  distributed workflows and provide deep runtime visibility, all accessible
+  through a professional command-line tool.
 
-**Success** at the end of Phase 5 means your UI is fully user-friendly—both in a
-typical browser (Docker or local) and as a Tauri `.app`—with advanced
-multi-agent features and plugin management, robust logs, and a polished
-front-end experience.
+## 2. Redesigned Ideal CLI Interaction Focus for Phase 5
 
----
+The CLI should now feel complete, powerful, and extremely user-friendly for
+advanced tasks.
 
-## 2. High-Level Tasks
+- **Saga Management (`lion workflow saga ...`):**
+  - `define --file <path.yaml|json>`: Loads definition, validates structure (DAG
+    check), reports success/failure.
+  - `start <definition_id> [--input <json_string>] [--correlation-id <uuid>]`:
+    Starts instance, prints instance ID.
+  - `list`: Table output (`Definition ID | Name | Version`). Supports
+    `--output json`.
+  - `instances [--definition-id <id>] [--status <Created|Running|...|Aborted>] [--limit N]`:
+    Filterable list of instances. Table output
+    (`Instance ID | Def ID | Status | Start Time`). Supports `--output json`.
+  - `status <instance_id>`: Detailed view showing overall status (colored),
+    start/end times, error (if any), followed by a table of steps
+    (`Step ID | Name | Status | Start Time | End Time | Result/Error Preview`).
+    Supports `--output json`.
+  - `abort <instance_id> [--reason <string>]`: Triggers abort and compensation.
+    Reports success/failure of the abort _request_.
+- **Event Broker Interaction (`lion event ...`):**
+  - `publish --topic <topic> --payload <json_string> [--source <id>] [--correlation-id <id>] [--priority <low|...|critical>]`:
+    Publishes event, confirms success. Payload must be valid JSON.
+  - `subscribe --topic <topic> [--count <N>] [--timeout <secs>]`: Blocks and
+    prints received events (formatted JSON or plain string) until N events
+    received or timeout occurs. Handles potential connection errors.
+  - `topics list`: Lists known event topics (if discoverable by backend). Table
+    output (`Topic Name | Subscribers (Count)`).
+  - `broker status`: Displays broker metrics (e.g., total topics, total
+    subscribers, in-flight messages, queue depths, if exposed by backend).
+- **Metrics Querying (`lion metrics ...`):**
+  - `list`: Table output (`Name | Type | Description`). Supports
+    `--output json`.
+  - `get <metric_name> [--labels <key=value,...>]`: Gets counter/gauge value(s).
+    Handles multi-value results for label variations. Clear output format.
+    Supports `--output json`.
+  - `histogram <metric_name> [--labels <key=value,...>] [--percentiles <p50,p90,p99.9>]`:
+    Gets histogram summary. Displays count, sum, average, and requested
+    percentiles. Supports `--output json`.
+- **Trace Querying (`lion trace ...`):**
+  - `get <trace_id>`: Displays trace as a hierarchical tree (using indentation
+    or box-drawing characters), showing span names, durations, start times,
+    status (Ok/Error), and key attributes. Supports `--output json` (likely as a
+    nested structure or flat list of spans with parent IDs).
+  - `find [--service <name>] [--span-name <name>] [--min-duration <ms>] [--max-duration <ms>] [--status <Ok|Error>] [--tag <key=value,...>] [--limit N]`:
+    Searches traces. Table output
+    (`Trace ID | Root Span Name | Start Time | Duration | Span Count | Status`).
+    Supports `--output json`. (Requires capable trace backend).
+- **CLI Polish:**
+  - **Tables:** Consistent use of `comfy-table` for all list outputs, ensuring
+    alignment and readability.
+  - **Colors:** Standardized colors for all status fields (Running/OK=Green,
+    Failed/Error=Red, Pending/Warn=Yellow,
+    Completed/Compensated/Aborted=Blue/Cyan).
+  - **Errors:** Detailed, contextual error messages printed to `stderr`. Use
+    specific exit codes (e.g., `1` general, `2` not found, `3` permission, `4`
+    invalid input).
+  - **Help:** Comprehensive help text for all commands, subcommands, and flags
+    via `clap`.
+  - **Shell Completion:** Generate and provide instructions for installing
+    completion scripts for Bash, Zsh, Fish via `lion completion <shell>`.
 
-1. **Adopt or Finalize a UI Framework / Styling**
-   - If you started with plain HTML/JS, you might incorporate a small framework
-     (React, Svelte, Vue) or a CSS framework (Tailwind, Bootstrap) to create a
-     more structured, aesthetically pleasing layout.
-2. **Enhance Agent & Plugin Pages**
-   - Add status pages for each agent, show partial outputs in a stable console,
-     highlight errors, etc.
-   - For plugins, show more details: permissions, version, usage instructions.
-3. **Implement or Improve Graph/Relationships (Optional)**
-   - If your orchestrator tracks agent relationships (like “Agent A spawns B,”
-     or “Agent calls plugin X”), you might visualize that in a small graph or
-     table.
-4. **Performance & Load Testing**
-   - If you anticipate large logs, do a quick load test to ensure SSE/WebSocket
-     doesn’t degrade or block the UI. Possibly adopt queueing or backpressure.
-5. **Finalize Tauri `.app`**
-   - Provide a custom icon, application name, window behavior for macOS.
-   - Possibly sign the `.app` for distribution. If only internal use, you can
-     skip notarization.
+## 3. Objectives & Scope (Expanded Detail)
 
----
+1. **Implement Saga CLI Commands (`lion workflow saga ...`):**
+   - **Backend Req (`lion_runtime` + `SagaOrchestrator`):** Need functions for
+     all operations: `define(SagaDefinition)`,
+     `start(def_id, input, correlation_id)`, `list_definitions()`,
+     `list_instances(filter)`, `get_instance_details(id)` (incl. detailed step
+     info: status, times, result/error snippets), `abort(id, reason)`.
+   - **CLI Impl:** Implement all subcommands (`define`, `start`, `list`,
+     `instances`, `status`, `abort`) in `commands/workflow.rs` or `saga.rs`.
+     Parse file for `define`, JSON for `start` input. Use `comfy-table` for
+     lists. Format `status` output clearly. Handle `--output json`.
+2. **Implement Event Broker CLI (`lion event ...`):**
+   - **Backend Req (`lion_runtime` + `EventBroker`):** Need `publish(Event)`,
+     `get_status() -> BrokerStatusInfo`, `list_topics()`. `subscribe` needs a
+     backend mechanism to stream events back to the potentially long-running CLI
+     process.
+   - **CLI Impl:** Add `event` command group. Implement `publish` (parses JSON
+     payload). Implement `subscribe` (handles blocking loop, printing events,
+     respects `--count`/`--timeout`). Implement `topics list`. Implement
+     `status`.
+3. **Implement Metrics CLI (`lion metrics ...`):**
+   - **Backend Req (`lion_runtime` + `MetricsRegistry` + Provider Query):** Need
+     `list_metrics() -> Vec<MetricInfo>`,
+     `query_metric(name, labels) -> Result<ValueOrMap>`,
+     `query_histogram(name, labels, percentiles) -> Result<HistogramSummary>`.
+     This likely requires runtime to query Prometheus/OTel backend.
+   - **CLI Impl:** Add `metrics` command group. Implement `list`, `get`,
+     `histogram`. Implement label parsing (`--labels k=v,k=v`). Implement
+     percentile parsing (`--percentiles p1,p2`). Format output. Handle
+     `--output json`.
+4. **Implement Tracing CLI (`lion trace ...`):**
+   - **Backend Req (`lion_runtime` + `Tracer` + Trace Store Query):** Need
+     `get_trace_details(trace_id) -> Result<TraceData { root_span_id, spans: Vec<SpanDetail> }>`,
+     `find_traces(criteria) -> Result<Vec<TraceSummary>>`. Requires runtime to
+     query Jaeger/Tempo/OTel backend.
+   - **CLI Impl:** Add `trace` command group. Implement `get <trace_id>`
+     (formats span tree). Implement `find` with filter flags. Handle
+     `--output json`.
+5. **CLI Polish and UX:**
+   - **Formatting:** Integrate `comfy-table` across _all_ `list` commands
+     (plugin, capability, policy, workflow, saga, event, metrics). Standardize
+     column names and widths where possible.
+   - **Coloring:** Apply the defined color scheme consistently to all status
+     fields in command outputs.
+   - **Error Handling:** Review all `Result` handling in command handlers. Use
+     `anyhow::Context` or `map_err` to add context. Implement specific exit
+     codes in `main.rs` based on error types.
+   - **Shell Completion:** Add `clap_complete` dependency. Implement
+     `completion` command handler. Add build script step or documentation for
+     generation/installation.
+6. **Interface Layer (`lion_cli/src/interfaces/`):** Implement all new interface
+   functions (for Saga, Event, Metrics, Trace) ensuring they correctly interact
+   with the assumed `lion_runtime` backend functions and handle the required
+   data structures.
+7. **Testing (`lion_cli/tests/`):** Add comprehensive integration tests
+   (`test_saga_commands.rs`, `test_event_commands.rs`,
+   `test_metrics_commands.rs`, `test_trace_commands.rs`). Test all subcommands,
+   flags, success/error paths, table output structure, and JSON output
+   structure. Test shell completion generation command.
 
-## 3. Step-by-Step Instructions
+## 4. Step-by-Step Implementation Plan (Expanded Detail)
 
-### Step 1: **UI Framework & Styling (Optional but Recommended)**
+_(Focuses on `lion_cli` implementation, assuming backend functions are
+available)_
 
-1. **Pick a Framework** (React, Vue, Svelte) or a simpler approach:
-   - If your code so far is plain HTML/JS, you can integrate a bundler or
-     minimal setup.
-   - Example with React:
-     ```bash
-     cd lion_ui/frontend
-     npx create-react-app .
-     # or npm create vite@latest
-     ```
-2. **Integrate**:
-   - Modify your front-end code to use components for the Agents page, Plugins
-     page, Logs page, etc.
-   - A routing library (React Router, SvelteKit) can provide clean page
-     transitions.
-3. **Styling**:
-   - If you want a quick approach, consider a CSS framework like **Tailwind** or
-     **Bootstrap**. This ensures consistent design with minimal custom CSS.
+### Step 1: **Implement Saga CLI (`lion workflow saga ...`)**
 
-### Step 2: **Enhance Agent & Plugin Pages**
+1. **`lion_runtime` Backend:** Implement functions wrapping `SagaOrchestrator`.
+2. **`lion_cli/interfaces/workflow.rs` (or `saga.rs`):** Define structs
+   (`SagaDefinitionInfo`, `SagaInstanceSummary`, `StepExecutionInfo`,
+   `SagaInstanceDetails`, `InstanceFilter`). Implement interface functions
+   (`define_saga`, `start_saga`, `list_definitions`, `list_instances`,
+   `get_instance_details`, `abort_instance`). Handle file parsing for `define`,
+   JSON parsing for `start --input`.
+3. **`lion_cli/main.rs`:** Define `SagaCommands` enum and all `clap` arguments
+   precisely.
+4. **`lion_cli/commands/workflow.rs` (or `saga.rs`):** Implement handlers. Use
+   `comfy-table` for `list` and `instances`. Format `status` with overall
+   summary + step table (colored). Handle JSON output.
+5. **Testing:** Create `test_saga_commands.rs`. Test all subcommands, filters
+   (`instances --status`), error cases (not found, already exists), JSON output.
 
-1. **Agents**:
-   - Each agent has a dedicated page (e.g., `#/agent/:id` in React Router).
-   - Show partial outputs in a console-like area, updated in real-time from SSE.
-   - Possibly show CPU usage, memory usage, or sub-status if your orchestrator
-     records that.
-2. **Plugins**:
-   - For each plugin in the list, let the user see “Manifest details,”
-     “Permissions,” “Version,” and last logs or invocation results.
-   - If the plugin can produce partial output, show that in real time as well.
+### Step 2: **Implement Event Broker CLI (`lion event ...`)**
 
-### Step 3: **Multi-Agent Relationship Visualization (Optional)**
+1. **`lion_runtime` Backend:** Implement `EventBroker` wrappers. Devise strategy
+   for CLI `subscribe` (e.g., runtime returns a limited stream, or CLI blocks).
+2. **`lion_cli/interfaces/workflow.rs` (or `event.rs`):** Implement
+   `publish_event`, `get_broker_status`, `list_topics`. Implement
+   `subscribe_to_topic` according to chosen strategy. Define `BrokerStatusInfo`,
+   `Event`.
+3. **`lion_cli/main.rs`:** Define `EventCommands` enum and `clap` args.
+4. **`lion_cli/commands/event.rs`:** Implement handlers. `publish` validates
+   payload JSON. `subscribe` implements the blocking/streaming logic. Use tables
+   for `topics` and `status`.
+5. **Testing:** Create `test_event_commands.rs`. Test `publish` with
+   valid/invalid JSON. Test `topics`, `status`. Test `subscribe`'s exit
+   condition (count or timeout).
 
-1. If your orchestrator tracks relationships (like “Agent X spawns Agent Y with
-   a certain prompt”), you can store them in a small adjacency list or in logs.
-2. The UI can use a library like D3.js or a simpler force-directed approach to
-   show a small graph of agent relationships.
-3. For Phase 5, this can be just a minimal adjacency list or a “tree” of agent
-   spawns, if relevant.
+### Step 3: **Implement Metrics CLI (`lion metrics ...`)**
 
-### Step 4: **Performance & Load Testing**
+1. **`lion_runtime` Backend:** Implement `MetricsRegistry` wrappers, including
+   query logic against the metrics provider.
+2. **`lion_cli/interfaces/observability.rs`:** Define `MetricInfo`,
+   `MetricValue`, `HistogramSummary`. Implement `list_metrics`, `query_metric`,
+   `query_histogram`.
+3. **`lion_cli/main.rs`:** Define `MetricsCommands` enum and `clap` args.
+   Implement `parse_labels` helper.
+4. **`lion_cli/commands/metrics.rs`:** Implement handlers. Parse
+   labels/percentiles correctly. Call interfaces. Format output (table for list,
+   key-value for get/histogram). Handle `--output json`.
+5. **Testing:** Create `test_metrics_commands.rs`. Test all subcommands, label
+   filtering, percentile requests, error cases, JSON output.
 
-1. **Agent/Log Stress Test**:
-   - Possibly spawn 50 agents concurrently, each producing partial logs, to
-     ensure SSE or WebSocket remains stable.
-   - If performance suffers, you might:
-     - Batch SSE events (e.g., gather lines for 500 ms, send them in a single
-       SSE event).
-     - Introduce a ring buffer to limit memory usage.
-2. **UI**:
-   - Confirm the front-end doesn’t lock up when many log lines are appended
-     (virtual scrolling or a smaller max display might help).
+### Step 4: **Implement Tracing CLI (`lion trace ...`)**
 
-### Step 5: **Finalize Tauri .app for macOS**
+1. **`lion_runtime` Backend:** Implement `Tracer`/Trace Store wrappers. Requires
+   integration with Jaeger/Tempo/OTel Collector APIs for `get` and `find`.
+2. **`lion_cli/interfaces/observability.rs`:** Define `SpanDetail`, `TraceData`,
+   `TraceSummary`, `TraceSearchCriteria`. Implement `get_trace_details`,
+   `find_traces`.
+3. **`lion_cli/main.rs`:** Define `TraceCommands` enum and `clap` args for `get`
+   and `find`.
+4. **`lion_cli/commands/trace.rs`:** Implement handlers. `get` needs to format
+   the span tree (e.g., using indentation). `find` uses a table. Handle
+   `--output json`.
+5. **Testing:** Create `test_trace_commands.rs`. Test `get` output structure.
+   Test `find` with various filters. Test non-existent IDs. Test JSON output.
 
-1. **Refine Tauri Configuration** (`tauri.conf.json`):
-   ```json
-   {
-     "build": {
-       "distDir": "../frontend/dist",
-       "devPath": "../frontend/dist"
-     },
-     "tauri": {
-       "bundle": {
-         "identifier": "com.yourorg.lion",
-         "icon": ["icons/icon.icns"]
-       },
-       "windows": [
-         {
-           "title": "lion Desktop",
-           "width": 1200,
-           "height": 800
-         }
-       ]
-     }
-   }
-   ```
-2. **Build & Test**:
-   - `cargo tauri build` → produces a `.app` in `target/release/bundle/macos/`.
-   - Launch `.app`, ensure everything is local, logs display, etc.
-3. **(Optional) Code Signing**:
-   - For distribution beyond your own dev team, you may need a Developer ID cert
-     from Apple. This is advanced usage; Phase 5 typically just warns about
-     potential signing.
+### Step 5: **CLI Polish and UX Enhancements**
 
-### Step 6: **UI Testing & Docker Re-Verification**
+1. **Integrate Tables:** Audit _all_ list commands (`plugin list`,
+   `capability list`, `policy list`, `workflow list`, `agent list`, `saga list`,
+   `saga instances`, `event topics`, `metrics list`, `trace find`) and ensure
+   they use `comfy-table` with consistent column definitions.
+2. **Apply Colors:** Audit _all_ commands displaying status (`plugin info`,
+   `workflow status`, `workflow info`, `agent list`, `saga status`, `trace get`)
+   and apply the standard color scheme using `colored`.
+3. **Refine Error Handling:** In `main.rs`'s error handling block (or individual
+   handlers), map specific backend `Error` variants (e.g.,
+   `Error::Plugin(PluginError::NotFound)`) to distinct exit codes and more
+   user-friendly messages on `stderr`.
+4. **Implement Shell Completion:**
+   - Add `clap_complete` dev-dependency.
+   - Add `Completion { shell: clap_complete::Shell }` command to `main.rs`.
+   - Implement handler using `clap_complete::generate`.
+   - Add documentation for setup (`eval "$(lion completion bash)"`).
 
-1. **Integration Testing**:
-   - Manually or automatically test each new feature (search, spawn agent, load
-     plugin, partial logs) in both the browser version and Tauri environment.
-   - Possibly replicate each test in Docker, ensuring the advanced UI runs at
-     `localhost:8080`, logs partial outputs, etc.
-2. **UI Acceptance**:
-   - If you have a QA step, confirm the style, layout, and navigation is
-     user-friendly. Possibly gather feedback from team members or stakeholders.
+### Step 6: **Final Testing and Documentation**
 
----
+1. **Full Test Suite:** Run `cargo test --all` in `lion_cli`. Ensure all tests
+   pass, including the new ones for advanced features and polish checks (e.g.,
+   JSON output validation).
+2. **Manual E2E:** Perform a comprehensive manual test of all major CLI
+   workflows (load plugin -> grant caps -> check policy -> run workflow -> check
+   saga -> inspect logs/metrics/traces).
+3. **Documentation:** Update all CLI documentation (README, man pages if
+   generated, usage examples) to cover every command and flag accurately. Ensure
+   shell completion instructions are clear.
+4. **Commit:** Finalize commits with `[stage2-phase5]` prefix.
 
-## 4. Potential Enhancements & Pitfalls
+## 5. Potential Issues & Considerations
 
-1. **Further UX**:
-   - Could add a status bar or notification system for plugin errors or agent
-     failures.
-   - Advanced sorting, time-based grouping in logs, etc.
-2. **Tauri & SSE**:
-   - If you rely on SSE from an Axum server, Tauri might also be opening an
-     internal port. That’s typically local, so no big security risk, but keep an
-     eye on port collisions or cross-origin if you do it in a more complex
-     setup.
-3. **Offline Mode**:
-   - With Tauri, everything can be truly offline if the orchestrator doesn’t
-     need external calls. For Mac laptops, a user can run the `.app` anywhere,
-     spawn agents, load local plugins—no network needed.
-4. **Major UI Overhaul**:
-   - If you adopt a big front-end framework in Phase 5, ensure existing SSR or
-     SSE code is integrated. This might be a heavier refactor. Budget time
-     accordingly.
+- **Backend Feature Completeness:** This phase heavily assumes the backend
+  (`lion_runtime` and underlying crates) fully implements Sagas, Event Broker
+  interactions, and provides queryable APIs for metrics and traces. Any gaps
+  there will block CLI implementation.
+- **Observability Backend Integration:** The implementation complexity of
+  `lion metrics` and `lion trace` commands depends greatly on the ease of
+  querying the chosen observability backends (Prometheus, Jaeger, OTel
+  Collector, etc.). This might require adding specific client libraries or API
+  wrappers in `lion_runtime`.
+- **CLI Streaming Complexity:** The `lion event subscribe` command remains the
+  most complex due to its streaming nature compared to other request-response
+  commands. Careful implementation is needed to handle blocking, timeouts, and
+  graceful termination.
+- **Polish Scope:** Achieving perfect formatting, error messages, and
+  completions across many commands takes significant effort. Prioritize
+  consistency and clarity.
 
----
+## 6. Expected Outcome
 
-## 5. Success Criteria
-
-1. **Polished UI**:
-   - A cohesive set of pages or nav: “Home/Dashboard,” “Agents,” “Plugins,”
-     “Logs,” “Search.”
-   - Crisp styling, easy to read partial logs, and simple to spawn/invoke new
-     tasks or plugins.
-2. **Advanced Multi-Agent**:
-   - If you implemented the optional relationship/graph feature, you see a map
-     or list of how agents connect.
-   - Otherwise, you at least have a robust agent detail page with all partial
-     outputs and final status.
-3. **Stable Tauri `.app`**:
-   - Double-click `.app` → local window opens → user can do everything offline.
-   - Build final `.app` in `target/release/bundle/macos/`, optionally share with
-     devs.
-4. **Docker**:
-   - The final web-based approach is still accessible via
-     `docker run -p 8080:8080 lion_ui`.
-   - The user sees a more polished front end and advanced features.
-
----
-
-## 6. Expected Outcome of Phase 5
-
-At the end of **Stage 2, Phase 5**:
-
-- You have a **fully refined UI** that handles real-time logs with advanced
-  filtering and search, multi-agent concurrency with partial outputs, and plugin
-  management.
-- **Tauri** is integrated for those wanting a local macOS desktop experience,
-  possibly with a simplified distribution model if you’re not using Docker.
-- The system is effectively “feature-complete” for Stage 2—both in polish
-  (UI/UX) and functionality (agent operations, plugin control, logs management).
-- You can now demonstrate the lion microkernel’s full potential in front of
-  stakeholders or end users, with a user-friendly interface that’s easily run in
-  Docker or as a Tauri `.app`.
-
-**Congratulations**—with Phase 5 complete, you’ve built a robust, user-friendly
-environment for multi-agent AI orchestration and plugin management, spanning
-local offline usage and Docker-based distributions!
+- **Fully Featured CLI:** `lion_cli` is now the definitive command-line
+  interface for the Lion system, providing control and observability over core
+  features _and_ advanced patterns like Sagas and Events, along with deep
+  diagnostic capabilities via metrics and trace querying.
+- **Professional Developer/Operator Tool:** The CLI boasts a polished user
+  experience with consistent table formatting, informative color-coded statuses,
+  helpful error messages, comprehensive JSON output for scripting, and
+  potentially shell completion.
+- **Complete System Validation:** The CLI serves as a powerful end-to-end
+  validation tool, demonstrating that all major components and features of the
+  Lion system are functional and interact correctly.
+- **Ready for UI Development:** With the backend interactions thoroughly defined
+  and tested via the comprehensive CLI, building a graphical UI (Web or Tauri)
+  becomes significantly more straightforward, focusing primarily on visual
+  presentation and user interaction design based on the established CLI commands
+  and backend APIs.

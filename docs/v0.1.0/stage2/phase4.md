@@ -1,320 +1,217 @@
-Below is an **exhaustively detailed** plan for **Stage 2, Phase 4**, focusing on
-**Advanced Logging (search, filter) and Initial Tauri Setup** for a local
-desktop experience—particularly on macOS. In this phase, you enhance the
-existing web-based UI with better log management capabilities (filtering by
-agent/plugin, searching partial outputs), while also **laying the groundwork**
-to wrap the same front end into a **Tauri** desktop application, providing a
-native-like environment on macOS.
+# **Stage 2, Phase 4 – CLI Feature Completeness: Core System Control & Observability**
 
----
+**(Revised & Expanded: CLI Focus - Builds on Stage 1, Phase 5 Completion)**
 
-# **Stage 2, Phase 4 – Advanced Logging & Initial Tauri Setup**
+## 1. Essence & Value Proposition Refocus
 
-## 1. Objectives & Scope
+**Goal:** Transform `lion_cli` into a **comprehensive command-line control
+plane** for the Lion system's foundational features. This phase extends beyond
+the basic agent/plugin demos of Stage 1, providing deep inspection capabilities
+for security constructs (Capabilities, Policies), detailed status reporting for
+core runtime entities (Plugins, Workflows), enhanced observability through
+structured log searching, and initial mechanisms for resource management.
 
-1. **Advanced Logging & Search**
-   - Extend your existing real-time logs (SSE or WebSocket) with **filtering**
-     or **search** (by agent ID, plugin ID, correlation ID, log text, etc.).
-   - Provide **UI controls** so a user can quickly find a particular output line
-     among many.
+- **Value Proposition Addressed:**
+  - **Authoritative Control & Manageability:** Establish the CLI as the primary
+    interface for inspecting the state of loaded plugins, active workflow
+    instances, and the system's security configuration. Introduce basic agent
+    and resource management commands.
+  - **Security Transparency & Verification:** Enable users to directly query and
+    view granted capabilities for specific plugins and the exact definitions of
+    applied policy rules via dedicated CLI commands.
+  - **Enhanced Debugging & Monitoring:** Implement powerful, structured log
+    searching (`lion logs search`), allowing users to filter runtime events by
+    various criteria (level, source, IDs, text, time) for effective diagnostics.
+  - **Resource Awareness:** Provide commands to view current resource usage
+    metrics for plugins and set fundamental resource limits, offering visibility
+    and control over sandbox constraints.
+- **Essence Reinforced:** Phase 4 solidifies the CLI as a powerful tool for
+  _understanding_ and _verifying_ the Lion system's state and behavior. It
+  demonstrates that the core concepts (capabilities, policies, isolation,
+  observability) are not just theoretical but practically accessible and
+  manageable before adding advanced orchestration or UI layers.
 
-2. **Initial Tauri Setup** (for local desktop usage)
-   - Reuse the same front-end code (HTML/JS or React/Svelte) within Tauri,
-     producing a `.app` for macOS (and other OSes if desired).
-   - Confirm that orchestrator + UI runs **fully local** with Tauri (no Docker
-     needed).
+## 2. Redesigned Ideal CLI Interaction Focus for Phase 4
 
-3. **Refine Docker & Local**
-   - The web-based version (Phase 1–3) remains intact; Tauri is an
-     **additional** packaging approach.
-   - Docker usage is unchanged, except you might not need it for Tauri
-     distribution.
+The target CLI experience emphasizes informative output, consistent structure,
+and powerful querying for core system elements.
 
-**Success** at the end of Phase 4 means you can run **two** approaches to the
-UI:
+- **Command Structure:** Strict adherence to `lion <NOUN> <VERB> [ARGS/FLAGS]`.
+  Key nouns for this phase: `plugin`, `capability`, `policy`, `workflow`,
+  `agent`, `resource`, `logs`. Key verbs: `list`, `info`, `search`, `spawn`,
+  `limits`, `usage`.
+- **Output Formatting:**
+  - **Human-Readable (Default):** Use well-aligned tables (via `comfy-table` or
+    similar) for `list` commands. Use clear key-value pairs or sectioned text
+    for `info`/`status`/`usage` commands. Employ color-coding (via `colored`)
+    for statuses (e.g., `PluginState::Running` green, `Failed` red).
+  - **Machine-Readable (`--output json`):** Provide a JSON output option for
+    commands returning structured data (`list`, `info`, `search`, `usage`). The
+    JSON structure should closely mirror the underlying Rust structs
+    (`PluginMetadata`, `CapabilityInfo`, `PolicyRule`, `LogEntry`, etc.).
+- **Filtering & Searching:** Log searching (`lion logs search`) must perform
+  efficient filtering based on multiple criteria. The backend (`lion_runtime`
+  interfacing with `lion_observability`) is responsible for handling the
+  filtering logic.
+- **Error Handling:** CLI commands must exit with non-zero status on error.
+  Messages to `stderr` should clearly state the command that failed, the
+  specific error encountered (leveraging the core error hierarchy, e.g.,
+  `PluginNotFound`, `CapabilityDenied`, `PolicyRuleNotFound`), and potential
+  hints if applicable.
+- **Argument Consistency:** Use standardized flags: `--plugin-id <UUID>`,
+  `--rule-id <STRING>`, `--workflow-id <UUID>`, `--instance-id <STRING>`,
+  `--correlation-id <UUID>`, `--output json`, `--limit N`, `--offset N`, etc.
 
-- The existing web-based server (with advanced log search).
-- A Tauri `.app` bundling the same front end, giving local macOS usage and an
-  integrated orchestrator, with the same advanced log features.
+## 3. Objectives & Scope (Expanded Detail)
 
----
+_(Assumes Stage 1, Phases 1-5 completed, providing basic `agentic_core` with
+orchestrator, event log, mock agent/plugin handlers, and a rudimentary CLI)_
 
-## 2. High-Level Tasks
+1. **Implement Structured Log Querying (`lion logs search`):**
+   - **Backend Requirement (`lion_runtime` + `lion_observability`):** Needs an
+     accessible log store (in-memory `VecDeque<LogEntry>` or persistent) holding
+     structured `LogEntry` { `timestamp`, `level`, `message`, `source_type`:
+     String (e.g., "System", "Plugin", "Agent", "Workflow"), `source_id`:
+     Option<String> (UUID/Name), `correlation_id`: Option<String>, `metadata`:
+     `serde_json::Value` }. Requires
+     `search_logs(filter: LogFilterParams) -> Result<Vec<LogEntry>>` function
+     implementing filtering by all criteria.
+   - **CLI Implementation (`lion_cli`):**
+     - Add `search` subcommand to `lion logs`.
+     - Define `clap` arguments: `--level <trace|...|error>`,
+       `--source-type <type>`, `--source-id <id>`, `--correlation-id <id>`,
+       `--text <pattern>`, `--since <timestamp>`, `--until <timestamp>`,
+       `--limit <N>`, `--offset <N>`, `--output json`.
+     - Implement handler in `commands/logs.rs` (or similar): Parse args into
+       `LogFilterParams`, call interface `search_logs`.
+     - Format output: Default table (`Timestamp | Level | Source | Msg`), JSON
+       array of `LogEntry`.
+2. **Refine Plugin Inspection (`lion plugin list/info`):**
+   - **Backend Requirement (`lion_runtime` + `PluginManager` +
+     `CapabilityManager`):**
+     - `PluginManager::list_plugins()` needs to return
+       `Vec<PluginSummary { id, name, version, state: PluginState }>`.
+     - `PluginManager::get_plugin_details(id)` needs to return
+       `PluginDetails { metadata: PluginMetadata, granted_capabilities: Vec<CapabilityInfo> }`.
+       This implies `PluginManager` queries `CapabilityManager` for the
+       capabilities associated with the plugin ID (as the subject).
+       `CapabilityInfo` should contain
+       `{ id: CapabilityId, type: String, description: String }`.
+   - **CLI Implementation (`lion_cli`):**
+     - Modify `list` handler in `commands/plugin.rs`: Add `STATE` column
+       (colored). Add `--output json`.
+     - Implement `info <plugin_id>` subcommand. Add `--output json`.
+     - Implement `handle_plugin_info`: Call interface `get_plugin_details`.
+       Display `PluginMetadata` fields. Display `granted_capabilities` in a
+       separate section/list. Format JSON output.
+3. **Implement Capability Viewing (`lion capability list`):**
+   - **Backend Requirement (`lion_runtime` + `CapabilityManager`):** Expose
+     `CapabilityManager::list_capabilities_for_subject(subject_id: &str) -> Result<Vec<CapabilityInfo>>`.
+   - **CLI Implementation (`lion_cli`):**
+     - Add top-level `capability` command group.
+     - Add `list` subcommand requiring `--plugin-id <id>`. Add `--output json`.
+     - Implement handler in `commands/capability.rs`: Call interface
+       `list_capabilities`. Format output table
+       (`Capability ID | Type | Details`). JSON is array of `CapabilityInfo`.
+4. **Refine Policy Inspection (`lion policy list/info`):**
+   - **Backend Requirement (`lion_runtime` + `PolicyStore`):** Expose
+     `PolicyStore::get_rule(rule_id: &str) -> Result<PolicyRule>`. Ensure
+     `list_rules()` is exposed.
+   - **CLI Implementation (`lion_cli`):**
+     - Refine `list` handler in `commands/policy.rs`: Use `comfy-table`. Add
+       `--output json`.
+     - Implement `info <rule_id>` subcommand. Add `--output json`.
+     - Implement `handle_policy_info`: Call interface `get_policy_rule`. Display
+       all fields of the `PolicyRule` struct in a readable key-value format.
+       JSON output is the full struct.
+5. **Enhance Workflow Status (`lion workflow info`):**
+   - **Backend Requirement (`lion_runtime` + `StateMachineManager`):** Expose
+     `get_workflow_instance_details(instance_id: &str) -> Result<WorkflowInstanceDetails>`.
+     The `WorkflowInstanceDetails` struct needs
+     `{ overall_status: ExecutionStatus, node_statuses: HashMap<NodeId, NodeRuntimeInfo { name: String, status: NodeStatus, start_time: Option<DateTime>, end_time: Option<DateTime> }> }`.
+     (Requires StateMachine to potentially access the definition for names).
+   - **CLI Implementation (`lion_cli`):**
+     - Refine `status <instance_id>` handler output.
+     - Implement `info <instance_id>` subcommand. Add `--output json`.
+     - Implement `handle_workflow_info`: Call interface, display overall status,
+       then list/table of node statuses with names and times. JSON output
+       mirrors `WorkflowInstanceDetails`.
+6. **Implement Agent Management (`lion agent spawn/list`):**
+   - **Backend Requirement (`lion_runtime`/`agentic_core`):** Expose agent
+     management interface:
+     `spawn_agent(prompt: String, name: Option<String>) -> Result<AgentId>`,
+     `list_agents() -> Result<Vec<AgentInfo { id: AgentId, name: String, status: String }>>`.
+   - **CLI Implementation (`lion_cli`):**
+     - Add top-level `agent` command group.
+     - Implement `spawn --prompt <TEXT> [--name <NAME>]`.
+     - Implement `list [--output json]`.
+     - Implement handlers in `commands/agent.rs`. `spawn` prints the new ID.
+       `list` uses a table (`Agent ID | Name | Status`) or JSON.
+7. **Implement Resource Management (`lion resource limits/usage`):**
+   - **Backend Requirement (`lion_runtime` + `IsolationManager`):** Expose
+     `set_resource_limit(plugin_id: PluginId, limit_type: ResourceLimitType, value: u64) -> Result<()>`
+     and `get_resource_usage(plugin_id: PluginId) -> Result<ResourceUsage>`.
+   - **CLI Implementation (`lion_cli`):**
+     - Add top-level `resource` command group.
+     - Implement
+       `limits --plugin-id <id> [--memory-mb <N>] [--cpu-percent <N>] ...`
+       command. Handler parses flags and calls backend `set_resource_limit` for
+       each provided limit.
+     - Implement `usage --plugin-id <id> [--output json]`. Handler calls backend
+       `get_resource_usage`.
+     - Implement handlers in `commands/resource.rs`. Format `usage` output
+       clearly. JSON output mirrors the `ResourceUsage` struct from `lion_core`.
+8. **Interface Layer Implementation (`lion_cli/src/interfaces/`):** Create or
+   update functions in the relevant modules (`observability.rs`, `runtime.rs`,
+   `capability.rs`, `policy.rs`, `workflow.rs`, `isolation.rs`, `agent.rs`) to
+   match the required backend signatures and perform the calls. Define necessary
+   intermediate structs (like `PluginSummary`, `CapabilityInfo`,
+   `LogFilterParams`, etc.) if they differ from core types.
+9. **Testing (`lion_cli/tests/`):** Create new test files (e.g.,
+   `test_logs_search.rs`, `test_plugin_info.rs`, etc.) for each new
+   command/feature. Use `assert_cmd` to:
+   - Verify command execution with various flags.
+   - Check for expected stdout (including table formatting).
+   - Verify `--output json` produces valid JSON matching expected structures.
+   - Check stderr for correct error messages on failure cases (e.g., ID not
+     found).
+   - Test exit codes.
 
-1. **Implement Log Storage & Search** in Orchestrator or a local buffer to
-   support filtering.
-2. **UI: Search & Filter Controls** on the logs page (by agent, plugin,
-   correlation ID, text).
-3. **Set Up Tauri** with a minimal `tauri.conf.json`, pointing to your built
-   front-end.
-4. **Embed Orchestrator** in Tauri (the same code that was run in the web server
-   context).
-5. **Package & Test** on macOS, ensuring a `.app` can be launched to see the
-   same UI offline.
+## 5. Potential Issues & Considerations
 
----
+- **Backend Interface Availability:** The feasibility of this phase hinges
+  entirely on the `lion_runtime` layer exposing the detailed functions needed
+  (e.g., getting capabilities per plugin, detailed node statuses, setting
+  resource limits). If these backend endpoints aren't ready, they must be
+  implemented first.
+- **Structured Data Consistency:** Ensuring the data structures
+  (`PluginMetadata`, `CapabilityInfo`, `PolicyRule`, `LogEntry`,
+  `ResourceUsage`, etc.) are defined consistently in `lion_core` and used
+  correctly by the backend, interfaces, and CLI JSON output is crucial.
+- **Performance of Backend Queries:** CLI commands like `lion logs search` or
+  `lion capability list` might trigger potentially expensive operations on the
+  backend. The backend implementation needs to be reasonably performant or the
+  CLI might appear sluggish.
+- **State Management & Concurrency:** The backend functions accessed by the CLI
+  must correctly handle concurrent access to the underlying state (plugin
+  registries, capability stores, workflow state machines, log buffers) using
+  `RwLock`/`Mutex`.
+- **Async Integration:** All CLI handlers interacting with the potentially
+  `async` backend must be `async` and use `await` correctly within the `tokio`
+  runtime established in `lion_cli/src/main.rs`.
 
-## 3. Step-by-Step Instructions
+## 6. Expected Outcome
 
-### Step 1: **Advanced Logging & Search in Orchestrator**
-
-1. **In-Memory Log Buffer**
-   - If you only have a real-time SSE broadcast, you might not store logs. For
-     search, you need a local store.
-   - Example: Keep a ring buffer or vector of the last X lines in the
-     orchestrator or UI server’s `MyAppState`.
-   - Each log line can be a struct, e.g.:
-     ```rust
-     pub struct LogLine {
-       pub timestamp: chrono::DateTime<chrono::Utc>,
-       pub agent_id: Option<Uuid>,
-       pub plugin_id: Option<Uuid>,
-       pub correlation_id: Option<Uuid>,
-       pub message: String,
-     }
-     ```
-   - If you want truly advanced searching or older logs, you could integrate a
-     small local DB or event-sourcing. Phase 4 typically uses a memory approach.
-
-2. **Update SSE**
-   - You still broadcast new lines as they arrive. But for search or filter, the
-     UI can do an HTTP call to a new endpoint, e.g.
-     `GET /api/logs?agent=...&plugin=...&text=...`. That endpoint queries your
-     in-memory list or ring buffer.
-
-### Step 2: **Create Log Filter Endpoints**
-
-1. A route like `GET /api/logs`:
-   ```rust
-   // GET /api/logs?agent=...&plugin=...&text=...
-   use axum::{
-       extract::{Query, State},
-       Json,
-   };
-   use std::sync::Arc;
-
-   #[derive(Deserialize)]
-   pub struct LogFilter {
-       pub agent: Option<String>,
-       pub plugin: Option<String>,
-       pub text: Option<String>,
-   }
-
-   pub async fn search_logs_handler(
-       State(app_state): State<Arc<MyAppState>>,
-       Query(params): Query<LogFilter>,
-   ) -> Json<Vec<LogLine>> {
-       // Filter in-memory log lines by agent, plugin, text
-       let lines = app_state.log_buffer.filter(params);
-       Json(lines)
-   }
-   ```
-2. The `filter(params)` can convert agent or plugin string to `Uuid`, etc.
-3. This endpoint returns JSON array of matching lines. The UI can show them or
-   integrate them with SSE.
-
-### Step 3: **UI: Searching & Filtering Logs**
-
-1. In your front end, create a new “Advanced Logs” page or some search form:
-   ```html
-   <h2>Advanced Log Search</h2>
-   <div>
-     <input id="agentFilter" placeholder="Agent ID" />
-     <input id="pluginFilter" placeholder="Plugin ID" />
-     <input id="textFilter" placeholder="Search text" />
-     <button id="searchBtn">Search</button>
-   </div>
-   <div id="searchResults"></div>
-
-   <script>
-     async function searchLogs() {
-       const agent = document.getElementById("agentFilter").value;
-       const plugin = document.getElementById("pluginFilter").value;
-       const text = document.getElementById("textFilter").value;
-       const params = new URLSearchParams();
-       if (agent) params.append("agent", agent);
-       if (plugin) params.append("plugin", plugin);
-       if (text) params.append("text", text);
-
-       const res = await fetch(`/api/logs?${params.toString()}`);
-       const lines = await res.json();
-       const container = document.getElementById("searchResults");
-       container.innerHTML = lines.map((l) =>
-         `<div>[${l.timestamp}] ${l.message}</div>`
-       ).join("");
-     }
-
-     document.getElementById("searchBtn").onclick = searchLogs;
-   </script>
-   ```
-2. Now a user can input agent ID, plugin ID, or partial text, then get results
-   from the orchestrator’s in-memory logs.
-
-### Step 4: **Initial Tauri Setup**
-
-1. **Install Tauri**:
-   ```bash
-   cargo install create-tauri-app
-   ```
-   Or if you’re integrating Tauri manually, add `tauri = "1"` to your
-   `lion_ui/Cargo.toml`.
-2. In your `lion_ui/` folder, create Tauri scaffolding:
-   ```bash
-   cd lion_ui
-   npx create-tauri-app
-   ```
-   or if you prefer manual, create a `src-tauri/tauri.conf.json` with something
-   like:
-   ```json
-   {
-     "build": {
-       "beforeDevCommand": "",
-       "beforeBuildCommand": "",
-       "devPath": "frontend/dist",
-       "distDir": "frontend/dist"
-     },
-     "tauri": {
-       "windows": [
-         {
-           "fullscreen": false,
-           "height": 800,
-           "resizable": true,
-           "title": "lion UI",
-           "width": 1200
-         }
-       ]
-     }
-   }
-   ```
-3. **Point Tauri to Your Built Front-End**
-   - If your front-end uses `npm run build` to produce `frontend/dist`, ensure
-     Tauri loads that as a static asset.
-4. **Use Tauri Commands**:
-   - Instead of running an HTTP server, Tauri can run your orchestrator code
-     in-process. Or you can keep your Axum server, but it’d be local.
-   - For a quick approach, you can define Tauri commands to spawn agents, load
-     plugins, etc.:
-     ```rust
-     #[tauri::command]
-     fn spawn_agent(prompt: String) -> String {
-         // call orchestrator logic
-         "spawned agent".to_string()
-     }
-     ```
-   - Then in your front-end code, you do
-     `window.__TAURI__.invoke("spawn_agent", { prompt: "my prompt" })`.
-   - If you want to keep SSE logs, you might run the Axum server on a local port
-     like 127.0.0.1:9000 inside Tauri, or do Tauri event APIs.
-5. **Build Tauri**:
-   ```bash
-   cargo tauri build
-   ```
-   This produces a `.app` for macOS in `target/release/bundle/` if everything is
-   configured correctly.
-
-### Step 5: **Refine Tauri or Keep Axum**
-
-- You can do a “hybrid” approach: Tauri opens a window pointing to
-  `http://127.0.0.1:9000/`. This approach reuses your Axum code exactly, but
-  it’s all local.
-- Or you define Tauri commands for everything. Then SSE might be replaced by
-  Tauri’s event system. That’s more refactoring. For Phase 4, a “hybrid”
-  approach is simpler: keep Axum for SSE, Tauri loads the front-end from
-  `dist/`.
-
-### Step 6: **Local Testing & Docker**
-
-1. **macOS**:
-   - `cargo tauri dev` or `cargo tauri build`.
-   - Launch the `.app`. You see the same UI. You can do advanced log searching.
-2. **Docker**:
-   - The Tauri build is typically for a local desktop. Docker usage might remain
-     for the web-based approach. If you want to distribute Tauri in Docker,
-     that’s less common. Usually Tauri is for local user space.
-3. **End-To-End**:
-   - Confirm that advanced log searching or filtering works in both:
-     - The standard `cargo run -p lion_ui` approach.
-     - The Tauri `.app` approach (if you configured a local Axum server or Tauri
-       commands).
-
----
-
-## 4. Potential Enhancements & Pitfalls
-
-1. **Data Retention**:
-   - If your user kills Tauri or the Docker container, logs vanish unless you
-     store them in a file or DB.
-   - For advanced usage, consider an actual event store or database.
-
-2. **Performance**:
-   - If searching large logs in memory, you might want indexing or at least a
-     limit to how many lines are stored.
-   - Tauri: watch out for any blocking code that might freeze the UI thread if
-     not carefully handled (the Tauri approach might require sending tasks to a
-     Rust background thread).
-
-3. **UI Complexity**:
-   - If you want separate pages or a more robust front-end, you might adopt
-     React or Svelte for navigation, subcomponents, etc. That can be done
-     seamlessly with Tauri as well.
-   - Phase 4 is a good time to possibly introduce a small front-end framework if
-     you haven’t yet.
-
-4. **macOS Notarization**:
-   - If you plan to distribute `.app` widely, Apple requires code signing or
-     notarization. That’s beyond the scope of Phase 4 but worth noting.
-
-5. **Security**:
-   - Tauri default is local usage with no external network port. If you keep
-     Axum or SSE, it’s still local to 127.0.0.1. That’s typically safe for
-     single-user scenarios.
-
----
-
-## 5. Success Criteria
-
-1. **Advanced Log Search**:
-   - The user can input search criteria (agent ID, plugin ID, or text), retrieve
-     a filtered list of log lines from your memory store.
-   - SSE is still live for real-time logs, but search is an additional endpoint
-     for historical or advanced filtering.
-
-2. **Tauri Local App**:
-   - You can do `cargo tauri build` on macOS, producing a `.app`.
-   - Double-clicking it opens a window that shows the same front-end you had in
-     the browser. You can spawn agents, load plugins, see partial logs, etc.,
-     all offline.
-
-3. **Docker**:
-   - The existing approach for a pure web-based server still works. Advanced
-     logs are available at `/api/logs`, Tauri is just an extra method for local
-     usage.
-
-4. **Both UI Approaches**:
-   - “Web-based server + SSE” and “Tauri .app + optional SSE or Tauri commands”
-     co-exist in the codebase.
-   - Users can choose how they want to run lion’s UI: local `.app` for a desktop
-     vibe, or Docker-based server for external access.
-
----
-
-## 6. Expected Outcome of Phase 4
-
-By the end of **Stage 2, Phase 4**, you have:
-
-- A **robust log search/filter** system in the UI, integrated with your
-  microkernel’s log buffer. Real-time SSE streaming remains active for new
-  lines, while old lines can be filtered or retrieved via `GET /api/logs` calls.
-- An **initial Tauri-based** local desktop approach for macOS that reuses your
-  front-end code, letting users run lion **entirely offline** without Docker or
-  a separate web server. The `.app` loads your orchestrator code and front-end
-  in one packaged environment.
-- A UI that’s significantly more powerful—letting advanced users manage large or
-  complex multi-agent operations, find relevant log lines quickly, and see
-  plugin invocation details in real time.
-
-In **Stage 2, Phase 5**, you might finalize the UI experience (styling, user
-experience improvements, more advanced plugin usage) or add more integration
-with multi-agent workflows (graph visualization of agent dependencies, for
-example). But with Phase 4 complete, you have a strong local macOS Tauri `.app`
-plus advanced web-based logging and plugin management.
+- **Comprehensive Core CLI:** `lion_cli` graduates from a basic tool to a robust
+  interface for inspecting and managing the fundamental state of the Lion
+  system: detailed plugin info (including capabilities), policy rules, workflow
+  instance/node status, basic agent lifecycle, and resource usage/limits.
+- **Effective Observability Tool:** `lion logs search` provides powerful,
+  structured querying capabilities, making the CLI a primary tool for
+  diagnostics and monitoring.
+- **Validated Backend API:** The implementation of these CLI commands serves as
+  a practical validation that the `lion_runtime` exposes a usable and
+  sufficiently detailed API for core system management.
+- **Strong Foundation:** The CLI now offers a feature-rich, verifiable interface
+  to the core system, simplifying subsequent development of advanced CLI
+  features (Phase 5) or any graphical UI.
