@@ -129,7 +129,7 @@ pub async fn load_plugin(
     };
 
     // Create a linker for host functions
-    let mut linker = Linker::new(engine);
+    let linker = Linker::new(engine);
 
     // TODO: Add host functions to the linker
 

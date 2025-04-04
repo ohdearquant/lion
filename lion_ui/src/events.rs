@@ -7,7 +7,6 @@ use std::{convert::Infallible, sync::Arc};
 use tokio_stream::wrappers::BroadcastStream;
 use tracing::error;
 
-use crate::logs::LogEntry;
 use crate::state::AppState;
 
 /// Server-Sent Events handler for streaming logs in real-time
